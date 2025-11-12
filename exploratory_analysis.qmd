@@ -1,0 +1,12 @@
+---
+title: "GI Cancer: Exploratory Analysis"
+bibliography: references.bib
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(here)
+source(here::here("R", "setup.R"))
+```

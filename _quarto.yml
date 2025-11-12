@@ -1,0 +1,18 @@
+project:
+  type: default
+
+execute:
+  freeze: auto
+
+format:
+  html:
+    theme: cosmo
+    code-fold: true
+    toc: true
+    toc-location: right
+    embed-resources: true
+    css: style.css
+    code-links:
+      repo
+
+lang: en

@@ -1,0 +1,16 @@
+.answer-box{
+  color: blue;
+}
+
+.boxed-proof {
+  border: 1px solid black;
+  padding: 12px;
+  margin-top: 1em;
+  margin-bottom: 3em;
+  color: blue;
+  border-radius: 5px; /* Optional: adds rounded corners */
+}
+
+.qed {
+  float: right; /* Pushes the QED symbol to the far right */
+}
