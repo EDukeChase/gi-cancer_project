@@ -12,7 +12,7 @@ Comparing real world gastrointestinal cancer chemotherapy treatment related adve
 
 This project is structured as a reproducible R environment using `renv` and Quarto.
 
--   `exploratory_analysis.qmd`: The main Quarto document containing initial exploratory analyses, data cleaning, and validation.
+-   `01_data-cleaning.qmd`: The main Quarto document containing initial exploratory analyses, data cleaning, and validation.
 -   `R/setup.R`: The R script that loads packages and sets global options.
 -   `_quarto.yml`: The project configuration file, which sets the HTML theme and other rendering options.
 -   `data/`: **(Ignored by Git)** Directory for raw data files.

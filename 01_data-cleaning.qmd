@@ -1,5 +1,5 @@
 ---
-title: "GI Cancer: Exploratory Analysis"
+title: "GI Cancer: Data Cleaning"
 bibliography: references.bib
 ---
 
@@ -7,6 +7,34 @@ bibliography: references.bib
 #| label: setup
 #| include: false
 
-library(here)
-source(here::here("R", "setup.R"))
+source("R/setup.R")
+
+# Packages
+library(readxl)    # Read xlsx files
+library(janitor)   # Routine cleaning
 ```
+
+# Load data to prepare for cleaning and renaming
+```{r}
+#| label: load-data
+
+gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx"))
+```
+## Clean up variable names, convert to appropriate data types
+```{r}
+#| label: variable_mapping
+
+map_path <- here("data", "variable_map.csv")
+
+if (!file.exists(map_path)) {
+  map_df <- tibble(
+    raw_name = names(gic_raw),
+    new_name = names(gic_raw),
+    description = ""
+  )
+  
+  write_csv(map_df, map_path)
+}
+```
+
+

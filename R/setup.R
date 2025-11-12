@@ -1,4 +1,4 @@
-# --- Always used packages ---
+# --- Core packages ---
 library(here)               # Robust file paths
 library(knitr)              # Used for running R code in Quarto
 library(RColorBrewer)       # Color palettes to enable color-blind friendliness
@@ -8,7 +8,7 @@ library(tidyverse)          # Essential R packages (Can pare down later)
 # --- Set seed for reproducibility ---
 set.seed(4534174)
 
-# --- Set global chunk options ---
+# --- Set global options ---
 knitr::opts_chunk$set(
   echo = TRUE,
   message = FALSE,
