@@ -1,4 +1,4 @@
-# Gnstrointestinal Cancer
+# Gastrointestinal Cancer
 
 Comparing real world gastrointestinal cancer chemotherapy treatment related adverse events incidence and severity between HIV positive and HIV negative patients in Zimbabwe - Hematological and hepatic functions.
 
