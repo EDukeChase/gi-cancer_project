@@ -1,5 +1,6 @@
 # --- Core packages ---
 library(here)               # Robust file paths
+library(kableExtra)         # Table formatting
 library(knitr)              # Used for running R code in Quarto
 library(RColorBrewer)       # Color palettes to enable color-blind friendliness
 library(tidyverse)          # Essential R packages (Can pare down later)

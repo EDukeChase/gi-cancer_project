@@ -7,7 +7,7 @@ execute:
 format:
   html:
     theme: cosmo
-    code-fold: true
+    code-fold: show
     toc: true
     toc-location: right
     embed-resources: true
