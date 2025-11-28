@@ -279,11 +279,111 @@ gic_tmp <- gic_tmp |>
 
 # Recheck
 all_names <- names(gic_tmp)
-# cycle_vars <- all_names[str_detect(all_names, "\\.\\d{1,2}$")]
+cycle_vars <- all_names[str_detect(all_names, "\\.\\d{1,2}$")]
 cycle_vars <- cycle_vars[cycle_vars != "Sex.Male.1/Female.2"]
 grid_data <- create_audit_grid(cycle_vars)
 format_audit_table(grid_data)
 ```
+
+
+```{r}
+#| label: encode-factor-vars
+
+gic_tmp <- gic_tmp |> 
+  # Name standardization
+  rename(
+    # Factor variables
+    hiv_status = "HIV.Status:.1,.Negative.|.2,.Positive",
+    sex = "Sex.Male.1/Female.2",
+    residence = "Primary.Residence.1.urban/.2.rural/3.peri-urban.",
+    cancer_site = "Cancer.site:.1,.Esophagus.|.2,.Gastric.|.3,.Gastro-esophageal.junction.|.4,.Gall.bladder.,.Biliary.&.Pancreas.|.9,.Colorectal.|.11,.Anal.",
+    histology = "Histology.type:.1,.adenocarcinoma/carcinoma.|.2,.Squamous.carcinoma.|.3,.Sarcoma.|.4,.Carcinoid.|.5,.Lymphoma.|.7,.Others",
+    cancer_stage = "Cancer.stage:.stage.1,.I.|.2,.II.|.3,.III.|.4,.IV.|.4,.Unknown/Undocumented",
+    tx_intent = "Treatment.intention-.1,.Curative.|.2,.Palliative",
+    chemo_seq = "Sequence.of.chemotherapy-.1,.Neoadjuvant.|.2,.Adjuvant.|.3,.Definitive",
+    chemo_type = "chemotherapy.given:.1,Platinum/Paclitaxel..|.2,.Platinum/5-FU..3,.LCV/5-FU.|.4,.CapeOX.|.5,.FOLFOX4.|.6,.Capecitabine.|.20,.Irinotecan.|.21,.Others",
+    
+    # Comorbidities
+    comorbid_htn = "Hypertension",
+    comorbid_dm = "Diabetes.mellitus.",
+    comorbid_tb = ".Tuberculosis",
+    comorbid_asthma = "Asthma",
+    comorbid_chd = "Cardiac.disease.",
+    comorbid_copd = "COPD.",
+    comorbid_ckd = "Kidney.disease.",
+    comorbid_epilepsy = "Epilepsy",
+    comorbid_none = "No.cormobidities",
+    
+    # History
+    hx_etoh = "drink_alcohol_history_of",
+    hx_tobacco = "tobacco_smoker_history_of",
+    hx_cancer = "family_history_of_cancer",
+    
+    # Baseline Measurements
+    weight = "Weight.(kg)",
+    height = "Height.(cm)",
+    bmi_0 = "Baseline.BMI",
+    wbc_0 = "Baseline.WBC",
+    anc_0 = "Baseline.ANC",
+    plt_0 = "Baseline.PLT",
+    cd4_count_0 = "Baseline.CD4.count",
+    hb_0 = "Baseline.Hb",
+    mcv_0 = "Baseline.MCV",
+    mch_0 = "Baseline.MCH",
+    sodium_0 = "Baseline.Na+",
+    potassium_0 = "Baseline.K+",
+    urea_0 = "Baseline.Urea",
+    creat_0 = "Baseline.Creat",
+    cr_clear_0 = "Baseline.Creatinine.clearance",
+    tp_0 = "Baseline.TP",
+    alb_0 = "Baseline.ALB",
+    tbil_0 = "Baseline.Tbil",
+    alp_0 = "Baseline.ALP",
+    ast_0 = "Baseline.AST",
+    alt_0 = "Baseline.ALT",
+    ggt_0 = "Baseline.GGT",
+    albi_score_0 = "Albumin.bilirubin..score",
+    cea_0 = "Baseline.CEA",
+    ca199_0 = "Baseline.CA19_9",
+    
+    # Treatment info
+    tx_concurent_rtx = "chemotherapy_given_with.concurrent.radiotherapy?",
+    cycles_prescribed = "Total.number.chemo.cycles.prescribed",
+    cycles_given = "Total.number.of.chemotherapy.administered",
+    completion_rate_pct = "Chemotherapy.completion.rates.(%)"
+  ) |> 
+  
+  # Encode factor variables correctly
+  mutate(
+    hiv_status = factor(hiv_status,
+                        levels = c(1, 2), labels = c("Negative", "Positive")),
+    sex = factor(sex,
+                 levels = c(1, 2), labels = c("Male", "Female")),
+    residence = factor(residence,
+                       levels = c(1, 2, 3), labels = c("Urban", "Rural", "Peri-urban")),
+    cancer_site = factor(cancer_site,
+                         levels = c(1, 2, 3, 4, 9, 11), 
+                         labels = c("Esophageal", "Gastric", "Gastro-esophageal Junction", "Gall Bladder, Biliary & Pancreas", "Colorectal", "Anal")),
+    histology = factor(histology,
+                       levels = c(1, 2, 3, 4, 5, 7), 
+                       labels = c("Adenocarcinoma/carcinoma", "Squamous carcinoma", "Sarcoma", "Carcinoid", "Lymphoma", "Other")),
+    cancer_stage = factor(cancer_stage,
+                          levels = c(1, 2, 3, 4),
+                          labels = c("I", "II", "III", "IV/Unknown")),
+    tx_intent = factor(tx_intent,
+                       levels = c(1, 2),
+                       labels = c("Curative", "Palliative")),
+    chemo_seq = factor(chemo_seq,
+                       levels = c(1, 2, 3),
+                       labels = c("Neoadjuvant", "Adjuvant", "Definitive")),
+    chemo_type = factor(chemo_type,
+                        levels = c(1, 2, 3, 4, 5, 6, 20, 21),
+                        labels = c("Platinum/Paclitaxel", "Platinum/5-FU", "LCV/5-FU", "CapeOX", "FOLFOX4", "Capecitabine", "Irinotecan", "Other"))
+  )
+```
+
+
+
 
 
 # Notes
@@ -311,12 +411,13 @@ Things I have noted and changed:
     - `HypoNatramia.Na+`/`HypoNa+` -> `HypoNa+`
     - `TBIL`/`TBil`/`Tbil` -> `TBIL`
 
-Things I want to address before I change them:
+Things I want to address before I change anything:
 
 - There are no patients marked as having COPD, Kidney disease, or epilepsy
     - I assume this is correct, but want to check that there wasn't some sort of accidental duplication error
 - `HypoNa+.1` is the same as `Baseline.Na+` and `HypoK+.1` is the same as `Baseline.K+`
     - Need to verify if this is correct, since none of the other baseline biomarkers are the same as their cycle 1 counterparts
+- For Cancer Stage, based on the column name it looks like both stage IV cancer and unknown/undocumented stage are both denoted by 4
 
 
 Things I need to dig into before I know how to handle them:
@@ -327,3 +428,7 @@ Things I need to dig into before I know how to handle them:
     - Look at a distribution of blood units given by cycle to see how plausible this is
 - `Hospitalization.requred.dur.to.toxicity?.10` is identical to `Was.the.cycle.delayed.due..to.toxicity.10`
     - Not sure if this is reasonable or not, need to look at others and compare.
+
+
+# Changes To Incorporate Into Notes
+Converting factor variables, renaming non-cycle variables, standardizing cycle variables
