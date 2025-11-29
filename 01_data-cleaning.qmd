@@ -2,7 +2,7 @@
 title: "GI Cancer: Data Cleaning"
 bibliography: references.bib
 ---
-
+# Load Data and Libraries
 ```{r}
 #| label: setup
 #| include: false
@@ -10,7 +10,8 @@ bibliography: references.bib
 source("R/setup.R")
 
 # Packages
-library(readxl)    # Read xlsx files
+library(readxl)     # Read xlsx files
+library(naniar)     # Visualize missing data
 ```
 
 ```{r}
@@ -62,7 +63,7 @@ identical(gic_raw$`HyperK+.6...193`, gic_raw$`HyperK+.6...219`)
 ```
 
 ```{r}
-#| label: duplicate-column-names-imp-changes
+#| label: duplicate-column-names-implement-changes
 
 gic_tmp <- gic_raw |> 
   rename(
@@ -153,7 +154,7 @@ duplicate_map <- map_dfr(dupe_cont, function(d_name) {
 -   `r duplicate_map[[38, 1]]` is the same as `r duplicate_map[[38, 2]]`,         <!-- Cycle 10 -->
     - Possibly valid, I'm not sure of the exact relationship though
 ```{r}
-#| label: duplicate-column-contents-imp-changes
+#| label: duplicate-column-contents-implement-changes
 
 # Remove `Cycle` columns, and redundant `Febrile.Neutropenia` and `HyperK+` columns
 gic_tmp <- gic_tmp |> 
@@ -167,7 +168,7 @@ gic_tmp <- gic_tmp |>
 
 ## Standardize naming
 ```{r}
-#| label: name-standardization-bm-search
+#| label: name-standardization-biomarker-search
 
 ## Biomarkers
 # Get all colum names from data
@@ -176,7 +177,7 @@ all_names <- names(gic_tmp)
 # Filter for names ending in a cycle number
 cycle_vars <- all_names[str_detect(all_names, "\\.\\d{1,2}$")]
 
-# Remove Sex variable since it was encoded similarly
+# Remove `Sex` variable from consideration since it was encoded similarly
 cycle_vars <- cycle_vars[cycle_vars != "Sex.Male.1/Female.2"]
 
 # Build functions to audit the names and print table indicating naming consistency
@@ -211,8 +212,10 @@ create_audit_grid <- function(cycle_vars) {
   return(audit_grid)
 }
 
+# Generate the table with the audit output
 format_audit_table <- function(grid_df) {
   
+  # Color rows based on whether they have all 12 cycles or not
   green_rows <- which(grid_df$all_ok == 1)
   red_rows   <- which(grid_df$all_ok == 0)
   
@@ -239,7 +242,7 @@ Noted issues:
 
 
 ```{r}
-#| label: name-standardization-bm-imp-changes
+#| label: name-standardization-biomarker-implement-changes
 
 gic_tmp <- gic_tmp |> 
   # Fix DBIL
@@ -287,9 +290,9 @@ format_audit_table(grid_data)
 
 
 ```{r}
-#| label: encode-factor-vars
+#| label: name-standardization
 
-gic_tmp <- gic_tmp |> 
+gic_clean <- gic_tmp |> 
   # Name standardization
   rename(
     # Factor variables
@@ -302,6 +305,7 @@ gic_tmp <- gic_tmp |>
     tx_intent = "Treatment.intention-.1,.Curative.|.2,.Palliative",
     chemo_seq = "Sequence.of.chemotherapy-.1,.Neoadjuvant.|.2,.Adjuvant.|.3,.Definitive",
     chemo_type = "chemotherapy.given:.1,Platinum/Paclitaxel..|.2,.Platinum/5-FU..3,.LCV/5-FU.|.4,.CapeOX.|.5,.FOLFOX4.|.6,.Capecitabine.|.20,.Irinotecan.|.21,.Others",
+    death_date = "date_of_death_if_such_outc",
     
     # Comorbidities
     comorbid_htn = "Hypertension",
@@ -378,16 +382,75 @@ gic_tmp <- gic_tmp |>
                        labels = c("Neoadjuvant", "Adjuvant", "Definitive")),
     chemo_type = factor(chemo_type,
                         levels = c(1, 2, 3, 4, 5, 6, 20, 21),
-                        labels = c("Platinum/Paclitaxel", "Platinum/5-FU", "LCV/5-FU", "CapeOX", "FOLFOX4", "Capecitabine", "Irinotecan", "Other"))
+                        labels = c("Platinum/Paclitaxel", "Platinum/5-FU", "LCV/5-FU", "CapeOX", "FOLFOX4", "Capecitabine", "Irinotecan", "Other")),
+    comorbid_htn = factor(comorbid_htn,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    comorbid_dm = factor(comorbid_dm,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    comorbid_tb = factor(comorbid_tb,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    comorbid_asthma = factor(comorbid_asthma,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    comorbid_chd = factor(comorbid_chd,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    comorbid_copd = factor(comorbid_copd,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    comorbid_ckd = factor(comorbid_ckd,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    comorbid_epilepsy = factor(comorbid_epilepsy,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    comorbid_none = factor(comorbid_none,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    hx_etoh = factor(hx_etoh,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    hx_tobacco = factor(hx_tobacco,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+    hx_cancer = factor(hx_cancer,
+                          levels = c(0,1),
+                          labels = c("False", "True")),
+  ) |> 
+  
+  # Standardize names of cycle variables
+  rename_with(
+    .cols = matches("\\.\\d{1,2}$"),
+    .fn = ~ .x |> 
+      str_replace("^Was\\.the\\.cycle\\.delayed[^0-9]*", "cycle_delayed.") |> 
+      str_replace("^Hospitalization\\.required[^0-9]*", "hosp_toxicity.") |> 
+      str_replace("^Hospitalization\\.days", "hosp_days") |> 
+      str_replace("^Blood\\.transfusion", "transfusion_given") |> 
+      str_replace("^blood\\.units\\.needed", "transfusion_units") |> 
+      str_replace("^CSF-G\\.Indication", "csfg_indicated") |>
+      str_replace("HypoNa\\+", "sodium") |> 
+      str_replace("HypoK\\+", "potassium") |> 
+      tolower() |> 
+      str_replace("\\.(\\d{1,2})$", "_\\1")
   )
+```
+
+```{r}
+#| label: add_ae-grades
+
+
 ```
 
 
 
 
 
+
 # Notes
-Things I have noted and changed:
+## Things I have noted and changed:
 
 - The `ANC.3...108` and `ANC.3...109` columns were identical, I assume due to accidental duplication.
     - Removed `ANC.3...109`, renamed `ANC.3...108` to `ANC.3`
@@ -395,10 +458,11 @@ Things I have noted and changed:
     - Renamed the first to be `HypoK+.3`
 - In with all of the cycle 7 biomarker measurements, the `Febrile.Neutropenia`, `HypoNa+`, `HypoK+`, and `HyperK+` columns were labelled as if they belonged to cycle 6. They were not identical to their cycle 6 counterparts, so I assume this was a numbering mistake
     - Renamed them to reflect that they belong in cycle 7
+    - Audrey confirmed that this was correct
 - The `ANC` and `Febrile.Neutropenia` columns within a given cycle were all identical (e.g., `ANC.3` was identical to `Febrile.Neutropenia.3`)
     - Removed all of the `Febrile.Neutropenia` columns
 - The `HypoK+` and `HyperK+` columns within a given cycle were all identical (e.g., `HypoK+.3` was identical to `HyperK+.3`)
-    - Removed all of the `HyperK+` columns and renamed all of the `HypoK+` columns to `K+`
+    - Removed all of the `HyperK+` columns
 - Cycle 3 included `Hypernatramia.Na+.3` and `Hyponatramia.Na+.3` which were identical
     - Removed `Hypernatrama.Na+.3`
 - There were several columns that were empty other than the cycle name (e.g., `Cycle 5`)
@@ -411,17 +475,16 @@ Things I have noted and changed:
     - `HypoNatramia.Na+`/`HypoNa+` -> `HypoNa+`
     - `TBIL`/`TBil`/`Tbil` -> `TBIL`
 
-Things I want to address before I change anything:
+## Things I want to note in case there is an issue with how I handle them:
 
 - There are no patients marked as having COPD, Kidney disease, or epilepsy
-    - I assume this is correct, but want to check that there wasn't some sort of accidental duplication error
+    - Low priority since I assume this is correct, but worth checking that there wasn't some sort of accidental duplication error
+
+
+## Things I need to dig into before I know how to handle them:
+- For Cancer Stage, based on the column name it looks like both stage IV cancer and unknown/undocumented stage are both denoted by 4
 - `HypoNa+.1` is the same as `Baseline.Na+` and `HypoK+.1` is the same as `Baseline.K+`
     - Need to verify if this is correct, since none of the other baseline biomarkers are the same as their cycle 1 counterparts
-- For Cancer Stage, based on the column name it looks like both stage IV cancer and unknown/undocumented stage are both denoted by 4
-
-
-Things I need to dig into before I know how to handle them:
-
 - `Dbil12` is empty. I'm pretty sure it's odd for just one of a set of biomarker measurements to be missing
 - For cycles 4, 7, 8, 9, and 11 the `Blood.transfusion` and `blood.units.needed` columns are identical within a given column
     - I assume this is correct, but wanted to check because it implies that every person who received a blood transfusion in those cycles was given exactly 1 unit of blood.
@@ -430,5 +493,7 @@ Things I need to dig into before I know how to handle them:
     - Not sure if this is reasonable or not, need to look at others and compare.
 
 
-# Changes To Incorporate Into Notes
-Converting factor variables, renaming non-cycle variables, standardizing cycle variables
+## Things I spotted and need to deal with
+- ast_1 is a character vector?
+- height/weight/bmi have something funky going on, there's a bmi of 0.2
+- Working on adding graded adverse events columns (see `grading_rules.csv` for WIP)

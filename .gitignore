@@ -1,8 +1,9 @@
 # --- Project Specific Folders and Files---
 /data/*
 !/data/README.md
-/docs/*
-!/docs/README.md
+!/data/grading_rules.csv
+/docs/gic_statistical-analysis-plan.docx
+/docs/original_contents
 /output/*
 !/output/README.md
 

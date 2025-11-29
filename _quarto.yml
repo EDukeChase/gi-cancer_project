@@ -1,11 +1,21 @@
+# --- Project Configuration ---
 project:
   type: default
+  output-dir: output
 
+# --- Execution Settings ---
 execute:
   freeze: auto
+  
+# --- Bibliography & Citations ---
+bibliography: references.bib
+csl: journal-of-clinical-oncology.csl
 
+# --- Format Configuration ---
 format:
+  # --- HTML Settings ---
   html:
+    # --- Document Settings ---
     theme: cosmo
     code-fold: show
     toc: true
@@ -13,6 +23,9 @@ format:
     embed-resources: true
     css: style.css
     code-links:
-      repo
+      - text: GitHub Repo
+        icon: github
+        href: https://github.com/EDukeChase/gi-cancer_project
 
+# --- Document Language
 lang: en
