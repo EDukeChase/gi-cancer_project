@@ -17,7 +17,7 @@ format:
   html:
     # --- Document Settings ---
     theme: cosmo
-    code-fold: show
+    code-fold: true
     toc: true
     toc-location: right
     embed-resources: true

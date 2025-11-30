@@ -1,0 +1,131 @@
+---
+title: "02_data-validation"
+bibliography: references.bib
+---
+# Load Data and Libraries
+```{r}
+#| label: setup
+#| include: false
+
+source("R/setup.R")
+
+# Packages
+library(naniar)     # Visualize missing data
+```
+
+
+```{r}
+#| label: correct-data-types
+
+
+# # Encode factor variables correctly
+#   mutate(
+#     hiv_status = factor(hiv_status,
+#                         levels = c(1, 2), labels = c("Negative", "Positive")),
+#     sex = factor(sex,
+#                  levels = c(1, 2), labels = c("Male", "Female")),
+#     residence = factor(residence,
+#                        levels = c(1, 2, 3), labels = c("Urban", "Rural", "Peri-urban")),
+#     cancer_site = factor(cancer_site,
+#                          levels = c(1, 2, 3, 4, 9, 11), 
+#                          labels = c("Esophageal", "Gastric", "Gastro-esophageal Junction", "Gall Bladder, Biliary & Pancreas", "Colorectal", "Anal")),
+#     histology = factor(histology,
+#                        levels = c(1, 2, 3, 4, 5, 7), 
+#                        labels = c("Adenocarcinoma/carcinoma", "Squamous carcinoma", "Sarcoma", "Carcinoid", "Lymphoma", "Other")),
+#     cancer_stage = factor(cancer_stage,
+#                           levels = c(1, 2, 3, 4),
+#                           labels = c("I", "II", "III", "IV/Unknown")),
+#     comorbid_htn = factor(comorbid_htn,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     comorbid_dm = factor(comorbid_dm,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     comorbid_tb = factor(comorbid_tb,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     comorbid_asthma = factor(comorbid_asthma,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     comorbid_chd = factor(comorbid_chd,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     comorbid_copd = factor(comorbid_copd,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     comorbid_ckd = factor(comorbid_ckd,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     comorbid_epilepsy = factor(comorbid_epilepsy,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     comorbid_none = factor(comorbid_none,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     hx_etoh = factor(hx_etoh,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     hx_tobacco = factor(hx_tobacco,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     hx_cancer = factor(hx_cancer,
+#                           levels = c(0,1),
+#                           labels = c("False", "True")),
+#     tx_concurent_rtx = factor(tx_concurent_rtx,
+#                               levels = c(0, 1),
+#                               labels = c("False", "True")),
+#     tx_intent = factor(tx_intent,
+#                        levels = c(1, 2),
+#                        labels = c("Curative", "Palliative")),
+#     chemo_seq = factor(chemo_seq,
+#                        levels = c(1, 2, 3),
+#                        labels = c("Neoadjuvant", "Adjuvant", "Definitive")),
+#     chemo_type = factor(chemo_type,
+#                         levels = c(1, 2, 3, 4, 5, 6, 20, 21),
+#                         labels = c("Platinum/Paclitaxel", "Platinum/5-FU", "LCV/5-FU", "CapeOX", "FOLFOX4", "Capecitabine", "Irinotecan", "Other"))
+#   ) |> 
+```
+
+```{r}
+#| label: type-audit
+
+# factor_audit <- tibble(
+#   variable = names(gic_clean),
+#   type = map_chr(gic_clean, ~ paste(class(.), collapse = "/")),
+#   
+#   # Count unique values (ignoring NA)
+#   n_unique = map_int(gic_clean, ~ n_distinct(., na.rm = TRUE)),
+#   
+#   # Show the actual values (so you can see "0, 1" vs "1, 2")
+#   values = map_chr(gic_clean, ~ {
+#     u <- sort(unique(na.omit(.)))
+#     if (length(u) > 5) paste0(paste(head(u, 5), collapse = ", "), ", ...") else paste(u, collapse = ", ")
+#   })
+# ) |> 
+#   mutate(
+#     # --- The Diagnosis Logic ---
+#     status = case_when(
+#       # Case A: It's already a factor (Good)
+#       str_detect(type, "factor") ~ "✅ Factor",
+#       
+#       # Case B: It's numeric, but looks like a boolean (0, 1) -> Needs attention
+#       type %in% c("numeric", "integer", "double") & 
+#         n_unique <= 2 & 
+#         str_detect(values, "^0, 1$|^0$|^1$") ~ "⚠️ Numeric (0/1) - Convert?",
+#       
+#       # Case C: It's numeric with few levels (e.g. 1, 2, 3) -> Maybe categorical?
+#       type %in% c("numeric", "integer", "double") & n_unique <= 5 ~ "❓ Numeric (Low Cardinality)",
+#       
+#       # Case D: Everything else (Continuous numbers, dates, etc.)
+#       TRUE ~ "OK"
+#     )
+#   )
+# 
+# # Print the list of suspects
+# print(factor_audit, n = Inf)
+```
+
+```{r}
+#| label: add_ae-grades
+
+```

@@ -3,6 +3,7 @@ library(here)               # Robust file paths
 library(kableExtra)         # Table formatting
 library(knitr)              # Used for running R code in Quarto
 library(RColorBrewer)       # Color palettes to enable color-blind friendliness
+library(scales)             # Simplify palette visualization
 library(tidyverse)          # Essential R packages (Can pare down later)
 
 
@@ -19,11 +20,22 @@ knitr::opts_chunk$set(
   fig.align = 'center'
 )
 
+# --- Define color-blind friendly color palettes ---
+cb_light  <- RColorBrewer::brewer.pal(8, "Set2")
+cb_dark   <- RColorBrewer::brewer.pal(8, "Dark2")
+cb_paired <- RColorBrewer::brewer.pal(12, "Paired")
+
+show_pal <- function(palette) {
+  scales::show_col(palette)
+}
+
 # --- Set plot options ---
 theme_set(theme_minimal(base_size = 12))
+
+# Apply color palette
 options(
-  ggplot2.discrete.colour = RColorBrewer::brewer.pal(3, "Dark2"),
-  ggplot2.discrete.fill = RColorBrewer::brewer.pal(3, "Dark2"),
+  ggplot2.discrete.colour = cb_light,
+  ggplot2.discrete.fill = cb_light,
   ggplot2.continuous.colour = "viridis",
   ggplot2.continuous.fill = "viridis"
 )

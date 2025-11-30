@@ -11,7 +11,6 @@ source("R/setup.R")
 
 # Packages
 library(readxl)     # Read xlsx files
-library(naniar)     # Visualize missing data
 ```
 
 ```{r}
@@ -27,60 +26,91 @@ gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FIN
 ```{r}
 #| label: duplicate-column-names
 
+# Get list of names which were identical in excel file
 dupe_names <- gic_raw |> 
   select(contains("...")) |> 
   names()
-print(dupe_names)
 
-# `ANC.3...108`/`ANC.3...109`
-identical(gic_raw$`ANC.3...108`, gic_raw$`ANC.3...109`)
-## Identical. `ANC.3...108` -> `ANC.3`, delete `ANC.3...109`
+# Create tibble of names to compare from `dupe_names`
+check_pairs <- tibble(
+  col_a = c(
+    "ANC.3...108",
+    "HyperK+.3...114",
+    "Febrile.Neutropenia.6...189",
+    "HypoNa+.6...191",
+    "HypoK+.6...192",
+    "HyperK+.6...193"
+  ),
+  col_b = c(
+    "ANC.3...109",
+    "HyperK+.3...115",
+    "Febrile.Neutropenia.6...215",
+    "HypoNa+.6...217",
+    "HypoK+.6...218",
+    "HyperK+.6...219"
+  )
+)
 
+# Compare to see if contents are identical
+pair_audit <- check_pairs |> 
+  rowwise() |> 
+  mutate(
+    are_identical = identical(gic_raw[[col_a]], gic_raw[[col_b]]),
+    status = if_else(are_identical,
+                     "Identical (Redundant)",
+                     "Different (Distinct)")
+  ) |> 
+  ungroup()
 
-# `HyperK+.3...114`/`HyperK+.3...115`
-identical(gic_raw$`HyperK+.3...114`, gic_raw$`HyperK+.3...115`)
-## Identical: `HyperK+.3...114` -> `HypoK+.3`, `HyperK+.3...115` -> `HyperK+.3`
+# Create table
+ident_rows <- which(pair_audit$are_identical == TRUE)
+diff_rows  <- which(pair_audit$are_identical == FALSE)
 
-
-# `Febrile.Neutropenia.6...189`/`Febrile.Neutropenia.6...215`
-identical(gic_raw$`Febrile.Neutropenia.6...189`, gic_raw$`Febrile.Neutropenia.6...215`)
-## Not identical: `Febrile.Neutropenia.6...215` -> `Febrile.Neutropenia.7`, `Febrile.Neutropenia.6...189` -> `Febrile.Neutropenia.6`
-
-
-# `HypoNa+6...191`/`HypoNa+.6...217`
-identical(gic_raw$`HypoNa+6...191`, gic_raw$`HypoNa+.6...217`)
-## Not identical: `HypoNa+6...191` -> `HypoNa+6`, `HypoNa+.6...217` -> `HypoNa+.7`
-
-
-# `HypoK+.6...192`/`HypoK+.6...218`
-identical(gic_raw$`HypoK+.6...192`, gic_raw$`HypoK+.6...218`)
-## Not identical: `HypoK+.6...192` -> `HypoK+.6`, `HypoK+.6...218` -> `HypoK+.7`
-
-
-# `HyperK+.6...193`/`HyperK+.6...219`
-identical(gic_raw$`HyperK+.6...193`, gic_raw$`HyperK+.6...219`)
-## Not identical: `HyperK+.6...193` -> `HyperK+.6`, `HyperK+.6...219` -> `HyperK+.7`
+pair_audit |> 
+  select(-are_identical) |> 
+  kbl(col.names = c("Column A", "Column B", "Result"),
+      booktabs = TRUE) |> 
+  kable_styling(full_width = TRUE) |> 
+  row_spec(ident_rows, background = cb_light[1], color = "black") |> 
+  row_spec(diff_rows, background = cb_light[2], color = "black")
 ```
 
-```{r}
-#| label: duplicate-column-names-implement-changes
+:::{.callout-note collapse="true"}
+### Actions Taken: Duplicate name resolution
 
-gic_tmp <- gic_raw |> 
+**Issue:** The raw Excel file contained several columns with identical or mislabeled headers.
+
+**Resolved:** [2025-11-16] Renamed/deleted duplicates in `01_data_cleaning.qmd` (Chunk: `fix_duplicate-column-names`).
+
+* `ANC.3...108` and `ANC.3...109` were identical. 
+    * `ANC.3...109` was removed, and the remaining column was renamed to `ANC.3`.
+* Two columns were named `HyperK+.3`, with no `HypoK+.3` present. 
+    * The first instance was renamed to `HypoK+.3`.
+* A block of variables (`Febrile.Neutropenia`, `HypoNa+`, `HypoK+`, `HyperK+`) appeared with a `.6` suffix in the Cycle 7 section. These were distinct from the actual Cycle 6 data.
+    * The variables were renamed to fit in Cycle 7. (Dr. Hendricks stated that Dr. Mazhindu told her this was correct.)
+:::
+
+
+```{r}
+#| label: fix_duplicate-column-names
+
+gic_renamed <- gic_raw |> 
+  # Fix identically names columns
   rename(
-    `ANC.3` = `ANC.3...108`,
-    `HypoK+.3` = `HyperK+.3...114`,
-    `HyperK+.3` = `HyperK+.3...115`,
-    `Febrile.Neutropenia.6` = `Febrile.Neutropenia.6...189`,
-    `Febrile.Neutropenia.7` = `Febrile.Neutropenia.6...215`,
-    `HypoNa+.6` = `HypoNa+.6...191`,
-    `HypoNa+.7` = `HypoNa+.6...217`,
-    `HypoK+.6` = `HypoK+.6...192`,
-    `HypoK+.7` = `HypoK+.6...218`,
-    `HyperK+.6` = `HyperK+.6...193`,
-    `HyperK+.7` = `HyperK+.6...219`
+    "ANC.3" = "ANC.3...108",
+    "HypoK+.3" = "HyperK+.3...114",
+    "HyperK+.3" = "HyperK+.3...115",
+    "Febrile.Neutropenia.6" = "Febrile.Neutropenia.6...189",
+    "Febrile.Neutropenia.7" = "Febrile.Neutropenia.6...215",
+    "HypoNa+.6" = "HypoNa+.6...191",
+    "HypoNa+.7" = "HypoNa+.6...217",
+    "HypoK+.6" = "HypoK+.6...192",
+    "HypoK+.7" = "HypoK+.6...218",
+    "HyperK+.6" = "HyperK+.6...193",
+    "HyperK+.7" = "HyperK+.6...219"
   ) |> 
   select(
-    - `ANC.3...109`,
+    - "ANC.3...109"
   )
 ```
 
@@ -90,74 +120,57 @@ gic_tmp <- gic_raw |>
 ```{r}
 #| label: duplicate-column-contents
 
+# Check for variables that have the exact same contents
+dupe_cont <- names(gic_renamed)[duplicated(as.list(gic_renamed))]
 
-dupe_cont <- names(gic_tmp)[duplicated(as.list(gic_tmp))]
 duplicate_map <- map_dfr(dupe_cont, function(d_name) {
-  match_idx <- detect_index(gic_tmp, ~ identical(.x, gic_tmp[[d_name]]))
+  match_idx <- detect_index(gic_renamed, ~ identical(.x, gic_renamed[[d_name]]))
   
   tibble(
     duplicate_column = d_name,
-    original_source = names(gic_tmp)[match_idx]
+    original_source = names(gic_renamed)[match_idx]
   )
 })
+
+# List duplications
+duplicate_map |> 
+  kbl(col.names = c("Duplicate Column", "Original Source")) |> 
+  kable_styling() |> 
+  scroll_box(height = "400px")
 ```
 
--   `r duplicate_map[[1, 1]]` and `r duplicate_map[[2, 1]]` are the same as `r duplicate_map[[1, 2]]`
-    -   No patients had any of these comorbidities. Likely valid, but worth checking.
--   `r duplicate_map[[4, 1]]` is the same as `r duplicate_map[[4, 2]]`
-    -   Same for `r duplicate_map[[8, 1]]`/`r duplicate_map[[8, 2]]`;       <!-- Cycle 2 -->
-                 `r duplicate_map[[10, 1]]`/`r duplicate_map[[10, 2]]`;     <!-- Cycle 3 -->
-                 `r duplicate_map[[14, 1]]`/`r duplicate_map[[14, 2]]`;     <!-- Cycle 4 -->
-                 `r duplicate_map[[18, 1]]`/`r duplicate_map[[18, 2]]`;     <!-- Cycle 5 -->
-                 `r duplicate_map[[21, 1]]`/`r duplicate_map[[21, 2]]`;     <!-- Cycle 6 -->
-                 `r duplicate_map[[24, 1]]`/`r duplicate_map[[24, 2]]`;     <!-- Cycle 7 -->
-                 `r duplicate_map[[28, 1]]`/`r duplicate_map[[28, 2]]`;     <!-- Cycle 8 -->
-                 `r duplicate_map[[32, 1]]`/`r duplicate_map[[32, 2]]`;     <!-- Cycle 9 -->
-                 `r duplicate_map[[36, 1]]`/`r duplicate_map[[36, 2]]`;     <!-- Cycle 10 -->
-                 `r duplicate_map[[40, 1]]`/`r duplicate_map[[40, 2]]`;     <!-- Cycle 11 -->
-                 `r duplicate_map[[44, 1]]`/`r duplicate_map[[44, 2]]`      <!-- Cycle 12 -->
--   `r duplicate_map[[5, 1]]` is the same as `r duplicate_map[[5, 2]]`
--   `r duplicate_map[[6, 1]]` and `r duplicate_map[[7, 1]]` are the same as `r duplicate_map[[6, 2]]`
--   `r duplicate_map[[6, 1]]` is the same as `r duplicate_map[[7, 1]]`
-    -   Same for `r duplicate_map[[9, 1]]`/`r duplicate_map[[9, 2]]`;       <!-- Cycle 2 -->
-                 `r duplicate_map[[12, 1]]`/`r duplicate_map[[12, 2]]`;     <!-- Cycle 3 -->
-                 `r duplicate_map[[15, 1]]`/`r duplicate_map[[15, 2]]`;     <!-- Cycle 4 -->
-                 `r duplicate_map[[19, 1]]`/`r duplicate_map[[19, 2]]`;     <!-- Cycle 5 -->
-                 `r duplicate_map[[22, 1]]`/`r duplicate_map[[22, 2]]`;     <!-- Cycle 6 -->
-                 `r duplicate_map[[25, 1]]`/`r duplicate_map[[25, 2]]`;     <!-- Cycle 7 -->
-                 `r duplicate_map[[29, 1]]`/`r duplicate_map[[29, 2]]`;     <!-- Cycle 8 -->
-                 `r duplicate_map[[33, 1]]`/`r duplicate_map[[33, 2]]`;     <!-- Cycle 9 -->
-                 `r duplicate_map[[37, 1]]`/`r duplicate_map[[37, 2]]`;     <!-- Cycle 10 -->
-                 `r duplicate_map[[41, 1]]`/`r duplicate_map[[41, 2]]`;     <!-- Cycle 11 -->
-                 `r duplicate_map[[45, 1]]`/`r duplicate_map[[45, 2]]`      <!-- Cycle 12 -->
--   `r duplicate_map[[11, 1]]` is the same as `r duplicate_map[[11, 2]]`
--   All of the following columns are completely empty: 
-                                 `r duplicate_map[[3, 1]]`,                 <!-- Almbumin.bilirubin..score -->
-                                 `r duplicate_map[[3, 2]]`,                 <!-- Baseline.Creatinine.Clearance -->
-                                 `r duplicate_map[[13, 1]]`,                <!-- Cycle 4 -->
-                                 `r duplicate_map[[17, 1]]`,                <!-- Cycle 5 -->
-                                 `r duplicate_map[[20, 1]]`,                <!-- Cycle 6 -->
-                                 `r duplicate_map[[23, 1]]`,                <!-- Cycle 7 -->
-                                 `r duplicate_map[[27, 1]]`,                <!-- Cycle 8 -->
-                                 `r duplicate_map[[31, 1]]`,                <!-- Cycle 9 -->
-                                 `r duplicate_map[[35, 1]]`,                <!-- Cycle 10 -->
-                                 `r duplicate_map[[39, 1]]`,                <!-- Cycle 11 -->
-                                 `r duplicate_map[[43, 1]]`,                <!-- Cycle 12 -->
-                                 `r duplicate_map[[46, 1]]`                 <!-- Dbil.12 -->
-    - Will get rid of the "Cycle" variables as they're just labels, the others are worth checking into.
--   `r duplicate_map[[16, 1]]` is the same as `r duplicate_map[[16, 2]]`    <!-- Cycle 4 -->
-    - Same for `r duplicate_map[[26, 1]]`/`r duplicate_map[[26, 2]]`,         <!-- Cycle 7 -->
-             `r duplicate_map[[30, 1]]`/`r duplicate_map[[30, 2]]`,         <!-- Cycle 8 -->
-             `r duplicate_map[[34, 1]]`/`r duplicate_map[[34, 2]]`,         <!-- Cycle 9 -->
-             `r duplicate_map[[42, 1]]`/`r duplicate_map[[42, 2]]`,         <!-- Cycle 11 -->
-    - This is possibly valid, but worth double checking
--   `r duplicate_map[[38, 1]]` is the same as `r duplicate_map[[38, 2]]`,         <!-- Cycle 10 -->
-    - Possibly valid, I'm not sure of the exact relationship though
+:::{.callout-warning collapse="false"}
+### Anomalies flagged for validation
+
+**Issues:** The following issues were observed and require clarification or investigation in the validation phase:
+
+* No patients have kidney disease, COPD, or epilepsy recorded. 
+    * Check for accuracy
+* `Albumin.bilirubin..score`, `Baseline.Creatinine.clearance`, and `Dbil.12` are completely empty.
+* `HypoNa+.1` and `HypoK+.1`/`HyperK+.1` are identical to their respective `Baseline` counterparts.
+* `blood.units.needed` and `Blood.transfusion` are identical for cycles 4, 7, 8, 9, and 11. 
+    * Implies all transfusions were exactly 1 unit.
+* `Hospitalization...10` is identical to `Was.the.cycle.delayed...10`.
+    * Possibly valid, I'm not sure of the exact relationship though
+:::
+
+:::{.callout-note collapse="true"}
+### Actions Taken: Remove redundant data
+
+**Issues:** Several columns identified as duplicates or artifacts.
+
+**Resolved:** [2025-11-16] The columns were removed in `01_data_cleaning.qmd` (Chunk: `fix_duplicate-column-contents`).
+
+* `Febrile.Neutropenia` (duplicate of `ANC`) and `HyperK+` (duplicate of `HypoK+`) removed for all cycles.
+* `Hypernatramia.Na+.3` (identical to `Hyponatramia.Na+.3`) removed.
+* All `Cycle #` spacer columns removed.
+:::
+
 ```{r}
-#| label: duplicate-column-contents-implement-changes
+#| label: fix_duplicate-column-contents
 
 # Remove `Cycle` columns, and redundant `Febrile.Neutropenia` and `HyperK+` columns
-gic_tmp <- gic_tmp |> 
+gic_renamed <- gic_renamed |> 
   select(
     -starts_with("Febrile.Neutropenia"),
     -starts_with("HyperK+"),
@@ -166,30 +179,40 @@ gic_tmp <- gic_tmp |>
   )
 ```
 
-## Standardize naming
+## Check consistency of cycle-specific variables
 ```{r}
-#| label: name-standardization-biomarker-search
-
-## Biomarkers
-# Get all colum names from data
-all_names <- names(gic_tmp)
+#| label: cycle-var_consistency
 
 # Filter for names ending in a cycle number
-cycle_vars <- all_names[str_detect(all_names, "\\.\\d{1,2}$")]
+cycle_vars <- names(gic_renamed)[str_detect(names(gic_renamed), "\\.\\d{1,2}$")]
 
 # Remove `Sex` variable from consideration since it was encoded similarly
 cycle_vars <- cycle_vars[cycle_vars != "Sex.Male.1/Female.2"]
 
-# Build functions to audit the names and print table indicating naming consistency
-create_audit_grid <- function(cycle_vars) {
-  
-  audit_grid <- tibble(raw_name = cycle_vars) |> 
+# Build function to audit the names
+create_cycle_audit <- function(cycle_vars) {
+  # Extract variable stems and cycles
+  parsed_data <- tibble(raw_name = cycle_vars) |> 
     extract(raw_name,
             into = c("stem", "cycle"),
-            regex = "(.*)\\.(\\d{1,2})$",
+            regex = "(.*)[\\._](\\d+)$",
             remove = FALSE) |> 
-    mutate(cycle = as.integer(cycle)) |> 
-    filter(cycle >= 1, cycle <= 12) |> 
+    mutate(cycle = as.integer(cycle))
+  
+  # Report if any cycles aren't in [1, 12] or baseline/0
+  out_of_bounds <- parsed_data |> 
+    filter(cycle < 0 | cycle > 12 | is.na(cycle))
+  
+  if(nrow(out_of_bounds > 0)) {
+    message("The following variables have unexpected cycle numbers:")
+    print(out_of_bounds)    
+  } else {
+    message("All variables have valid cycle numbers.")
+  }
+  
+  # Create the audit grid
+  audit_grid <- parsed_data |> 
+    filter(cycle >= 0, cycle <= 12) |> 
     select(stem, cycle) |> 
     distinct() |> 
     mutate(exists = 1) |> 
@@ -206,45 +229,71 @@ create_audit_grid <- function(cycle_vars) {
     ungroup() |> 
     select(stem,
            all_ok,
-           any_of(as.character(1:12)))
+           any_of(as.character(0:12)))
   
-  # Return the dataframe
   return(audit_grid)
 }
 
-# Generate the table with the audit output
+# Function to generate table from audit output
 format_audit_table <- function(grid_df) {
   
-  # Color rows based on whether they have all 12 cycles or not
-  green_rows <- which(grid_df$all_ok == 1)
-  red_rows   <- which(grid_df$all_ok == 0)
+  has_baseline <- if("0" %in% names(grid_df)) grid_df$`0` == 1 else FALSE
+  cycles_complete <- grid_df$all_ok == 1
+  
+  cycle_sum <- rowSums(grid_df[as.character(1:12)], na.rm = TRUE)
+  cycles_empty <- cycle_sum == 0
+  
+  # Sort into cases
+  ## Case A: Baseline + all cycles
+  rows_complete <- which(has_baseline & cycles_complete)
+  ## Case B: No baseline + all cycles
+  rows_longitudinal <- which(!has_baseline & cycles_complete)
+  ## Case C: Baseline, no cycles
+  rows_baseline <- which(has_baseline & cycles_empty)
+  ## Case D: Everything else
+  rows_problem <- setdiff(1:nrow(grid_df), c(rows_complete, rows_longitudinal, rows_baseline))
+  
   
   # Return the kable object
   grid_df |> 
     kbl(booktabs = TRUE) |> 
     kable_styling(full_width = FALSE) |> 
-    row_spec(green_rows, background = "#D4EFDF") |> 
-    row_spec(red_rows,   background = "#FADBD8")
+    row_spec(rows_complete,     background = cb_light[1]) |> 
+    row_spec(rows_longitudinal, background = cb_light[5]) |> 
+    row_spec(rows_baseline,     background = cb_light[6]) |> 
+    row_spec(rows_problem,      background = cb_light[2])
 }
 
-grid_data <- create_audit_grid(cycle_vars)
+
+grid_data <- create_cycle_audit(cycle_vars)
 format_audit_table(grid_data)
 ```
 
-Noted issues:
+:::{.callout-note collapse="true"}
+### Actions Taken: Harmonize variable naming
 
-- `DBIL` for cycle 1, `Dbil` for the rest
-- `HB` for cycles 1-3, and 8, `Hb` for the rest
-- `Hospitalization.days` missing for cycle 2
-- `Hospitalization.required.due.to.toxicity?` for cycle 1, but `Hospitalization.required.dur.to.toxicity?` for the rest
-- `HypoNatramia.Na+` for cycles 2 and 3, but `HypoNa+` for the rest
-- `TBIL` for cycle 1, `TBil` for cycle 3, `Tbil` for the rest
+**Issues:** Several cycle variables had minor inconsistencies, missing suffixes, or typos in their naming.
 
+**Resolved:** [2025-11-28] Harmonized naming conventions in `01_data_cleaning.qmd` (Chunk: `fix_cycle-var-consistency`).
+
+* `DBIL` for cycle 1, `Dbil` for the rest
+    * Renamed all to `DBIL`
+* `HB` for cycles 1-3, and 8, `Hb` for the rest
+    * Renamed all to `HB`
+* `Hospitalization.days` missing for cycle 2
+    * Renamed `Hospitalization.days` to `Hospitalization.days.2`
+* `Hospitalization.required.due.to.toxicity?` for cycle 1, but `Hospitalization.required.dur.to.toxicity?` for the rest
+    * Renamed to fix "dur" typo where present
+* `HypoNatramia.Na+` for cycles 2 and 3, but `HypoNa+` for the rest
+    * Renamed all to `HypoNa+`
+* `TBIL` for cycle 1, `TBil` for cycle 3, `Tbil` for the rest
+    * Renamed all to `TBIL`
+:::
 
 ```{r}
-#| label: name-standardization-biomarker-implement-changes
+#| label: fix_cycle-var_consistency
 
-gic_tmp <- gic_tmp |> 
+gic_renamed <- gic_renamed |> 
   # Fix DBIL
   rename_with(
     .cols = matches("^dbil", ignore.case = TRUE),
@@ -281,31 +330,27 @@ gic_tmp <- gic_tmp |>
   )
 
 # Recheck
-all_names <- names(gic_tmp)
-cycle_vars <- all_names[str_detect(all_names, "\\.\\d{1,2}$")]
+cycle_vars <- names(gic_renamed)[str_detect(names(gic_renamed), "\\.\\d{1,2}$")]
 cycle_vars <- cycle_vars[cycle_vars != "Sex.Male.1/Female.2"]
-grid_data <- create_audit_grid(cycle_vars)
+grid_data <- create_cycle_audit(cycle_vars)
 format_audit_table(grid_data)
 ```
 
+## Rename Variables
 
 ```{r}
-#| label: name-standardization
+#| label: rename
 
-gic_clean <- gic_tmp |> 
+gic_renamed <- gic_renamed |> 
   # Name standardization
   rename(
-    # Factor variables
+    # Basic Variables
     hiv_status = "HIV.Status:.1,.Negative.|.2,.Positive",
     sex = "Sex.Male.1/Female.2",
     residence = "Primary.Residence.1.urban/.2.rural/3.peri-urban.",
     cancer_site = "Cancer.site:.1,.Esophagus.|.2,.Gastric.|.3,.Gastro-esophageal.junction.|.4,.Gall.bladder.,.Biliary.&.Pancreas.|.9,.Colorectal.|.11,.Anal.",
     histology = "Histology.type:.1,.adenocarcinoma/carcinoma.|.2,.Squamous.carcinoma.|.3,.Sarcoma.|.4,.Carcinoid.|.5,.Lymphoma.|.7,.Others",
     cancer_stage = "Cancer.stage:.stage.1,.I.|.2,.II.|.3,.III.|.4,.IV.|.4,.Unknown/Undocumented",
-    tx_intent = "Treatment.intention-.1,.Curative.|.2,.Palliative",
-    chemo_seq = "Sequence.of.chemotherapy-.1,.Neoadjuvant.|.2,.Adjuvant.|.3,.Definitive",
-    chemo_type = "chemotherapy.given:.1,Platinum/Paclitaxel..|.2,.Platinum/5-FU..3,.LCV/5-FU.|.4,.CapeOX.|.5,.FOLFOX4.|.6,.Capecitabine.|.20,.Irinotecan.|.21,.Others",
-    death_date = "date_of_death_if_such_outc",
     
     # Comorbidities
     comorbid_htn = "Hypertension",
@@ -324,8 +369,8 @@ gic_clean <- gic_tmp |>
     hx_cancer = "family_history_of_cancer",
     
     # Baseline Measurements
-    weight = "Weight.(kg)",
-    height = "Height.(cm)",
+    weight_0 = "Weight.(kg)",
+    height_0 = "Height.(cm)",
     bmi_0 = "Baseline.BMI",
     wbc_0 = "Baseline.WBC",
     anc_0 = "Baseline.ANC",
@@ -350,81 +395,22 @@ gic_clean <- gic_tmp |>
     cea_0 = "Baseline.CEA",
     ca199_0 = "Baseline.CA19_9",
     
-    # Treatment info
-    tx_concurent_rtx = "chemotherapy_given_with.concurrent.radiotherapy?",
+    # Treatment Info
+    tx_concurrent_rtx = "chemotherapy_given_with.concurrent.radiotherapy?",
+    tx_intent = "Treatment.intention-.1,.Curative.|.2,.Palliative",
+    chemo_seq = "Sequence.of.chemotherapy-.1,.Neoadjuvant.|.2,.Adjuvant.|.3,.Definitive",
+    chemo_type = "chemotherapy.given:.1,Platinum/Paclitaxel..|.2,.Platinum/5-FU..3,.LCV/5-FU.|.4,.CapeOX.|.5,.FOLFOX4.|.6,.Capecitabine.|.20,.Irinotecan.|.21,.Others",
     cycles_prescribed = "Total.number.chemo.cycles.prescribed",
     cycles_given = "Total.number.of.chemotherapy.administered",
-    completion_rate_pct = "Chemotherapy.completion.rates.(%)"
-  ) |> 
-  
-  # Encode factor variables correctly
-  mutate(
-    hiv_status = factor(hiv_status,
-                        levels = c(1, 2), labels = c("Negative", "Positive")),
-    sex = factor(sex,
-                 levels = c(1, 2), labels = c("Male", "Female")),
-    residence = factor(residence,
-                       levels = c(1, 2, 3), labels = c("Urban", "Rural", "Peri-urban")),
-    cancer_site = factor(cancer_site,
-                         levels = c(1, 2, 3, 4, 9, 11), 
-                         labels = c("Esophageal", "Gastric", "Gastro-esophageal Junction", "Gall Bladder, Biliary & Pancreas", "Colorectal", "Anal")),
-    histology = factor(histology,
-                       levels = c(1, 2, 3, 4, 5, 7), 
-                       labels = c("Adenocarcinoma/carcinoma", "Squamous carcinoma", "Sarcoma", "Carcinoid", "Lymphoma", "Other")),
-    cancer_stage = factor(cancer_stage,
-                          levels = c(1, 2, 3, 4),
-                          labels = c("I", "II", "III", "IV/Unknown")),
-    tx_intent = factor(tx_intent,
-                       levels = c(1, 2),
-                       labels = c("Curative", "Palliative")),
-    chemo_seq = factor(chemo_seq,
-                       levels = c(1, 2, 3),
-                       labels = c("Neoadjuvant", "Adjuvant", "Definitive")),
-    chemo_type = factor(chemo_type,
-                        levels = c(1, 2, 3, 4, 5, 6, 20, 21),
-                        labels = c("Platinum/Paclitaxel", "Platinum/5-FU", "LCV/5-FU", "CapeOX", "FOLFOX4", "Capecitabine", "Irinotecan", "Other")),
-    comorbid_htn = factor(comorbid_htn,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    comorbid_dm = factor(comorbid_dm,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    comorbid_tb = factor(comorbid_tb,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    comorbid_asthma = factor(comorbid_asthma,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    comorbid_chd = factor(comorbid_chd,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    comorbid_copd = factor(comorbid_copd,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    comorbid_ckd = factor(comorbid_ckd,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    comorbid_epilepsy = factor(comorbid_epilepsy,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    comorbid_none = factor(comorbid_none,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    hx_etoh = factor(hx_etoh,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    hx_tobacco = factor(hx_tobacco,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
-    hx_cancer = factor(hx_cancer,
-                          levels = c(0,1),
-                          labels = c("False", "True")),
+    completion_rate = "Chemotherapy.completion.rates.(%)",
+    death_date = "date_of_death_if_such_outc"
   ) |> 
   
   # Standardize names of cycle variables
   rename_with(
     .cols = matches("\\.\\d{1,2}$"),
     .fn = ~ .x |> 
+      # Fix specific longer names
       str_replace("^Was\\.the\\.cycle\\.delayed[^0-9]*", "cycle_delayed.") |> 
       str_replace("^Hospitalization\\.required[^0-9]*", "hosp_toxicity.") |> 
       str_replace("^Hospitalization\\.days", "hosp_days") |> 
@@ -433,67 +419,187 @@ gic_clean <- gic_tmp |>
       str_replace("^CSF-G\\.Indication", "csfg_indicated") |>
       str_replace("HypoNa\\+", "sodium") |> 
       str_replace("HypoK\\+", "potassium") |> 
+      # Convert everything to snake case
       tolower() |> 
       str_replace("\\.(\\d{1,2})$", "_\\1")
   )
 ```
 
+:::{.callout-note collapse="true"}
+### Action Taken: Rename variables
+
+**Issues:** Raw variable names contained factor levels and long strings.
+
+**Resolved:** [2025-11-29] Converted all variables to standardized snake_case format in `01_data_cleaning.qmd` (Chunk: `rename`).
+
+* Standardized naming conventions
+    * Simplified names and converted all to snake case
+    * Baseline measurements denoted with `_0` suffix
+    * Cycle measurements denoted with `_#` suffix for the given cycle number
+:::
+
+## Renaming Audit
+### Variable exists for each cycle
 ```{r}
-#| label: add_ae-grades
+#| label: check_rename-cycle-vars
 
-
+# Recheck cycle vars
+final_cycle_vars <- names(gic_renamed)[str_detect(names(gic_renamed), "\\_\\d{1,2}$")]
+final_name_audit <- create_cycle_audit(final_cycle_vars)
+format_audit_table(final_name_audit)
 ```
 
+### Check for lost rows, incorrect deletions
+```{r}
+#| label: integrity-check_renaming_basic
+
+# Row integrity
+if(nrow(gic_raw) != nrow(gic_renamed)) {
+  stop("Row count mismatch, rows were lost or added.")
+} else {
+  cat("Row count preserved:", nrow(gic_renamed), "patients.")
+}
+
+# Deletion verification
+deleted_patterns <- c("Febrile.Neutropenia", "HyperK\\+", "Cycle \\d", "\\.\\.\\.\\d*")
+found_trash <- map(deleted_patterns, ~ grep(., names(gic_renamed), value = TRUE))
+
+if (length(unlist(found_trash)) > 0) {
+  cat("\nSome columns intended for deletion are still present.")
+} else {
+  cat("\nAll redundant columns removed.")
+}
+```
+
+### Check static variables against original names
+```{r}
+#| label: integrity-check_static-vars
+
+# Static variable integrity verification
+## Load Glossary
+glossary_df <- read_xlsx(here("docs", "glossary.xlsx"))
+
+## Find the start of the Longitudinal Section
+longitudinal_start_index <- which(str_detect(glossary_df$Variable, "Longitudinal"))[1]
+
+if (is.na(longitudinal_start_index)) {
+  stop("Could not find 'Longitudinal' header.")
+} else {
+  static_vars <- glossary_df |> slice(1:(longitudinal_start_index - 1))
+}
+
+## Prepare checklist
+check_list <- static_vars |> 
+  filter(!str_detect(Variable, "^\\*\\*")) |> 
+  select(clean_col = Variable, raw_col = `Original Name (Example)`)
+
+## Run stationary var audit
+static_audit <- check_list |> 
+  rowwise() |> 
+  mutate(
+    # Check if clean version of var names exist
+    clean_exists = clean_col %in% names(gic_renamed),
+    
+    # Get rid of backticks on variable names
+    raw_col = str_remove_all(raw_col, "`"), 
+    raw_exists = raw_col %in% names(gic_raw), 
+    data_match = if (clean_exists && raw_exists) {
+      identical(gic_raw[[raw_col]], gic_renamed[[clean_col]])
+      } else {
+        NA
+        }) |> 
+  ungroup() |> 
+  mutate(
+    Status = case_when(
+      !clean_exists ~ "Clean var missing",
+      !raw_exists   ~ "Raw var missing",
+      data_match    ~ "Match",
+      TRUE          ~ "Data mismatch"
+    )
+  )
+
+## Define row indices for better visualization
+static_green <- which(static_audit$Status == "Match")
+static_red <- which(static_audit$Status != "Match")
 
 
+## Display static audit
+static_audit |> 
+  arrange(Status) |> 
+  select(clean_col, raw_col, Status) |> 
+  kbl(booktabs = TRUE) |> 
+  kable_styling(full_width = TRUE) |> 
+  row_spec(static_green, background = cb_light[1]) |> 
+  row_spec(static_red, background = cb_light[2]) |> 
+  scroll_box(height = "400px")
+```
+
+### Check cycle variables against originals
+```{r}
+#| label: integrity-check_cycle-vars
+
+# Cycle variable integrity validation
+## Get all variables, both baseline and cyclic
+clean_cycle_vars <- names(gic_renamed) |> str_subset("_[1-9]\\d*$")
+
+## Create function to match against raw data/cols
+find_raw_match <- function(clean_col_name) {
+  clean_vec <- gic_renamed[[clean_col_name]]
+  
+  # Check for empty columns
+  if (all(is.na(clean_vec))) {
+    return(tibble(raw_match = "-", status = "All NA"))
+  }
+  
+  # Check against every column in raw data
+  matches <- names(gic_raw)[map_lgl(gic_raw, ~ identical(., clean_vec))]
+  
+  if (length(matches) == 0) {
+    return(tibble(raw_match = NA_character_, status = "No match"))
+  } else if (length(matches) == 1) {
+    return(tibble(raw_match = matches, status = "Unique match"))
+  } else {
+    # If multiple raw columns match (like the deleted duplicates), list them
+    match_list <- paste(matches, collapse = ", ")
+    return(tibble(raw_match = match_list, status = "Multiple raw matches"))
+  }
+}
+
+## Run cycle audit
+cycle_audit <- tibble(clean_name = clean_cycle_vars) |> 
+  rowwise() |> 
+  mutate(result = list(find_raw_match(clean_name))) |> 
+  unnest(result) |> 
+  ungroup()
+
+## Extract metadata for sorting
+cycle_audit_final <- cycle_audit |> 
+  extract(clean_name, into = c("stem", "cycle"), regex = "(.*)_(\\d+)$", remove = FALSE) |> 
+  mutate(cycle = as.integer(cycle)) |> 
+  arrange(stem, cycle)
+
+## Define row indices for better visualization
+cycle_good <- which(cycle_audit_final$status == "Unique match")
+cycle_multiple <- which(cycle_audit_final$status == "Multiple raw matches")
+cycle_empty <- which(cycle_audit_final$status == "All NA")
+cycle_bad <- which(cycle_audit_final$status == "No match")
 
 
+## Print cycle audit
+cycle_audit_final |> 
+  select(clean_name, raw_match, status) |> 
+  kbl(booktabs = TRUE, col.names = c("Clean Name", "Matched Raw Column(s)", "Status")) |> 
+  kable_styling(full_width = TRUE) |> 
+  row_spec(cycle_good, background = cb_light[1]) |> 
+  row_spec(cycle_multiple, background = cb_light[6]) |> 
+  row_spec(cycle_empty, background = cb_light[8]) |> 
+  row_spec(cycle_bad, background = cb_light[2]) |> 
+  scroll_box(height = "400px")
+```
 
-# Notes
-## Things I have noted and changed:
+# Save Cleaned Data
+```{r}
+#| label: save-data
 
-- The `ANC.3...108` and `ANC.3...109` columns were identical, I assume due to accidental duplication.
-    - Removed `ANC.3...109`, renamed `ANC.3...108` to `ANC.3`
-- There were two identical `HyperK+.3` columns and no `HypoK+.3` column for cycle 3
-    - Renamed the first to be `HypoK+.3`
-- In with all of the cycle 7 biomarker measurements, the `Febrile.Neutropenia`, `HypoNa+`, `HypoK+`, and `HyperK+` columns were labelled as if they belonged to cycle 6. They were not identical to their cycle 6 counterparts, so I assume this was a numbering mistake
-    - Renamed them to reflect that they belong in cycle 7
-    - Audrey confirmed that this was correct
-- The `ANC` and `Febrile.Neutropenia` columns within a given cycle were all identical (e.g., `ANC.3` was identical to `Febrile.Neutropenia.3`)
-    - Removed all of the `Febrile.Neutropenia` columns
-- The `HypoK+` and `HyperK+` columns within a given cycle were all identical (e.g., `HypoK+.3` was identical to `HyperK+.3`)
-    - Removed all of the `HyperK+` columns
-- Cycle 3 included `Hypernatramia.Na+.3` and `Hyponatramia.Na+.3` which were identical
-    - Removed `Hypernatrama.Na+.3`
-- There were several columns that were empty other than the cycle name (e.g., `Cycle 5`)
-    - Removed all of these columns
-- Standardized naming conventions
-    - `DBIL`/`Dbil` -> `DBIL`
-    - `HB`/`Hb` -> `HB`
-    - `Hospitalization.days` -> `Hospitalization.days.1` for cycle 1
-    - Fixed `Hospitalization.required.dur.to.toxicity?`typo
-    - `HypoNatramia.Na+`/`HypoNa+` -> `HypoNa+`
-    - `TBIL`/`TBil`/`Tbil` -> `TBIL`
-
-## Things I want to note in case there is an issue with how I handle them:
-
-- There are no patients marked as having COPD, Kidney disease, or epilepsy
-    - Low priority since I assume this is correct, but worth checking that there wasn't some sort of accidental duplication error
-
-
-## Things I need to dig into before I know how to handle them:
-- For Cancer Stage, based on the column name it looks like both stage IV cancer and unknown/undocumented stage are both denoted by 4
-- `HypoNa+.1` is the same as `Baseline.Na+` and `HypoK+.1` is the same as `Baseline.K+`
-    - Need to verify if this is correct, since none of the other baseline biomarkers are the same as their cycle 1 counterparts
-- `Dbil12` is empty. I'm pretty sure it's odd for just one of a set of biomarker measurements to be missing
-- For cycles 4, 7, 8, 9, and 11 the `Blood.transfusion` and `blood.units.needed` columns are identical within a given column
-    - I assume this is correct, but wanted to check because it implies that every person who received a blood transfusion in those cycles was given exactly 1 unit of blood.
-    - Look at a distribution of blood units given by cycle to see how plausible this is
-- `Hospitalization.requred.dur.to.toxicity?.10` is identical to `Was.the.cycle.delayed.due..to.toxicity.10`
-    - Not sure if this is reasonable or not, need to look at others and compare.
-
-
-## Things I spotted and need to deal with
-- ast_1 is a character vector?
-- height/weight/bmi have something funky going on, there's a bmi of 0.2
-- Working on adding graded adverse events columns (see `grading_rules.csv` for WIP)
+saveRDS(gic_renamed, here("data", "processed", "gic_renamed.rds"))
+```
