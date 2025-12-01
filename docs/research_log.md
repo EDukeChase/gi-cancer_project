@@ -17,24 +17,43 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 ---
 
 ## Project Status & Workflow
-- [ ] **Data Cleaning**
-	- [x] Check columns that had the same names in the excel file.
-	- [/] Check columns that have identical contents.
-	- [x] Check consistency of cycle specific variables.
-	- [x] Standardize variable names using snake case.
-	- [x] Audit each step of variable name standardization.
-	- [x] Encode variables as correct data types.
-	- [/] Audit variables after encoding.
-- [ ] **Data Validation**
-	- [x] [2025-11-30] Convert columns to correct data type and audit for accidental changes
-	- [ ] Examine missingness
-	- [ ] Identify invalid entries
-	- [ ] Veryify that `cycles_prescribed` >= `cycles_given`.
-	- [ ] Verify that `cycles_given` matches up with actual number of cycles containing data for each patient.
-		- Consider longitudinal data in chunks of "CBC Panel", "Chemisty Panel", "LFT Panel" and "Management"
-	- [ ] Verify composite variables (e.g., `completion_rate`, `bmi`).
-	- [ ] Add graded adverse event columns.
-		- MET-002 [P2]: Adverse Event Grading Rules
+- [/] **Data Cleaning (`01_data-cleaning.qmd`)**
+	- [x] [2025-11-16] **Duplicate Names:** Identified and resolved raw columns with identical names in the excel file.
+		- [x] DAT-001: Duplicate column names
+	- [/] **Duplicate Content:** Identified redundant columns; unresolved anomalies flagged for validation.
+		- [x] DAT-002: Redundant data columns
+		- [ ] DAT-004 [P3]: Zero comorbidities
+		- [ ] DAT-005 [P2]: Baseline vs. cycle 1 electrolytes
+		- [ ] DAT-006 [P2]: Empty `dbil_12`
+		- [ ] DAT-007 [P2]: Empty `abli_score_0` and `cr_clear_0`
+		- [ ] DAT-008 [P2]: Possible Blood transfusion duplication
+		- [ ] DAT-009 [P2]: Cycle 10 hospitalization variable
+	- [x] [2025-11-28] **Longitudinal Consistency:** Verified and standardized variable names across all 12 cycles.
+		- [x] DAT-003: Inconsistent Longitudinal Variable Naming
+	- [x] [2025-11-29] **Standardization:** Converted all variable names to snake_case and `stem_#` format.
+		- [x] DAT-011: General Variable Renaming
+	- [x] [2025-11-29] **Naming Audit:** Audited renaming steps to ensure traceability to raw data.
+	- [/] **Type Encoding:** Converted types (Factors, Dates, Numerics).
+		- [ ] DAT-010 [P1]: Cancer stage encoding ambiguity
+		- [x] DAT-012: Factors Encoded as Numeric
+		- [x] DAT-013: Empty Columns as Logical
+		- [x] DAT-014: Date Precision
+		- [ ] DAT-015 [P1]: Residence factor level mismatch
+	- [/] **Encoding Audit:** Verified integrity of type conversion.
+		- [ ] DAT-016 [P2]: Numeric Column as Character
+		- [ ] DAT-017 [P1]: Invalid Level (`sex`)
+- [ ] **Data Validation (`02_data-validation.qmd`):**
+    - [ ] **Logic Check:** Verify `cycles_given` matches actual data presence.
+        - *Note:* Audit by panel (Hematology, Chemistry, LFT, Management) to identify partial data vs. completely missing cycles.
+    - [ ] **Logic Check:** Verify `cycles_given` <= `cycles_prescribed`.
+    - [ ] **Logic Check:** Verify temporal consistency (e.g., Death Date > Treatment Start).
+	- [ ] **Calculation Check:** Verify composite variables (`completion_rate`, `bmi`) match their components.
+    - [ ] **Range Check:** Identify and handle impossible baseline values.
+    - [ ] **Range Check:** Scan for clinically impossible lab values.
+    - [ ] **Missingness:** Examine missingness patterns (Random vs. Systematic/Attrition).
+    - [ ] **Feature Engineering:** Generate graded adverse event columns using `grading_rules.csv`.
+		- [ ] MET-001 [P3]: Febrile Neutropenia vs. ANC
+		- [ ] MET-002 [P2]: Adverse Event Grading Rules
 
 ## Data Integrity & Anomalies (DAT)
 *Issues regarding the accuracy, completeness, or logic of the raw data.*
@@ -179,7 +198,6 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- *Redundant Content:* `Febrile.Neutropenia` (duplicate of `ANC`) and `HyperK+` (duplicate of `HypoK+`) were removed for all cycles.
 		- *Duplicate Column:* `Hypernatramia.Na+.3` (identical to `Hyponatramia.Na+.3`) was removed.
 		- *Documentation Artifacts:* All `Cycle #` spacer columns removed.
-
 - [x] **DAT-003: Inconsistent Variable Naming**
 	- *Resolved:* [2025-11-28] in `01_data-cleaning.qmd` (Chunk: `fix_longitudinal-consistency`).
 	- *Observed:*[2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_longitudinal-consistency`)
@@ -187,16 +205,12 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Details:*
 		- *Harmonized:* Capitalized all stems (`DBIL`, `HB`, `TBIL`), realigned with original naming scheme (`HypoNa+`).
 		- *Corrected:* Applied missing suffixes (`Hospitalization.days.2`), fixed typos (`Hospitalization.required.due.to.toxicity?`).
-
 - [x] **DAT-011: General Variable Renaming**
 	- *Resolved:* [2025-11-29] in `01_data-cleaning.qmd` (Chunk: `apply_standard-names`).
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-names`).
 	- *Summary:* Raw variable names contained factor levels and long strings.
 	- *Details:* 
 		- *Standardized:* Simplified names and converted all to snake case. Baseline measurements denoted with `_0` suffix. Longitudinal measurements denoted with `_#` suffix for appropriate cycle number.
-
-[2025-11-30]
-
 - [x] **DAT-012: Factors Encoded as Numeric**
 	- *Resolved:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
