@@ -6,6 +6,8 @@ project:
 # --- Execution Settings ---
 execute:
   freeze: auto
+  message: true
+  warning: true
   
 # --- Bibliography & Citations ---
 bibliography: references.bib

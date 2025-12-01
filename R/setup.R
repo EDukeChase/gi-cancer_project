@@ -13,8 +13,6 @@ set.seed(4534174)
 # --- Set global options ---
 knitr::opts_chunk$set(
   echo = TRUE,
-  message = FALSE,
-  warning = FALSE,
   fig.width = 8,
   fig.asp = 0.618,
   fig.align = 'center'
