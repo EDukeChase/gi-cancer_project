@@ -1,5 +1,5 @@
 ---
-title: "02_data-validation"
+title: "GI Cancer: Data Validation"
 bibliography: references.bib
 ---
 # Load Data and Libraries
@@ -374,20 +374,87 @@ Examine patterns of missing data.
 # Feature Engineering
 ## Adverse Event Grading
 Apply grading logic to raw laboratory values using `grading_rules.csv`.
+
 ```{r}
 #| label: derive_adverse-events
 
-# Load grading rules and apply logic to create adverse event columns
+# Load adverse event grading rules
+rules <- read_csv(here("data", "grading_rules.csv"), show_col_types = FALSE)
 
+# Pivot, Grade, and Pivot Back
+gic_graded <- gic_wrk |> 
+  # Pivot Long
+  select(record_id, matches("_\\d+$")) |> 
+  pivot_longer(
+    cols = -record_id,
+    names_to = c("stem", "cycle"),
+    names_pattern = "(.*)_(\\d+)$",
+    values_to = "value",
+    values_transform = list(value = as.numeric) # Ensure numeric for grading math
+  ) |> 
+  filter(!is.na(value)) |> 
+  semi_join(rules, by = "stem") |> 
+  
+  # Apply Logic (Min < Val <= Max)
+  left_join(rules, by = "stem", relationship = "many-to-many") |> 
+  filter(value > min_val & value <= max_val) |> 
+  
+  # Pivot Wide (Create labels)
+  mutate(new_col = paste0(stem, "_grade_", cycle)) |> 
+  select(record_id, new_col, label) |> 
+  pivot_wider(names_from = new_col, values_from = label)
+
+# Join back to main data
+gic_validated <- gic_wrk |> 
+  left_join(gic_graded, by = "record_id")
+
+# Print a random sample of grades to see if it worked, will perform audit later
+gic_validated |> 
+  select(record_id, hb_1, hb_grade_1) |> 
+  # Filter for patients who have data for the given cycle
+  filter(!is.na(hb_1)) |> 
+  head(10) |> 
+  kbl(caption = "Verification: HB Cycle 1 Grading") |> 
+  kable_styling(full_width = FALSE)
+
+gic_validated |> 
+  select(record_id, ast_5, ast_grade_5) |> 
+  # Filter for patients who have data for the given cycle
+  filter(!is.na(ast_5)) |> 
+  head(10) |> 
+  kbl(caption = "Verification: AST Cycle 5 Grading") |> 
+  kable_styling(full_width = FALSE)
+
+gic_validated |> 
+  select(record_id, wbc_6, wbc_grade_6) |> 
+  # Filter for patients who have data for the given cycle
+  filter(!is.na(wbc_6)) |> 
+  head(10) |> 
+  kbl(caption = "Verification: WBC Cycle 6 Grading") |> 
+  kable_styling(full_width = FALSE)
 ```
 
 # Export
 ```{r}
 #| label: save_final-data
 
-# Save fully validated and graded dataset for analysis
-# saveRDS(gic_df, here("data", "processed", "gic_df.rds"))
+# Define path to file
+gic_validated_path <- here("data", "processed", "gic_validated.rds")
+
+# Save if file doesn't exist, or check if overwrite is intended if it does.
+if (file.exists(gic_validated_path) && interactive()) {
+  # If file exists and this is being run manually in RStudio ask before overwriting
+  response <- readline(prompt = paste("Warning:", basename(gic_validated_path), "already exists. Overwrite? (y/n):"))
+  
+  if (tolower(substr(response, 1, 1)) == "y") {
+    saveRDS(gic_validated, gic_validated_path)
+    message("File overwritten: ", basename(gic_validated_path))
+  } else {
+    message("Save operation cancelled.")
+  }
+} else {
+  # If the file doesn't exist or document is being rendered, just save it
+  saveRDS(gic_validated, gic_validated_path)
+  message("File saved: ", basename(gic_validated_path))
+}
 ```
-
-
-
