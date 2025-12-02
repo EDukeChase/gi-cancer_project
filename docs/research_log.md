@@ -108,7 +108,8 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `fix_duplicate-content`)
 	- *Details:* 
 		- *Leave Ambiguous Label:* Treat a value of `4` as "Stage IV / Unknown".
-	- *Task:* Clarify correct encoding.
+	- *Update:* [2025-12-01] Dr. Maxhindu confirmed `4` indicates "Stage IV", as treatment implies known stage.
+	- *Task:* Update factor encoding in `01_data-cleaning.qmd` to map `4` -> "Stage IV".
 - [/] **DAT-015 [P2]: Residence factor level mismatch**
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
 	- *Summary:* The documented encoding for `residence` is "1 = urban; 2 = rural; 3 = peri-urban", but observed levels are 0, 1, and 2.
@@ -123,11 +124,12 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Temporary Resolution*: [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
 	- *Details:* 
 		- *Coerced Data Types:* Converted `ast_1` to numeric and explicitly coerced "pn" to `NA`.
-	- *Task:* Clarify whether this was data misentry or if "pn" has a specific meaning.
+	- *Update:* [2025-12-02] Dr. Mazhindu confirmed "pn" should be **28**.
+	- *Task:* Update `01_data-cleaning.qmd` to replace "pn" with `28` before numeric coercion.
 - [ ] **DAT-018 [P1]: Chemotherapy Data Discrepancy**
 	- *Observed:* [2025-12-01] via email from Dr. Mazhindu [2025-10-08].
 	- *Summary:* `different_administered.csv` contains corrected administration counts for 6 patients.
-	- *Task:* Validate CSV contents against `gic_raw` to identify changed values, then apply patch in `01_data-cleaning.qmd`.
+	- *Task:* Discuss with Dr. Mazhindu in meeting [2025-12-02] to clarify how to integrate corrected data.
 - [ ] **DAT-019 [P1]: Extraneous cycle data**
     - *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `assess_extraneous-data`).
     - *Summary:* 4 patients (Record IDs: 27, 146, 498, 766) have data recorded for cycles beyond their `cycles_given` count.
@@ -147,13 +149,6 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 ## Methodology (MET)
 *Decisions affecting the statistical plan.*
 
-- [/] **MET-001 [P3]: Febrile Neutropenia vs. ANC**
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
-	- *Summary:* Raw data had `ANC` and `Febrile.Neutropenia` as identical columns.
-	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
-	- *Details:*
-		- **Redundant Content:** `Febrile.Neutropenia` (duplicate of `ANC`) was removed for all cycles.
-	- *Task:* Consult with Dr. Mazhindu, since FN is neutropenia with a fever, but there is no fever data present, and the `ANC` and `Febrile.Neutropenia` columns contained identical measurements.
 - [ ] **MET-002 [P1]: Adverse Event Grading Rules**
 	- *Observed:* [2020-11-29] in `NOrmal ranges and Adverse Events grading system.xlsx`
 	- *Summary:* Edge case ambiguity in adverse event grading criteria.
@@ -175,12 +170,12 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 - [ ] **ADM-001 [P3]: Update Glossary**
 	- *Task:* Add all missing valid and reference ranges.
 - [ ] **ADM-002 [P0]: Outstanding Inquiries (for Dr. Mazhindu)**
-	- *Status:* Sent, awaiting reply
-	- *Content:*
-		1. DAT-010 [P1]: Cancer stage encoding ambiguity
-		2. DAT-018 [P1]: Chemotherapy Data Discrepancy
-		3. DAT-016 [P2]: Numeric Column as Character
-		4. MET-001 [P3]: Febrile Neutropenia vs. ANC
+	- *Status:* Reply received [2025-12-01]
+	- *Outcomes:*
+		1. DAT-010: Confirmed `4` = "Stage IV".
+		2. DAT-018: Resolve during meeting on 2025-12-02
+		3. DAT-016: Replace "pn" with 28.
+		4. MET-001: Will move forward with ANC only analysis.
 	
 ## Resolved Items Archive
 
@@ -237,3 +232,9 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Summary:* The variable `sex` contained the raw value `3`.
     - *Details:*
 		- *Patched Data Error:* Corrected raw value of `3` to `1` (Male) per confirmation from Dr. Mazhindu [2025-10-08].
+- [x] **MET-001 [P3]: Febrile Neutropenia vs. ANC**
+	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+	- *Resolved:* [2025-12-01] Definition confirmed by Dr. Mazhindu in email.
+	- *Summary:* Raw data had `ANC` and `Febrile.Neutropenia` as identical columns.
+	- *Details:*
+		- **Confirmation:** `Dr. Mazhindu confirmed that using `ANC` as a proxy for the analysis is acceptable given the lack of fever data. The deletion of the redundant column stands.
