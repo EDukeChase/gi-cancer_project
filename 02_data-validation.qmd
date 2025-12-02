@@ -9,12 +9,385 @@ bibliography: references.bib
 
 source("R/setup.R")
 
-# Packages
-library(naniar)     # Visualize missing data
-```
 
+# Packages
+```
 
 ```{r}
-#| label: add_ae-grades
+#| label: load-data
+
+gic_encoded <- readRDS(here("data", "processed", "gic_encoded.rds"))
+```
+
+# Logic & Consistency Validation
+## Cycle Consistency
+Verify that `cycles_given` matches the actual presence of data in the cycle columns. Flag patients who have data present in cycles after their administered number.
+
+```{r}
+#| label: assess_extraneous-data
+
+# Pivot longitudinal data to make finding missing data easier
+real_data_map <- gic_encoded |> 
+  select(record_id, pgh_number, cycles_prescribed, cycles_given, matches("_[1-9]\\d*$")) |> 
+  pivot_longer(
+    cols = matches("_\\d+$"),
+    names_to = c("stem", "cycle"),
+    names_pattern = "(.*)_(\\d+)$",
+    values_to = "value",
+    values_transform = list(value = as.character)
+  ) |> 
+  filter(!is.na(value)) |> 
+  mutate(cycle = as.integer(cycle))
+
+# Calculate max data cycle per patient
+patient_max_cycles <- real_data_map |> 
+  group_by(record_id, pgh_number, cycles_prescribed, cycles_given) |> 
+  summarize(
+    max_cycle_with_data = max(cycle),
+    .groups = "drop"
+  ) |> 
+  complete(record_id = gic_encoded$record_id, fill = list(max_cycle_with_data = 0)) |> 
+  left_join(select(gic_encoded, record_id, cycles_given), by = "record_id", suffix = c("", "_orig")) |> 
+  mutate(cycles_given = coalesce(cycles_given, cycles_given_orig)) |> 
+  select(-cycles_given_orig)
+
+# Identify extraneous data (data beyond official count)
+extraneous_data <- patient_max_cycles |> 
+  filter(max_cycle_with_data > cycles_given) |> 
+  mutate(excess_cycles = max_cycle_with_data - cycles_given) |> 
+  arrange(desc(max_cycle_with_data))
+
+# Display extraneous
+if (nrow(extraneous_data) > 0) {
+  warning("Found ", nrow(extraneous_data), " patients with data beyond their recorded cycle count.")
+  extraneous_data |> 
+    kbl(booktabs = TRUE, caption = "Extraneous Data Logic Check") |> 
+    kable_styling()
+} else {
+  message("Extraneous cycle consistency check passed: No data found beyond `cycles_gi")
+}
+
+# Identify missing data
+missing_cycle_data <- patient_max_cycles |> 
+  filter(max_cycle_with_data < cycles_given) |> 
+  mutate(missing_cycles = cycles_given - max_cycle_with_data) |> 
+  arrange(desc(missing_cycles))
+
+if (nrow(missing_cycle_data) > 0) {
+  warning("Found ", nrow(missing_cycle_data), " patients missing records for completed cycles.")
+  missing_cycle_data |> 
+    kbl(caption = "Missing Cycle Records") |> 
+    kable_styling() |> 
+    scroll_box(height = "400px")
+} else {
+  message("Missing cycle consistency check passed: All administered cycles have data.")
+}
+```
+
+::: {.callout-warning collapse="false"}
+### Anomaly: Extraneous Cycle Data
+
+**Issue:** The audit identified 4 patients with data recorded for cycles greater than their `cycles_given` count.
+
+* **Affected IDs:** 27, 146, 498, 766
+* **Status:** Flagged as **DAT-019**. Investigation required to determine if the administration count is incorrect or if the data should be removed.
+:::
+
+```{r}
+#| label: investigate_extraneous-data
+#| results: asis
+
+# Define problem IDs:
+problem_ids <- c(27, 146, 498, 766)
+
+# Define panel groups for readability
+var_groups <- tibble(
+  stem = c(
+    "hb", "mcv", "mch", "plt", "wbc", "anc", "lcc",                      # CBC
+    "sodium", "potassium",                                               # Chem
+    "tp", "alb", "tbil", "dbil", "alp", "alt", "ast", "ggt",             # LFT
+    "cycle_delayed", "hosp_toxicity", "hosp_days", "transfusion_given",  # Mgmt
+    "transfusion_units", "csfc_indicated"                                # Mgmt
+  ),
+  panel = c(
+    rep("1. CBC", 7),
+    rep("2. Chem", 2),
+    rep("3. LFT", 8),
+    rep("4. Mgmt", 6)
+  )
+)
+
+# Function to view patient history
+view_pt_hx <- function(pid, df) {
+  # Get official count
+  n_given <- df |> filter(record_id == pid) |> pull(cycles_given)
+  
+  # Extract and pivot data
+  pt_data <- df |> 
+    filter(record_id == pid) |> 
+    select(matches("_[1-9]\\d*$")) |> 
+    pivot_longer(
+      cols = everything(),
+      names_to = c("stem", "cycle"),
+      names_pattern = "(.*)_(\\d+)$",
+      values_transform = list(value = as.character) 
+    ) |> 
+    mutate(cycle = as.numeric(cycle)) |> 
+    
+    # Filter to only relevant cycles
+    filter(cycle >= n_given | !is.na(value)) |> 
+    
+    # Join with panel info for sorting
+    left_join(var_groups, by = "stem") |>
+    arrange(panel, stem)
+  
+  # Create visuyalization
+  pt_wide <- pt_data |> 
+    select(panel, stem, cycle, value) |> 
+    pivot_wider(names_from = cycle, values_from = value)
+  cycle_cols <- setdiff(names(pt_wide), c("panel", "stem"))
+  
+  # 2. Filter for the bad ones
+  bad_cols <- cycle_cols[map_lgl(cycle_cols, function(col) {
+    # Logic: Is it a future cycle?
+    is_future <- as.numeric(col) > n_given
+    # Logic: Does it have data? (Not all NAs)
+    has_data  <- !all(is.na(pt_wide[[col]]))
+    
+    return(is_future && has_data)
+  })]
+  
+  # 3. Get indices for kable
+  target_indices <- which(names(pt_wide) %in% bad_cols)
+  
+  # Render
+  pt_wide |> 
+    kbl(booktabs = T,
+        caption = paste("Pt Data: Record ID", pid,
+                        "(Cycles Given:", n_given, ")")) |> 
+    kable_styling(font_size = 11) |> 
+    column_spec(target_indices, background = cb_light[2])
+}
+
+walk(problem_ids, function(pid) {
+  print(view_pt_hx(pid, gic_encoded))
+  
+  # Add a visual spacer between tables so they don't merge
+  cat("\n<br><br>\n") 
+})
+```
+
+```{r}
+#| label: fix_extraneous-data
+
+# Filter problem IDs out of working dataset until correct values determined
+gic_wrk <- gic_encoded |> 
+  filter(!record_id %in% problem_ids)
+
+message("Excluded ", length(problem_ids), " records with ambiguous cycle data.")
+message("Remaining number of patients: ", nrow(gic_wrk))
+```
+
+::: {.callout-note}
+### Action Taken: Exclusion of Ambiguous Records
+
+**Issue:** 4 records were identified with extraneous cycle data (data present for cycles beyond the recorded `cycles_given`).
+**Investigation:** Visual inspection confirmed data inconsistencies (e.g., Record 146 has data for Cycle 1 and Cycle 12 only; Record 498 has zero-values in Cycle 8).
+**Resolution:** These records have been excluded from the analysis dataset pending clarification.
+:::
+
+
+## Treatment Adherence Logic
+Verify that the administered cycles do not exceed prescribed cycles.
+```{r}
+#| label: assess_cycle-counts
+
+# Check that `cycles_given` <= `cycles_prescribed`
+over_treated <- gic_wrk |> 
+  filter(cycles_given > cycles_prescribed) |> 
+  select(record_id, cycles_prescribed, cycles_given) |> 
+  mutate(excess = cycles_given - cycles_prescribed) |> 
+  arrange(desc(excess))
+
+if (nrow(over_treated) > 0) {
+  warning("Found ", nrow(over_treated), " patients with more cycles given than prescribed.")
+  
+  over_treated |> 
+    kbl(booktabs = TRUE, caption = "Treatment Adherence Logic Check") |> 
+    kable_styling(full_width = FALSE) |> 
+    row_spec(1:nrow(over_treated), background = cb_light[2])
+} else {
+  message("Treatment adherence check passed.")
+}
+```
+
+## Composite Variable Checks
+Verify that pre-calculated fields match their components.
+```{r}
+#| label: assess_calculated-vars
+
+# Define tolerance thresholds
+bmi_tol <- 0.5
+rate_tol <- 1.0
+
+composite_audit <- gic_wrk |> 
+  select(record_id, height_0, weight_0, bmi_0, 
+         cycles_given, cycles_prescribed, completion_rate) |> 
+  mutate(
+    # 1. Calculate fresh BMI (Height is in cm, convert to m)
+    bmi_calc = weight_0 / (height_0 / 100)^2,
+    
+    # 2. Calculate fresh Completion Rate
+    rate_calc = (cycles_given / cycles_prescribed) * 100,
+    
+    # 3. Measure Diff
+    bmi_diff = abs(bmi_0 - bmi_calc),
+    rate_diff = abs(completion_rate - rate_calc)
+  ) |> 
+  # Filter for mismatches exceeding tolerance
+  # (We use !is.na checks to ignore rows where data is missing)
+  filter(
+    (!is.na(bmi_diff) & bmi_diff > bmi_tol) | 
+    (!is.na(rate_diff) & rate_diff > rate_tol)
+  ) |> 
+  arrange(desc(bmi_diff))
+
+if (nrow(composite_audit) > 0) {
+  warning("Found ", nrow(composite_audit), " records with composite variable mismatches.\n")
+  
+  composite_audit |> 
+    select(record_id, 
+           bmi_orig = bmi_0, bmi_new = bmi_calc, bmi_diff,
+           rate_orig = completion_rate, rate_new = rate_calc) |> 
+    kbl(caption = "Composite Variable Logic Check", digits = 1) |> 
+    kable_styling() |> 
+    scroll_box(height = "400px")
+} else {
+  message("Composite Check Passed: BMI and Completion Rates match inputs within tolerance.")
+}
+```
+
+## Temporal Consistency
+Verify that event dates occur within logical timeframes.
+```{r}
+#| label: assess_temporal-logic
+
+# Check death_date vs study time window
 
 ```
+
+# Numeric Range Validation
+## Body Measurement Outliers
+Identify clinically impossible values for height and weight.
+
+```{r}
+#| label: assess_body-measurements
+
+# Set wide limits to try and only catch errors, not outliers
+limits <- list(
+  ht_min = 100, ht_max = 250,
+  wt_min = 30, wt_max = 200,
+  bmi_min = 10, bmi_max = 50
+)
+
+# Identify outliers
+body_outliers <- gic_wrk |> 
+  select(record_id, height_0, weight_0, bmi_0) |> 
+  filter(
+    height_0 < limits$ht_min | height_0 > limits$ht_max |
+    weight_0 < limits$wt_min | weight_0 > limits$wt_max |
+    bmi_0 < limits$bmi_min   | bmi_0 > limits$bmi_max
+  ) |> 
+  arrange(height_0)
+
+if (nrow(body_outliers) > 0) {
+  warning("Found ", nrow(body_outliers), " records with impossible body measurements.")
+  
+  body_outliers |> 
+    kbl(caption = "Body Measurement Outliers", digits = 1) |> 
+    kable_styling(full_width = FALSE) |> 
+    row_spec(which(body_outliers$height_0 > 250), background = cb_light[2])
+} else {
+  message("Body Measurement Check Passed.")
+}
+
+# Visualize results
+gic_wrk |> 
+  select(height_0, weight_0, bmi_0) |> 
+  pivot_longer(everything(), names_to = "measure", values_to = "value") |> 
+  ggplot(aes(x = value)) +
+  geom_histogram(bins = 30, fill = cb_light[3], color = "white") +
+  facet_wrap(~measure, scales = "free") +
+  theme_minimal() +
+  labs(title = "Distribution of Body Measurements", x = NULL, y = "Count")
+```
+
+```{r}
+#| label: fix_body-measurements
+
+# Temporary resolution for DAT-020
+gic_wrk <- gic_wrk |> 
+  mutate(
+    # Fix suspected height typo
+    `height_0` = if_else(record_id == 614, 149.8, height_0),
+    # Recalculate BMI
+    bmi_0 = if_else(record_id == 614, weight_0 / (height_0 / 100)^2, bmi_0)
+  )
+
+```
+
+::: {.callout-note}
+### Action Taken [DAT-020]: Body Measurement Correction 
+
+**Issue:** Record 614 contained an impossible height (1498 cm).
+**Temporary Resolution:** Height set to 149.8 cm (suspected decimal error). BMI recalculated for this record only; all other BMI values remain as imported.
+:::
+
+## Biomarker Range Checks
+Scan laboratory values for biologically impossible values (e.g., negative counts, values 10x above physiological max, etc.).
+```{r}
+#| label: assess_biomarker-ranges
+
+# Generate summary stats for longitudinal variables
+
+```
+
+# Missingness Analysis
+## Missing Data Patterns
+Examine patterns of missing data.
+
+```{r}
+#| label: assess_missingness
+
+# Visualize missingness by cycle
+
+```
+
+```{r}
+#| label: assess_panel-missingness
+
+# Examine missingness patterns by blood panel across cycle to identify unexpectedly missing data
+
+```
+
+
+# Feature Engineering
+## Adverse Event Grading
+Apply grading logic to raw laboratory values using `grading_rules.csv`.
+```{r}
+#| label: derive_adverse-events
+
+# Load grading rules and apply logic to create adverse event columns
+
+```
+
+# Export
+```{r}
+#| label: save_final-data
+
+# Save fully validated and graded dataset for analysis
+# saveRDS(gic_df, here("data", "processed", "gic_df.rds"))
+```
+
+
+

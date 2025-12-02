@@ -17,11 +17,12 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 ---
 
 ## Project Status & Workflow
-- [/] **Data Cleaning (`01_data-cleaning.qmd`)**
+- [ ] **Data Cleaning (`01_data-cleaning.qmd`)**
+	- [ ] **Apply manual data patch (DAT-018).**
 	- [x] [2025-11-16] **Duplicate Names:** Identified and resolved raw columns with identical names in the excel file.
-		- [x] DAT-001: Duplicate column names
-	- [/] **Duplicate Content:** Identified redundant columns; unresolved anomalies flagged for validation.
-		- [x] DAT-002: Redundant data columns
+		- *Resolved Tasks:* DAT-001.
+	- [ ] **Duplicate Content:** Identified redundant columns; unresolved anomalies flagged for validation.
+		- *Resolved Tasks:* DAT-002.
 		- [ ] DAT-004 [P3]: Zero comorbidities
 		- [ ] DAT-005 [P2]: Baseline vs. cycle 1 electrolytes
 		- [ ] DAT-006 [P2]: Empty `dbil_12`
@@ -29,31 +30,31 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] DAT-008 [P2]: Possible Blood transfusion duplication
 		- [ ] DAT-009 [P2]: Cycle 10 hospitalization variable
 	- [x] [2025-11-28] **Longitudinal Consistency:** Verified and standardized variable names across all 12 cycles.
-		- [x] DAT-003: Inconsistent Longitudinal Variable Naming
+		- *Resolved Tasks:* DAT-003.
 	- [x] [2025-11-29] **Standardization:** Converted all variable names to snake_case and `stem_#` format.
-		- [x] DAT-011: General Variable Renaming
+		- *Resolved Tasks:* DAT-011.
 	- [x] [2025-11-29] **Naming Audit:** Audited renaming steps to ensure traceability to raw data.
-	- [/] **Type Encoding:** Converted types (Factors, Dates, Numerics).
+	- [ ] **Type Encoding:** Converted types (Factors, Dates, Numerics).
+		- *Resolved Tasks:* DAT-012, DAT-013, DAT-014.
 		- [ ] DAT-010 [P1]: Cancer stage encoding ambiguity
-		- [x] DAT-012: Factors Encoded as Numeric
-		- [x] DAT-013: Empty Columns as Logical
-		- [x] DAT-014: Date Precision
-		- [ ] DAT-015 [P1]: Residence factor level mismatch
-	- [/] **Encoding Audit:** Verified integrity of type conversion.
+		- [ ] DAT-015 [P2]: Residence factor level mismatch
+	- [ ] **Encoding Audit:** Verified integrity of type conversion.
+		- *Resolved Tasks:* DAT-017.
 		- [ ] DAT-016 [P2]: Numeric Column as Character
-		- [ ] DAT-017 [P1]: Invalid Level (`sex`)
 - [ ] **Data Validation (`02_data-validation.qmd`):**
     - [ ] **Logic Check:** Verify `cycles_given` matches actual data presence.
-        - *Note:* Audit by panel (Hematology, Chemistry, LFT, Management) to identify partial data vs. completely missing cycles.
-    - [ ] **Logic Check:** Verify `cycles_given` <= `cycles_prescribed`.
+        - [ ] DAT-019 [P1]: Extraneous cycle data
+    - [x] [2025-12-01] **Logic Check:** Verify `cycles_given` <= `cycles_prescribed`.
     - [ ] **Logic Check:** Verify temporal consistency (e.g., Death Date > Treatment Start).
 	- [ ] **Calculation Check:** Verify composite variables (`completion_rate`, `bmi`) match their components.
-    - [ ] **Range Check:** Identify and handle impossible baseline values.
+		- Complete, but need to reincorporate missing patient data.
+    - [ ] **Range Check:** Identify and handle impossible body measurement values.
+		- [ ] DAT-020 [P2]: Body measurement outlier
     - [ ] **Range Check:** Scan for clinically impossible lab values.
     - [ ] **Missingness:** Examine missingness patterns (Random vs. Systematic/Attrition).
     - [ ] **Feature Engineering:** Generate graded adverse event columns using `grading_rules.csv`.
 		- [ ] MET-001 [P3]: Febrile Neutropenia vs. ANC
-		- [ ] MET-002 [P2]: Adverse Event Grading Rules
+		- [ ] MET-002 [P1]: Adverse Event Grading Rules
 
 ## Data Integrity & Anomalies (DAT)
 *Issues regarding the accuracy, completeness, or logic of the raw data.*
@@ -108,7 +109,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Details:* 
 		- *Leave Ambiguous Label:* Treat a value of `4` as "Stage IV / Unknown".
 	- *Task:* Clarify correct encoding.
-- [/] **DAT-015 [P1]: Residence factor level mismatch**
+- [/] **DAT-015 [P2]: Residence factor level mismatch**
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
 	- *Summary:* The documented encoding for `residence` is "1 = urban; 2 = rural; 3 = peri-urban", but observed levels are 0, 1, and 2.
 	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
@@ -123,18 +124,25 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Details:* 
 		- *Coerced Data Types:* Converted `ast_1` to numeric and explicitly coerced "pn" to `NA`.
 	- *Task:* Clarify whether this was data misentry or if "pn" has a specific meaning.
-- [/] **DAT-017 [P1]: Invalid Level (`sex`)** 
-	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `audit_encoding_static-factor`).
-	- *Summary:* The variable `sex` contained the raw value `3` (defined levels: 1=Male, 2=Female).
-		- *Investigation:* Traced to `record_id == 94`.
-    - *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
+- [ ] **DAT-018 [P1]: Chemotherapy Data Discrepancy**
+	- *Observed:* [2025-12-01] via email from Dr. Mazhindu [2025-10-08].
+	- *Summary:* `different_administered.csv` contains corrected administration counts for 6 patients.
+	- *Task:* Validate CSV contents against `gic_raw` to identify changed values, then apply patch in `01_data-cleaning.qmd`.
+- [ ] **DAT-019 [P1]: Extraneous cycle data**
+    - *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `assess_extraneous-data`).
+    - *Summary:* 4 patients (Record IDs: 27, 146, 498, 766) have data recorded for cycles beyond their `cycles_given` count.
+		- *Investigation:* The patients with record IDs 27, 498, and 766 had some amount of data for one more cycle than prescribed. The patient with record ID 146 had expected data for cycle 1, but also had data for cycle 12.
+	- *Temporary Resolution*: [2025-12-01] in `02_data-validation.qmd` (Chunk: `fix_extraneous-data`).
 	- *Details:*
-		- *Coerced Data Type:* Converted `sex` to a factor value, exlicitly coerced `3` to `NA` during encoding to maintain factor integrity.
-    * *Task:* Clarify with Dr. Mazhindu if `3` represents a valid category or a data entry error.
-- [ ] **[P1]: Investigate baseline measurement outliers**
-	- *Observed:* [2025-11-??] in `02_data-validation.qmd` (Chunk: ``)
-    - *Summary:* Impossible values found (Height > 14 meters, BMI 0.2).
-	- *Task:* Investigate possible causes, consult with Dr. Mazhindu
+		- *Excluded Patients:* Excluded these 4 records from analysis.
+    - *Task:* Determine if `cycles_given` is incorrect or if the cycle data is erroneous.
+- [ ] **DAT-020 [P2]: Body measurement outlier**
+    - *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `asses_body-measurements`).
+	  - *Summary:* One patient record (record ID 614) contains physically impossible values for height/bmi.
+	  - *Temporary Resolution*: [2025-12-01] in `02_data-validation.qmd` (Chunk: `fix_body-measurements`).
+	  - *Details:*
+		  - *Data Correction:* Replace value of 1498 with 149.8 and recalculate BMI.
+	  - *Task:* Determine correct value for `height_0` for this patient. Current value is 1498, suspect it should be 149.8.
 
 ## Methodology (MET)
 *Decisions affecting the statistical plan.*
@@ -146,7 +154,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Details:*
 		- **Redundant Content:** `Febrile.Neutropenia` (duplicate of `ANC`) was removed for all cycles.
 	- *Task:* Consult with Dr. Mazhindu, since FN is neutropenia with a fever, but there is no fever data present, and the `ANC` and `Febrile.Neutropenia` columns contained identical measurements.
-- [ ] **MET-002 [P2]: Adverse Event Grading Rules**
+- [ ] **MET-002 [P1]: Adverse Event Grading Rules**
 	- *Observed:* [2020-11-29] in `NOrmal ranges and Adverse Events grading system.xlsx`
 	- *Summary:* Edge case ambiguity in adverse event grading criteria.
 	- *Task:* Secure a definitive reference standard from the Dr. Mazhindu.
@@ -167,18 +175,12 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 - [ ] **ADM-001 [P3]: Update Glossary**
 	- *Task:* Add all missing valid and reference ranges.
 - [ ] **ADM-002 [P0]: Outstanding Inquiries (for Dr. Mazhindu)**
-	- *Status:* Draft
+	- *Status:* Sent, awaiting reply
 	- *Content:*
 		1. DAT-010 [P1]: Cancer stage encoding ambiguity
-		2. DAT-015 [P1]: Residence factor level mismatch
-		3. DAT-017 [P1]: Invalid Level (`sex`)
-		4. DAT-005 [P2]: Baseline vs. cycle 1 electrolytes
-		5. DAT-006 [P2]: Empty `dbil_12`
-		6. DAT-007 [P2]: Empty `abli_score_0` and `cr_clear_0`
-		7. DAT-008 [P2]: Possible Blood transfusion duplication
-		8. DAT-009 [P2]: Cycle 10 hospitalization variable
-		9. DAT-016 [P2]: Numeric Column as Character
-		10. MET-002 [P2]: Adverse Event Grading Rules
+		2. DAT-018 [P1]: Chemotherapy Data Discrepancy
+		3. DAT-016 [P2]: Numeric Column as Character
+		4. MET-001 [P3]: Febrile Neutropenia vs. ANC
 	
 ## Resolved Items Archive
 
@@ -229,3 +231,9 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Summary:* `death_date` is stored as `POSIXct` (DateTime).
 	- *Details:* 
 		- *Coerced Data Type:* Converted to `Date` class.
+- [x] **DAT-017: Invalid `sex` Level** 
+	- *Resolved:* [2025-12-01] in `01_data-cleaning.qmd` (Chunk: `fix_dat-017_sex-error`).
+	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `audit_encoding_static-factor`).
+	- *Summary:* The variable `sex` contained the raw value `3`.
+    - *Details:*
+		- *Patched Data Error:* Corrected raw value of `3` to `1` (Male) per confirmation from Dr. Mazhindu [2025-10-08].

@@ -20,6 +20,18 @@ library(lubridate)  # Handle date data
 gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx"))
 ```
 
+```{r}
+#| label: fix_dat-017_sex-error
+
+# Manual fix for DAT-017 (Invalid `sex` Level)
+# Per email from Dr. Mazhindu [2025-10-08], Record 94 confirmed as Male (1).
+gic_raw <- gic_raw |> 
+  mutate(
+    `Sex.Male.1/Female.2` = if_else(record_id == 94, 1, `Sex.Male.1/Female.2`)
+  )
+```
+
+
 # Structural Cleaning
 ## Duplicate Column Names
 ```{r}
@@ -687,8 +699,8 @@ gic_encoded <- gic_renamed |>
   mutate(
   # Convert static factors
     sex               = factor(sex,
-                         levels = c(1, 2, 3), 
-                         labels = c("Male", "Female", NA)),
+                         levels = c(1, 2), 
+                         labels = c("Male", "Female")),
     residence         = factor(residence,
                          levels = c(0, 1, 2), 
                          labels = c("Urban", "Rural", "Peri-urban")),
@@ -990,16 +1002,6 @@ if (any(sf_audit$is_error)) warning("Data loss detected in static factors.")
 format_factor_audit_table(sf_audit)
 ```
 
-:::{.callout-warning collapse="false"}
-### Warning: Factor encoding anomalies flagged
-
-**Issues:** The static factor audit identified invalid raw values that did not match the coding scheme.
-
-* **Invalid Level (`sex`):** The variable `sex` contained the raw value `3` (defined levels: 1=Male, 2=Female).
-    * *Investigation:* Traced to `record_id == 94`.
-    * *Temporary Resolution:* Value was coerced to `NA` during encoding to maintain factor integrity.
-:::
-
 ### Audit Longitudinal Categorical Variables
 
 **Criteria:**
@@ -1018,14 +1020,6 @@ cf_audit <- audit_factor_logic(gic_renamed, gic_encoded, cf_vars)
 if (any(cf_audit$is_error)) warning("Data loss detected in static factors.")
 
 format_factor_audit_table(cf_audit)
-
-mapping_table <- audit_factor_logic(gic_renamed, gic_encoded, cf_vars)
-
-mapping_table |> 
-  arrange(variable, as.numeric(raw_value)) |> 
-  kbl(booktabs = TRUE, caption = "Cycle Factor Mapping Detail") |> 
-  kable_styling() |> 
-  scroll_box(height = "400px")
 ```
 
 :::{.callout-note collapse="false"}
