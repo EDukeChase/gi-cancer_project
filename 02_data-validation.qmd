@@ -266,6 +266,70 @@ if (nrow(composite_audit) > 0) {
   message("Composite Check Passed: BMI and Completion Rates match inputs within tolerance.")
 }
 ```
+# Transfusion Logic Check
+```{r}
+#| label: assess_transfusions
+
+# [DAT-008] Audit transfusion data for consistency and unit volume errors.
+
+# Pivot to handle all cycles at once
+transfusion_long <- gic_encoded |> 
+  select(record_id, 
+         starts_with("transfusion_given_"), 
+         starts_with("transfusion_units_")) |> 
+  pivot_longer(
+    cols = -record_id,
+    names_to = c(".value", "cycle"),
+    names_pattern = "(.*)_(\\d+)$"
+  ) |> 
+  mutate(cycle = as.numeric(cycle)) |> 
+  arrange(cycle)
+
+# Summarize by Cycle
+transfusion_summary <- transfusion_long |> 
+  group_by(cycle) |> 
+  summarize(
+    n_given = sum(transfusion_given == "Yes", na.rm = TRUE),
+    
+    # [DAT-008] Check for missing units (Given = Yes, Units = NA/0)
+    missing_units = sum(transfusion_given == "Yes" & 
+                        (is.na(transfusion_units) | transfusion_units == 0), na.rm = TRUE),
+    
+    # [DAT-008] Check for unexpected units (Given = No, Units > 0)
+    unexpected_units = sum(transfusion_units > 0 & 
+                           (transfusion_given != "Yes" | is.na(transfusion_given)), na.rm = TRUE),
+    
+    # [DAT-008] Original redundancy check (Given == Units)
+    is_identical = identical(
+      as.numeric(transfusion_given == "Yes"), 
+      as.numeric(transfusion_units)
+    )
+  )
+
+# Print Table
+error_rows <- which(transfusion_summary$missing_units > 0 | 
+                    transfusion_summary$unexpected_units > 0)
+
+transfusion_summary |> 
+  kbl(booktabs = TRUE, caption = "Transfusion Logic & Consistency Check") |> 
+  kable_styling(full_width = FALSE) |> 
+  row_spec(error_rows, background = cb_light[2])
+```
+::: {.callout-warning collapse="false"}
+### Anomaly: Transfusion Data Inconsistencies (DAT-008)
+
+**Issue:** The audit revealed inconsistencies between logging if a transfusion was given and the number of units given as part of a transfusion
+
+* **Missing Units:** 3 records are flagged as having received a transfusion ("Yes") but have zero or missing unit volume recorded. (Data incompleteness).
+* **Flag Mismatch:** 3 records are flagged as NOT receiving a transfusion ("No") but contain a valid unit count (>0). (Flag error).
+
+**Status:** Flagged for cleanup in the `fix_...` chunk. The red rows indicate cycles with **at least one** internal inconsistency.
+:::
+
+```{r}
+#| label: fix_transfusions
+```
+
 
 ## Temporal Consistency
 Verify that event dates occur within logical timeframes.
@@ -458,3 +522,4 @@ if (file.exists(gic_validated_path) && interactive()) {
   message("File saved: ", basename(gic_validated_path))
 }
 ```
+
