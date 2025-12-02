@@ -21,12 +21,12 @@ gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FIN
 ```
 
 ```{r}
-#| label: fix_dat-017_sex-error
+#| label: apply_manual-patches
 
-# Manual fix for DAT-017 (Invalid `sex` Level)
-# Per email from Dr. Mazhindu [2025-10-08], Record 94 confirmed as Male (1).
 gic_raw <- gic_raw |> 
   mutate(
+    # DAT-017: Invalid `sex` Level
+    # Record ID 94 confirmed as Male (1) per Dr. Mazhindu [email, 2025-10-08]
     `Sex.Male.1/Female.2` = if_else(record_id == 94, 1, `Sex.Male.1/Female.2`)
   )
 ```
@@ -87,18 +87,18 @@ pair_audit |>
 ```
 
 :::{.callout-note collapse="false"}
-### Actions Taken: Duplicate name resolution
+### Actions Taken: Duplicate name resolution (DAT-001, DAT-021, DAT-022)
 
-**Issue:** The raw Excel file contained several columns with identical or mislabeled headers.
+**Summary:** The raw Excel file contained several columns with identical or mislabeled headers, requiring manual renaming before processing.
 
-**Resolved:** [2025-11-16] Renamed/deleted duplicates in `01_data_cleaning.qmd` (Chunk: `fix_duplicate-column-names`).
+**Resolved:** [2025-11-16] in `01_data_cleaning.qmd` (Chunk: `fix_duplicate-column-names`).
 
-* `ANC.3...108` and `ANC.3...109` were identical. 
+* **ANC Duplication (DAT-001):** `ANC.3...108` and `ANC.3...109` were identical.
     * `ANC.3...109` was removed, and the remaining column was renamed to `ANC.3`.
-* Two columns were named `HyperK+.3`, with no `HypoK+.3` present. 
+* **Potassium Naming (DAT-021):** Two columns were named `HyperK+.3`, with no `HypoK+.3` present.
     * The first instance was renamed to `HypoK+.3`.
-* A block of variables (`Febrile.Neutropenia`, `HypoNa+`, `HypoK+`, `HyperK+`) appeared with a `.6` suffix in the Cycle 7 section. These were distinct from the actual Cycle 6 data.
-    * The variables were renamed to fit in Cycle 7. (Dr. Hendricks stated that Dr. Mazhindu told her this was correct.)
+* **Cycle 7 Mislabeling (DAT-022):** A block of variables (`Febrile.Neutropenia`, `HypoNa+`, etc.) appeared with a `.6` suffix in the Cycle 7 section.
+    * The variables were renamed to fit in Cycle 7. (Verified by Dr. Hendricks/Dr. Mazhindu).
 :::
 
 
@@ -108,9 +108,14 @@ pair_audit |>
 gic_renamed <- gic_raw |> 
   # Fix identically names columns
   rename(
+    # [DAT-001] Fix duplicate ANC.3 column, keep `ANC.3...108` version
     "ANC.3" = "ANC.3...108",
+    
+    # [DAT-021] Fix duplicate Potassium variable names
     "HypoK+.3" = "HyperK+.3...114",
     "HyperK+.3" = "HyperK+.3...115",
+    
+    # [DAT-022] Fix cycle 7 variable mislabeling
     "Febrile.Neutropenia.6" = "Febrile.Neutropenia.6...189",
     "Febrile.Neutropenia.7" = "Febrile.Neutropenia.6...215",
     "HypoNa+.6" = "HypoNa+.6...191",
@@ -121,6 +126,7 @@ gic_renamed <- gic_raw |>
     "HyperK+.7" = "HyperK+.6...219"
   ) |> 
   select(
+    # [DAT-001] Remove redundant ANC.3 column
     - "ANC.3...109"
   )
 ```
@@ -165,9 +171,9 @@ duplicate_map |>
 :::
 
 :::{.callout-note collapse="false"}
-### Note: Removed redundant data
+### Actions Taken: Duplicate name resolution (DAT-001)
 
-**Issues:** Several columns identified as duplicates or artifacts.
+*Summary:* The raw Excel file contained several columns with identical or mislabeled headers.
 
 **Resolved:** [2025-11-16] The columns were removed in `01_data_cleaning.qmd` (Chunk: `fix_duplicate-column-contents`).
 
@@ -618,7 +624,25 @@ The renaming audit confirmed that data integrity was preserved during variable n
 ```{r}
 #| label: save_renamed-data
 
-saveRDS(gic_renamed, here("data", "processed", "gic_renamed.rds"))
+# Define path to file
+gic_renamed_path <- here("data", "processed", "gic_renamed.rds")
+
+# Save if file doesn't exist, or check if overwrite is intended if it does.
+if (file.exists(gic_renamed_path) && interactive()) {
+  # If file exists and this is being run manually in RStudio ask before overwriting
+  response <- readline(prompt = paste("Warning:", basename(save_path), "already exists. Overwrite? (y/n):"))
+  
+  if (tolower(substr(response, 1, 1)) == "y") {
+    saveRDS(gic_renamed, gic_renamed_path)
+    message("File overwritten: ", basename(gic_renamed_path))
+  } else {
+    message("Save operation cancelled.")
+  }
+} else {
+  # If the file doesn't exist or document is being rendered, just save it
+  saveRDS(gic_renamed, gic_renamed_path)
+  message("File saved: ", basename(gic_renamed_path))
+}
 ```
 
 # Data Type Standardization
@@ -719,7 +743,7 @@ gic_encoded <- gic_renamed |>
     cancer_stage      = factor(cancer_stage,
                           levels = c(1, 2, 3, 4),
                           labels = c("Stage I", "Stage II", "Stage III", 
-                                     "Stage IV/Unknown")),
+                                     "Stage IV")),
     comorbid_htn      = factor(comorbid_htn,
                           levels = c(0,1),
                           labels = c("No", "Yes")),
@@ -1036,6 +1060,26 @@ The encoding audit confirmed that data integrity was preserved during type conve
 ## Export
 ```{r}
 #| label: save-clean-data
+
+# Define path to file
+gic_encoded_path <- here("data", "processed", "gic_encoded.rds")
+
+# Save if file doesn't exist, or check if overwrite is intended if it does.
+if (file.exists(gic_encoded_path) && interactive()) {
+  # If file exists and this is being run manually in RStudio ask before overwriting
+  response <- readline(prompt = paste("Warning:", basename(save_path), "already exists. Overwrite? (y/n):"))
+  
+  if (tolower(substr(response, 1, 1)) == "y") {
+    saveRDS(gic_encoded, gic_encoded_path)
+    message("File overwritten: ", basename(gic_encoded_path))
+  } else {
+    message("Save operation cancelled.")
+  }
+} else {
+  # If the file doesn't exist or document is being rendered, just save it
+  saveRDS(gic_encoded, gic_encoded_path)
+  message("File saved: ", basename(gic_encoded_path))
+}
 
 saveRDS(gic_encoded, here("data", "processed", "gic_encoded.rds"))
 ```

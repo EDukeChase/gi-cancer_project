@@ -2,7 +2,7 @@
 
 This document tracks outstanding questions, data anomalies, coding tasks, and administrative actions for the project.
 
-**Status Legend**
+**Entry Status Legend**
 - [ ] **Open:** Needs attention or action.
 - [/] **In Progress:** Investigation started or partially implemented.
 - [x] **Resolved:** Fixed or decided (see notes for details).
@@ -49,11 +49,11 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- [ ] **Calculation Check:** Verify composite variables (`completion_rate`, `bmi`) match their components.
 		- Complete, but need to reincorporate missing patient data.
     - [ ] **Range Check:** Identify and handle impossible body measurement values.
-		- [ ] DAT-020 [P2]: Body measurement outlier
+		- [/] DAT-020 [P2]: Body measurement outlier
     - [ ] **Range Check:** Scan for clinically impossible lab values.
     - [ ] **Missingness:** Examine missingness patterns (Random vs. Systematic/Attrition).
     - [ ] **Feature Engineering:** Generate graded adverse event columns using `grading_rules.csv`.
-		- [ ] MET-001 [P3]: Febrile Neutropenia vs. ANC
+		- *Resolved Tasks:* MET-001
 		- [ ] MET-002 [P1]: Adverse Event Grading Rules
 
 ## Data Integrity & Anomalies (DAT)
@@ -63,28 +63,24 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 	- *Summary:* No patients have COPD, Kidney Disease, or Epilepsy recorded.
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-	- *Details:* 
 		- *No Action:* Assume data are correct.
 	- *Task:* Verify this isn't a data entry error.
 - [/] **DAT-005 [P2]: Baseline vs. cycle 1 electrolytes**
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 	- *Summary:* `HypoNa+.1` is identical to `Baseline.Na+` (same for Potassium). This pattern does not hold for other biomarkers.
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-	- *Details:* 
 		- *No Action:* Assume data are correct.
 	- *Task:* Verify if Cycle 1 is officially the baseline for electrolytes, or if this is a data duplication error.
 - [/] **DAT-006 [P2]: Empty `dbil_12`**
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 	- *Summary:* Column is entirely empty, however there were other liver panel results for patients in cycle 12.
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-	- *Details:* 
 		- *No Action:* Assume data are correct.
 	- *Task:* Confirm if this is expected missingness (not tested) or data loss.
 - [/] **DAT-007 [P2]: Empty `abli_score_0` and `cr_clear_0`**
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 	- *Summary:* Columns are entirely empty.
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-	- *Details:* 
 		- *No Action:* Leave columns in place, do not include in analysis.
 	- *Task:* Confirm if data are missing, or if columns should be removed.
 - [/] **DAT-008 [P2]: Possible Blood transfusion duplication**
@@ -92,41 +88,37 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Summary:* For cycles 4, 7, 8, 9, and 11, `transfusion_given` and `transfusion_units` are identical.
 		- *Implication:* This implies every single transfusion in those cycles was exactly 1 unit.
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-	- *Details:* 
 		- *No Action:* Assume data are correct.
 	- *Task:* Check `transfusion_units` in other cycles to see if this is likely, or data entry mistake.
 - [/] **DAT-009 [P2]: Cycle 10 hospitalization variable**
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 	- *Summary:* `Hospitalization.required...10` is identical to `Was.the.cycle.delayed...10`.
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-	- *Details:* 
 		- *No Action:* Assume data are correct.
 	- *Task:* Compare with other cycles to see if this correlation is plausible or a data entry mistake.
 - [ ] **DAT-010 [P1]: Cancer stage encoding ambiguity**
+	- *Update:* [2025-12-01](Email from Dr. Maxhindu) Confirmed `4` indicates "Stage IV", as treatment implies known stage.
+	- *Task:* Update factor encoding in `01_data-cleaning.qmd` (Chunk: ` to map `4` -> "Stage IV".
 	- *Observed:* [2025-11-28] in `01_data-cleaning.qmd` (Chunk: `apply_standard-names`).
 	- *Summary:* The column name implies `4` could mean either "Stage IV" or "Unknown/Undocumented".
-	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `fix_duplicate-content`)
-	- *Details:* 
-		- *Leave Ambiguous Label:* Treat a value of `4` as "Stage IV / Unknown".
-	- *Update:* [2025-12-01] Dr. Maxhindu confirmed `4` indicates "Stage IV", as treatment implies known stage.
-	- *Task:* Update factor encoding in `01_data-cleaning.qmd` to map `4` -> "Stage IV".
+	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`)
+		- *Use Ambiguous Label:* Map a value of `4` as "Stage IV / Unknown".
 - [/] **DAT-015 [P2]: Residence factor level mismatch**
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
 	- *Summary:* The documented encoding for `residence` is "1 = urban; 2 = rural; 3 = peri-urban", but observed levels are 0, 1, and 2.
 	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
-	- *Details:* 
 		- *Alternate Encoding:* Will assume 0 = urban, 1 = rural, 2 = peri-urban.
 	- *Task:* Clarify correct encoding.
 - [/] **DAT-016 [P2]: Numeric Column as Character**
+	- *Update:* [2025-12-02](Email from Dr. Mazhindu) Confirmed "pn" should be `28`.
+	- *Task:* Update `01_data-cleaning.qmd` to replace "pn" with `28` before numeric coercion, undo explicit coercion implemented as part of temporary resolution in the `apply_type-coercion` chunk.
+	- *Temporary Resolution*: [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
+		- *Coerced Data Types:* Converted `ast_1` to numeric and explicitly coerced "pn" to `NA`.
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
 	- *Summary:* `ast_1` is stored as a character vector.
 		- *Investigation:* `record_id == 64` contains the value "pn" for `ast_1`.
-	- *Temporary Resolution*: [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
-	- *Details:* 
-		- *Coerced Data Types:* Converted `ast_1` to numeric and explicitly coerced "pn" to `NA`.
-	- *Update:* [2025-12-02] Dr. Mazhindu confirmed "pn" should be **28**.
-	- *Task:* Update `01_data-cleaning.qmd` to replace "pn" with `28` before numeric coercion.
 - [ ] **DAT-018 [P1]: Chemotherapy Data Discrepancy**
+	- *Update:* [2025-12-02](Email from Dr. Mazhindu)
 	- *Observed:* [2025-12-01] via email from Dr. Mazhindu [2025-10-08].
 	- *Summary:* `different_administered.csv` contains corrected administration counts for 6 patients.
 	- *Task:* Discuss with Dr. Mazhindu in meeting [2025-12-02] to clarify how to integrate corrected data.
@@ -135,16 +127,18 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Summary:* 4 patients (Record IDs: 27, 146, 498, 766) have data recorded for cycles beyond their `cycles_given` count.
 		- *Investigation:* The patients with record IDs 27, 498, and 766 had some amount of data for one more cycle than prescribed. The patient with record ID 146 had expected data for cycle 1, but also had data for cycle 12.
 	- *Temporary Resolution*: [2025-12-01] in `02_data-validation.qmd` (Chunk: `fix_extraneous-data`).
-	- *Details:*
 		- *Excluded Patients:* Excluded these 4 records from analysis.
     - *Task:* Determine if `cycles_given` is incorrect or if the cycle data is erroneous.
 - [ ] **DAT-020 [P2]: Body measurement outlier**
     - *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `asses_body-measurements`).
 	  - *Summary:* One patient record (record ID 614) contains physically impossible values for height/bmi.
 	  - *Temporary Resolution*: [2025-12-01] in `02_data-validation.qmd` (Chunk: `fix_body-measurements`).
-	  - *Details:*
-		  - *Data Correction:* Replace value of 1498 with 149.8 and recalculate BMI.
+		- *Data Correction:* Replace value of 1498 with 149.8 and recalculate BMI.
 	  - *Task:* Determine correct value for `height_0` for this patient. Current value is 1498, suspect it should be 149.8.
+- [ ] **DAT-023 [P3]: Plotting warning (Body measurements)**
+	- *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `assess_body-measurements`).
+    - *Summary:* `ggplot` warning: "Removed 21 rows containing non-finite values".
+    - *Task:* Verify if these correspond exactly to the known `NA`s in Height, Weight, and BMI, or if valid data is being excluded.
 
 ## Methodology (MET)
 *Decisions affecting the statistical plan.*
@@ -163,6 +157,27 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 - [ ] **TEC-002 [P4]: Fix ToC Issue**
 	- *Location:* `01_data-cleaning.qmd`.
 	- *Issue:* Table of contents on right side of rendered HTML pages is no longer dynamic aside from acting as links; it only shows top level headers and the first one is always highlighted, regardless of what link was last clicked. Links do work. Suspect this might have something to do with the `kableExtra::scroll_box()` function used throughout.
+- [/] **TEC-003 [P3]: Update Research Log Format**
+	- *Location:* `research_log.md`.
+	- *Task:* Reorder items under entries in chronological order (See DAT-016 for example).
+- [ ] **TEC-004 [P4]: Implement ID Cross-Referencing**
+	- *Location:* `01_data-cleaning.qmd`.
+	- *Goal:* Ensure bidirectional traceability between the code, the report, and the research log.
+	- *Task:* Refactor code comments and callout blocks to explicitly reference Research Log IDS (e.g., `DAT-001`).
+- [ ] **TEC-005 [P4]: Create custom save function**
+    - *Location:* `R/setup.R`
+    - *Goal:* Reduce code duplication by replacing verbose save chunks in `01_data-cleaning.qmd` and `02_data-validation.qmd` with a single function call.
+    - *Task:* Define a wrapper function (e.g., `safe_save_rds`) to handle the interactive overwrite prompt logic.
+- [ ] **TEC-006 [P2]: Fix 'File Path Too Long' Warnings**
+    - *Observed:* 
+		- [2025-11-30] in `01_data-analysis.qmd`.
+		- [2025-12-02] in `02_data-analysis.qmd` in Chunk(`assess_body-measurements`)
+    - *Issue:* RStudio fails to copy font files to the cache because the OneDrive path exceeds 260 characters.
+    - *Attempted Resolutions:* 
+		1. Set `embed-resources: false` in `_quarto.yml`. (Result: Error persisted during interactive chunk execution).
+        2. Created Directory Junction from `.Rproj.user` to `C:/R_Cache/gi-cancer/`. (Result: Error persisted, likely due to RStudio accessing the project via the original long path).
+    - *Task:* Disable "Show output inline for all R Markdown documents" in RStudio Global Options to bypass the notebook cache entirely.
+	
 
 ## Project Management & Admin (ADM)
 *Communication, documentation updates, and external coordination.*
@@ -177,9 +192,9 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		3. DAT-016: Replace "pn" with 28.
 		4. MET-001: Will move forward with ANC only analysis.
 	
-## Resolved Items Archive
+## Archived Log Entries
 
-- [x] **DAT-001: Duplicate column names**
+- [x] **DAT-001: ANC Column Duplication**
 	- *Resolved:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-names`).
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-names`).
 	- *Summary:* The raw Excel file contained several columns with identical or mislabeled headers.
@@ -187,6 +202,9 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
       - *ANC Duplication:* `ANC.3...108` and `ANC.3...109` were identical. Removed `...109`, renamed `...108` to `ANC.3`.
       - *Potassium Naming:* Two columns were named `HyperK+.3`, with no `HypoK+.3`. Renamed the first instance to `HypoK+.3`.
       - *Cycle 7 Mislabeling:* Variables labeled `.6` in the Cycle 7 section were renamed to Cycle 7.
+- [x] **DAT-021: Potassium Naming**
+- [x] **DAT-022: Cycle 7 Mislabeling**
+
 - [x] **DAT-002: Redundant data columns**
 	- *Resolved:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`).
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
@@ -197,7 +215,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- *Documentation Artifacts:* All `Cycle #` spacer columns removed.
 - [x] **DAT-003: Inconsistent Variable Naming**
 	- *Resolved:* [2025-11-28] in `01_data-cleaning.qmd` (Chunk: `fix_longitudinal-consistency`).
-	- *Observed:*[2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_longitudinal-consistency`)
+	- *Observed:*[2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_longitudinal-consistency`).
 	- *Summary:* Several longitudinal variables had minor inconsistencies, missing suffixes, or typos.
 	- *Details:*
 		- *Harmonized:* Capitalized all stems (`DBIL`, `HB`, `TBIL`), realigned with original naming scheme (`HypoNa+`).
@@ -233,8 +251,8 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Details:*
 		- *Patched Data Error:* Corrected raw value of `3` to `1` (Male) per confirmation from Dr. Mazhindu [2025-10-08].
 - [x] **MET-001 [P3]: Febrile Neutropenia vs. ANC**
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 	- *Resolved:* [2025-12-01] Definition confirmed by Dr. Mazhindu in email.
+	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 	- *Summary:* Raw data had `ANC` and `Febrile.Neutropenia` as identical columns.
 	- *Details:*
-		- **Confirmation:** `Dr. Mazhindu confirmed that using `ANC` as a proxy for the analysis is acceptable given the lack of fever data. The deletion of the redundant column stands.
+		- *Confirmation:* `Dr. Mazhindu confirmed that using `ANC` as a proxy for the analysis is acceptable given the lack of fever data. The deletion of the redundant column stands.
