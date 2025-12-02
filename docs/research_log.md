@@ -177,6 +177,9 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		1. Set `embed-resources: false` in `_quarto.yml`. (Result: Error persisted during interactive chunk execution).
         2. Created Directory Junction from `.Rproj.user` to `C:/R_Cache/gi-cancer/`. (Result: Error persisted, likely due to RStudio accessing the project via the original long path).
     - *Task:* Disable "Show output inline for all R Markdown documents" in RStudio Global Options to bypass the notebook cache entirely.
+- [ ] **TEC-007 [P1]: Audit Adverse Event Grading**
+    - *Location:* `02_data-validation.qmd` (Chunk: `derive_adverse-events`).
+    - *Task:* Verify that the adverse event grading logic correctly assigned values (e.g., check that `ast_5` values map to the correct `ast_grade_5` labels) and ensure missing values (`NA`) were handled correctly.
 	
 
 ## Project Management & Admin (ADM)
