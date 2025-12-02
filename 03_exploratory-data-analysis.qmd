@@ -1,0 +1,55 @@
+---
+title: "GI Cancer: Exploratory Data Analysis"
+bibliography: references.bib
+---
+
+# Setup
+
+```{r}
+#| label: setup
+#| include: false
+
+source("R/setup.R")
+library(gtsummary) # Essential for Table 1 generation
+library(ggstats)   # Helper for gtsummary plots (optional)
+
+# Load the finalized dataset from the validation step
+# Note: Ensure this file was saved at the end of 02_data-validation.qmd
+gic_validated <- readRDS(here("data", "processed", "gic_validated.rds"))
+```
+
+# Baseline Characteristics
+```{r}
+#| label: tbl-baseline
+#| tbl-cap: "Table 1: Baseline Patient Characteristics by HIV Status"
+
+gic_validated |> 
+  select(
+    # Demographics
+    sex, residence, 
+    height_0, weight_0, bmi_0,
+    
+    # Clinical
+    cancer_site, cancer_stage, histology,
+    
+    # Comorbidities (Grouped)
+    comorbid_htn, comorbid_dm, comorbid_tb, 
+    
+    # Stratification Variable
+    hiv_status
+  ) |> 
+  tbl_summary(
+    by = hiv_status,                # Split column
+    missing = "ifany",              # Show missing counts if they exist
+    statistic = list(
+      all_continuous() ~ "{mean} ({sd})",        # Mean (SD) for numerics
+      all_categorical() ~ "{n} ({p}%)"           # N (%) for factors
+    ),
+    digits = all_continuous() ~ 1   # 1 decimal place for means
+  ) |> 
+  add_p() |>                        # Add p-value for differences
+  add_overall() |>                  # Add "Total" column
+  bold_labels() |> 
+  modify_caption("**Table 1. Patient Characteristics**")
+```
+
