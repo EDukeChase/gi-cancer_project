@@ -274,11 +274,12 @@ if (nrow(composite_audit) > 0) {
 
 # Pivot to handle all cycles at once
 transfusion_long <- gic_encoded |> 
-  select(record_id, 
+  select(record_id,
+         pgh_number,
          starts_with("transfusion_given_"), 
-         starts_with("transfusion_units_")) |> 
+         starts_with("transfusion_units_")) |>
   pivot_longer(
-    cols = -record_id,
+    cols = -c(record_id, pgh_number),
     names_to = c(".value", "cycle"),
     names_pattern = "(.*)_(\\d+)$"
   ) |> 
@@ -325,6 +326,36 @@ transfusion_summary |>
 
 **Status:** Flagged for cleanup in the `fix_...` chunk. The red rows indicate cycles with **at least one** internal inconsistency.
 :::
+
+```{r}
+#| label: investigate_transfusion-records
+
+# Define the combined error condition (Given=Yes, Units=0/NA) OR (Units>0, Given=No/NA)
+transfusion_error_records <- transfusion_long |> 
+  filter(
+    # Check A: Given but Missing/Zero Units
+    (transfusion_given == "Yes" & (is.na(transfusion_units) | transfusion_units == 0)) |
+    
+    # Check B: Has Units but No/NA Flag
+    (transfusion_units > 0 & (transfusion_given != "Yes" | is.na(transfusion_given)))
+  ) |> 
+  
+  # Select the identifiers and context
+  select(record_id, pgh_number, cycle, transfusion_given, transfusion_units) |> 
+  arrange(record_id, cycle)
+
+# Display the failed records
+if (nrow(transfusion_error_records) > 0) {
+  warning("Found ", nrow(transfusion_error_records), " individual cycle errors requiring review.")
+  transfusion_error_records |> 
+    kbl(caption = "Patient-Cycle Transfusion Inconsistencies") |> 
+    kable_styling(full_width = TRUE) |> 
+    scroll_box(height = "400px")
+} else {
+  message("All individual transfusion records are logically consistent.")
+}
+```
+
 
 ```{r}
 #| label: fix_transfusions
