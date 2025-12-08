@@ -3,78 +3,18 @@ title: "GI Cancer: Exploratory Data Analysis"
 bibliography: references.bib
 ---
 
-# Setup
-
+# Load Data & Libraries
 ```{r}
 #| label: setup
 #| include: false
 
 source("R/setup.R")
-library(gtsummary) # Essential for Table 1 generation
-library(ggstats)   # Helper for gtsummary plots (optional)
 
-# Load the finalized dataset from the validation step
-# Note: Ensure this file was saved at the end of 02_data-validation.qmd
+# Load Data
 gic_validated <- readRDS(here("data", "processed", "gic_validated.rds"))
+
+# Load Libraries
 ```
 
-# Baseline Characteristics
-```{r}
-#| label: tbl-numeric-manual
-#| results: asis
-
-# Define numeric vars to summarize
-num_vars <- c("bmi_0", "weight_0", "height_0", "cycles_given")
-
-# Calculate Stats
-num_summary <- gic_validated |> 
-  filter(!is.na(hiv_status)) |> 
-  group_by(hiv_status) |> 
-  summarise(
-    across(all_of(num_vars), 
-           ~ paste0(round(mean(., na.rm = TRUE), 1), " (", round(sd(., na.rm = TRUE), 1), ")"))
-  ) |> 
-  pivot_longer(-hiv_status, names_to = "Variable", values_to = "Value") |> 
-  pivot_wider(names_from = hiv_status, values_from = Value)
-
-# Print
-num_summary |> 
-  kbl(booktabs = TRUE, caption = "Baseline Numerics (Mean + SD)") |> 
-  kable_styling(full_width = FALSE)
-```
-
-```{r}
-#| label: tbl-categorical-manual
-#| results: asis
-
-library(janitor)
-
-# Define categorical vars to summarize
-cat_vars <- c("sex", "cancer_stage", "residence", "comorbid_htn")
-
-# Loop through them and print small tables
-walk(cat_vars, function(var) {
-  
-  # Create Title
-  cat(paste0("\n**", var, "**\n"))
-  
-  # Make the table
-  tbl <- gic_validated |> 
-    filter(!is.na(hiv_status)) |> 
-    tabyl(!!sym(var), hiv_status) |> 
-    adorn_percentages("col") |> 
-    adorn_pct_formatting(digits = 1) |> 
-    adorn_ns(position = "front") 
-  
-  # Print kable
-  print(
-    tbl |> 
-      kbl(booktabs = TRUE) |> 
-      kable_styling(full_width = FALSE, position = "left")
-  )
-  
-  cat("\n<br>\n") # Space between tables
-})
-```
 
 
