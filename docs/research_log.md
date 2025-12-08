@@ -83,13 +83,14 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
 		- *No Action:* Leave columns in place, do not include in analysis.
 	- *Task:* Confirm if data are missing, or if columns should be removed.
-- [/] **DAT-008 [P2]: Possible Blood transfusion duplication**
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
-	- *Summary:* For cycles 4, 7, 8, 9, and 11, `transfusion_given` and `transfusion_units` are identical.
-		- *Implication:* This implies every single transfusion in those cycles was exactly 1 unit.
-	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-		- *No Action:* Assume data are correct.
-	- *Task:* Check `transfusion_units` in other cycles to see if this is likely, or data entry mistake.
+- [ ] **DAT-008 [P2]: Transfusion Data Inconsistency**
+    - *Update:* [2025-12-02] Audit revealed active data mismatches (missing units/unexpected units) in cycles outside the initial duplication list.
+    - *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+    - *Summary:* Columns `transfusion_given` and `transfusion_units` show both redundant data entry and active inconsistencies.
+    - *Original Observation (Duplication):* Columns were mathematically identical (implied 1 unit) in cycles 4, 7, 8, 9, and 11.
+    - *New Finding (Active Errors):* Found explicit errors where the `transfusion_given` flag contradicts the `units` count.
+    - *Temporary Resolution:* [2025-11-16] Assumed data were correct (No action taken on the columns yet).
+    - *Task:* Investigate specific cycles flagged (red rows) for data entry patterns and determine the "source of truth" (Units or Given flag) for correction in `02_data-validation.qmd`.
 - [/] **DAT-009 [P2]: Cycle 10 hospitalization variable**
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 	- *Summary:* `Hospitalization.required...10` is identical to `Was.the.cycle.delayed...10`.
