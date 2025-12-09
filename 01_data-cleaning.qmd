@@ -21,13 +21,41 @@ gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FIN
 ```
 
 ```{r}
+gic_raw |> filter(record_id %in% c(14, 231)) |> select(record_id, `Total.number.chemo.cycles.prescribed`, `Total.number.of.chemotherapy.administered`, `Chemotherapy.completion.rates.(%)`, contains("delayed"))
+```
+
+
+```{r}
 #| label: apply_manual-patches
 
 gic_raw <- gic_raw |> 
   mutate(
-    # DAT-017: Invalid `sex` Level
-    # Record ID 94 confirmed as Male (1) per Dr. Mazhindu [email, 2025-10-08]
-    `Sex.Male.1/Female.2` = if_else(record_id == 94, 1, `Sex.Male.1/Female.2`)
+    # [DAT-017] Fix invalid sex level (3 -> 1)
+    `Sex.Male.1/Female.2` = if_else(record_id == 94, 1, `Sex.Male.1/Female.2`),
+    
+    # [DAT-016] Fix AST1 character string (pn -> 28)
+    `AST.1` = if_else(record_id == 64, "28", `AST.1`),
+    
+    # [DAT-020] Fix height decimal error (1498 -> 149.8)
+    `Height.(cm)` = if_else(record_id == 614, 149.8, `Height.(cm)`),
+    `Baseline.BMI` = if_else(record_id == 614, `Weight.(kg)` / (`Height.(cm)` / 100)^2, `Baseline.BMI`),
+    
+    # [DAT-008] Apply transfusion misentry fixes from table provided by Dr. Mazhindu
+    `blood.units.needed.3` = if_else(record_id == 160, 1, `blood.units.needed.3`),
+    `Blood.transfusion.1` = if_else(record_id == 238, 1, `Blood.transfusion.1`),
+    `Blood.transfusion.10` = if_else(record_id == 437, 0, `Blood.transfusion.10`),
+    `Blood.transfusion.3` = if_else(record_id == 454, 0, `Blood.transfusion.3`),
+    `Blood.transfusion.2` = if_else(record_id == 505, 1, `Blood.transfusion.2`),
+    `Blood.transfusion.5` = if_else(record_id == 567, 1, `Blood.transfusion.5`),
+    
+    # [DAT-019] Remove erroneous cycle 12 data,  match cycles given to match data presence, update completion rate
+    across(contains(".12"), ~ if_else(record_id == 146, NA, .x)),
+    `Total.number.of.chemotherapy.administered` = if_else(record_id == 27, 6, `Total.number.of.chemotherapy.administered`),
+    `Chemotherapy.completion.rates.(%)` = if_else(record_id == 27, 100 * `Total.number.of.chemotherapy.administered` / `Total.number.chemo.cycles.prescribed`, `Chemotherapy.completion.rates.(%)`),
+    `Total.number.of.chemotherapy.administered` = if_else(record_id == 498, 8, `Total.number.of.chemotherapy.administered`),
+    `Chemotherapy.completion.rates.(%)` = if_else(record_id == 498, 100 * `Total.number.of.chemotherapy.administered` / `Total.number.chemo.cycles.prescribed`, `Chemotherapy.completion.rates.(%)`),
+    `Total.number.of.chemotherapy.administered` = if_else(record_id == 766, 2, `Total.number.of.chemotherapy.administered`),
+    `Chemotherapy.completion.rates.(%)` = if_else(record_id == 766, 100 * `Total.number.of.chemotherapy.administered` / `Total.number.chemo.cycles.prescribed`, `Chemotherapy.completion.rates.(%)`)
   )
 ```
 
@@ -630,7 +658,7 @@ gic_renamed_path <- here("data", "processed", "gic_renamed.rds")
 # Save if file doesn't exist, or check if overwrite is intended if it does.
 if (file.exists(gic_renamed_path) && interactive()) {
   # If file exists and this is being run manually in RStudio ask before overwriting
-  response <- readline(prompt = paste("Warning:", basename(save_path), "already exists. Overwrite? (y/n):"))
+  response <- readline(prompt = paste("Warning:", basename(gic_renamed_path), "already exists. Overwrite? (y/n):"))
   
   if (tolower(substr(response, 1, 1)) == "y") {
     saveRDS(gic_renamed, gic_renamed_path)
@@ -813,7 +841,7 @@ gic_encoded <- gic_renamed |>
     dbil_12           = as.numeric(dbil_12),
     
     # Coerce `ast_1` to numeric
-    ast_1             = as.numeric(if_else(ast_1 == "pn", NA_character_, ast_1))
+    ast_1             = as.numeric(ast_1)
   )
 ```
 
@@ -821,9 +849,6 @@ gic_encoded <- gic_renamed |>
 ### Warning: Encoding anomalies flagged
 
 **Issues:** 
-
-* **Factor level mismatch**: The documented encoding for `residence` is "1 = urban; 2 = rural; 3 = peri-urban", but observed levels are 0, 1, and 2.
-  * *Temporary Resolution:* Will assume 0 = urban, 1 = rural, 2 = peri-urban
 * **Numeric column as character:** `ast_1` is stored as a character vector.
 	- *Investigation:* `record_id == 64` contains the value "pn" for `ast_1`.
 	- *Temporary Resolution*: Coerced "pn" to `NA`.
@@ -1067,7 +1092,7 @@ gic_encoded_path <- here("data", "processed", "gic_encoded.rds")
 # Save if file doesn't exist, or check if overwrite is intended if it does.
 if (file.exists(gic_encoded_path) && interactive()) {
   # If file exists and this is being run manually in RStudio ask before overwriting
-  response <- readline(prompt = paste("Warning:", basename(save_path), "already exists. Overwrite? (y/n):"))
+  response <- readline(prompt = paste("Warning:", basename(gic_encoded_path), "already exists. Overwrite? (y/n):"))
   
   if (tolower(substr(response, 1, 1)) == "y") {
     saveRDS(gic_encoded, gic_encoded_path)
