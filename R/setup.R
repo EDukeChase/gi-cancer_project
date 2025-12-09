@@ -38,4 +38,27 @@ options(
   ggplot2.continuous.fill = "viridis"
 )
 
-# --- Custom Functions ---
+# --- Project Metadata & Variable Mapping ---
+
+# Define clinical panels for longitudinal data
+# Used for audits, visualization grouping, and type-checks
+var_groups <- tibble(
+  stem = c(
+    "hb", "mcv", "mch", "plt", "wbc", "anc", "lcc",                # 1. CBC
+    "sodium", "potassium",                                         # 2. Chem
+    "tp", "alb", "tbil", "dbil", "alp", "alt", "ast", "ggt",       # 3. LFT
+    "cycle_delayed", "hosp_toxicity", "hosp_days", 
+    "transfusion_given", "transfusion_units", "csfg_indicated"     # 4. Mgmt
+  ),
+  panel = c(
+    rep("1. CBC", 7),
+    rep("2. Chem", 2),
+    rep("3. LFT", 8),
+    rep("4. Mgmt", 6)
+  )
+)
+
+# Helper to identify management variables vs lab variables
+mgmt_stems <- var_groups |> 
+  filter(panel == "4. Mgmt") |> 
+  pull(stem)
