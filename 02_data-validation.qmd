@@ -11,6 +11,7 @@ source("R/setup.R")
 
 
 # Packages
+
 ```
 
 ```{r}
@@ -36,51 +37,55 @@ real_data_map <- gic_encoded |>
     values_to = "value",
     values_transform = list(value = as.character)
   ) |> 
-  filter(!is.na(value)) |> 
-  mutate(cycle = as.integer(cycle))
+  mutate(cycle = as.integer(cycle)) |> 
+  left_join(var_groups, by = "stem") |> 
+  mutate(type = if_else(panel == "4. Mgmt", "Mgmt", "Labs"))
 
-# Calculate max data cycle per patient
-patient_max_cycles <- real_data_map |> 
-  group_by(record_id, pgh_number, cycles_prescribed, cycles_given) |> 
+# Summarize records to check if data matches cycles_given
+patient_audit <- real_data_map |> 
+  group_by(record_id, pgh_number, cycles_given) |> 
   summarize(
-    max_cycle_with_data = max(cycle),
+    # Check number of cycles that have labwork data
+    n_lab_cycles = n_distinct(cycle[type == "Labs" & !is.na(value)]),
+    # Check number of cycles that have management data
+    n_mgmt_cycles = n_distinct(cycle[type == "Mgmt" & !is.na(value)]),
+    # Check if number of lab cycles matches number of management cycles
+    labs_mgmt_match = n_lab_cycles == n_mgmt_cycles,
+    # For cycles with management data, check if all is present
+    mgmt_is_complete = {
+      required_vars <- expand.grid(s = mgmt_stems, c = 1:first(cycles_given)) |> 
+        mutate(fullname = paste0(s, "_", c)) |> 
+        pull(fullname)
+      actual_vars <- paste0(stem, "_", cycle)[!is.na(value) & type == "Mgmt"]
+      all(required_vars %in% actual_vars)
+    },
+    # Check the last cycle that had any data entered
+    max_cycle_any = max(cycle[!is.na(value)], na.rm = TRUE),
     .groups = "drop"
   ) |> 
-  complete(record_id = gic_encoded$record_id, fill = list(max_cycle_with_data = 0)) |> 
-  left_join(select(gic_encoded, record_id, cycles_given), by = "record_id", suffix = c("", "_orig")) |> 
-  mutate(cycles_given = coalesce(cycles_given, cycles_given_orig)) |> 
-  select(-cycles_given_orig)
+  mutate(max_cycle_any = if_else(is.infinite(max_cycle_any), 0, max_cycle_any))
 
-# Identify extraneous data (data beyond official count)
-extraneous_data <- patient_max_cycles |> 
-  filter(max_cycle_with_data > cycles_given) |> 
-  mutate(excess_cycles = max_cycle_with_data - cycles_given) |> 
-  arrange(desc(max_cycle_with_data))
+# Flag pts with data that doesn't match tx hx
+problem_ids <- patient_audit |> 
+  filter(
+    max_cycle_any > cycles_given |
+    n_mgmt_cycles != cycles_given |
+    n_lab_cycles != cycles_given |
+    labs_mgmt_match == FALSE |
+    mgmt_is_complete == FALSE
+  ) |> 
+  pull(record_id)
 
-# Display extraneous
-if (nrow(extraneous_data) > 0) {
-  warning("Found ", nrow(extraneous_data), " patients with data beyond their recorded cycle count.")
-  extraneous_data |> 
-    kbl(booktabs = TRUE, caption = "Extraneous Data Logic Check") |> 
-    kable_styling()
+# Display audit table
+if (length(problem_ids) > 0) {
+  warning("Found discrepancies for ", length(problem_ids), " records.")
+  
+  patient_audit |> 
+    filter(record_id %in% problem_ids) |> 
+    kbl(booktabs = TRUE, caption = "Strict Cycle Consistency Audit") |> 
+    kable_styling(full_width = FALSE)
 } else {
-  message("Extraneous cycle consistency check passed: No data found beyond `cycles_gi")
-}
-
-# Identify missing data
-missing_cycle_data <- patient_max_cycles |> 
-  filter(max_cycle_with_data < cycles_given) |> 
-  mutate(missing_cycles = cycles_given - max_cycle_with_data) |> 
-  arrange(desc(missing_cycles))
-
-if (nrow(missing_cycle_data) > 0) {
-  warning("Found ", nrow(missing_cycle_data), " patients missing records for completed cycles.")
-  missing_cycle_data |> 
-    kbl(caption = "Missing Cycle Records") |> 
-    kable_styling() |> 
-    scroll_box(height = "400px")
-} else {
-  message("Missing cycle consistency check passed: All administered cycles have data.")
+  message("All cycle counts match data presence and management completeness.")
 }
 ```
 
@@ -97,104 +102,74 @@ if (nrow(missing_cycle_data) > 0) {
 #| label: investigate_extraneous-data
 #| results: asis
 
-# Define problem IDs:
-problem_ids <- c(27, 146, 498, 766)
-
-# Define panel groups for readability
-var_groups <- tibble(
-  stem = c(
-    "hb", "mcv", "mch", "plt", "wbc", "anc", "lcc",                      # CBC
-    "sodium", "potassium",                                               # Chem
-    "tp", "alb", "tbil", "dbil", "alp", "alt", "ast", "ggt",             # LFT
-    "cycle_delayed", "hosp_toxicity", "hosp_days", "transfusion_given",  # Mgmt
-    "transfusion_units", "csfc_indicated"                                # Mgmt
-  ),
-  panel = c(
-    rep("1. CBC", 7),
-    rep("2. Chem", 2),
-    rep("3. LFT", 8),
-    rep("4. Mgmt", 6)
-  )
-)
-
-# Function to view patient history
-view_pt_hx <- function(pid, df) {
-  # Get official count
-  n_given <- df |> filter(record_id == pid) |> pull(cycles_given)
+view_pt_hx <- function(pid, df, audit_data = NULL, show_empty = TRUE) {
+  # Get official count and audit info for the pt
+  pt_row <- df |> filter(record_id == pid)
+  n_given <- pt_row |> pull(cycles_given)
   
-  # Extract and pivot data
-  pt_data <- df |> 
-    filter(record_id == pid) |> 
+  audit_row <- if(!is.null(audit_data)) audit_data |> filter(record_id == pid) else NULL
+  
+  # Extract and pivot longitudinal data
+  pt_data <- pt_row |> 
     select(matches("_[1-9]\\d*$")) |> 
     pivot_longer(
       cols = everything(),
       names_to = c("stem", "cycle"),
       names_pattern = "(.*)_(\\d+)$",
+      values_to = "value",
       values_transform = list(value = as.character) 
     ) |> 
     mutate(cycle = as.numeric(cycle)) |> 
-    
-    # Filter to only relevant cycles
-    filter(cycle >= n_given | !is.na(value)) |> 
-    
-    # Join with panel info for sorting
+    # Keep cycles based on tx hx or data presence
+    filter(if(show_empty) cycle <= n_given | !is.na(value) else !is.na(value)) |> 
     left_join(var_groups, by = "stem") |>
     arrange(panel, stem)
   
-  # Create visuyalization
+  # Create wide format for kable
   pt_wide <- pt_data |> 
     select(panel, stem, cycle, value) |> 
     pivot_wider(names_from = cycle, values_from = value)
-  cycle_cols <- setdiff(names(pt_wide), c("panel", "stem"))
   
-  # 2. Filter for the bad ones
-  bad_cols <- cycle_cols[map_lgl(cycle_cols, function(col) {
-    # Logic: Is it a future cycle?
-    is_future <- as.numeric(col) > n_given
-    # Logic: Does it have data? (Not all NAs)
-    has_data  <- !all(is.na(pt_wide[[col]]))
-    
-    return(is_future && has_data)
-  })]
+  cycle_cols <- as.numeric(setdiff(names(pt_wide), c("panel", "stem")))
   
-  # 3. Get indices for kable
-  target_indices <- which(names(pt_wide) %in% bad_cols)
-  
-  # Render
-  pt_wide |> 
+  # Build table
+  kb <- pt_wide |> 
     kbl(booktabs = T,
-        caption = paste("Pt Data: Record ID", pid,
-                        "(Cycles Given:", n_given, ")")) |> 
-    kable_styling(font_size = 11) |> 
-    column_spec(target_indices, background = cb_light[2])
+        caption = paste("Pt Data: Record ID", pid, "(Given:", n_given, ")")) |> 
+    kable_styling(font_size = 11)
+
+  # Highlight affected columns
+  for(cyc in cycle_cols) {
+    col_idx <- which(names(pt_wide) == as.character(cyc))
+    has_any_data <- any(!is.na(pt_wide[[as.character(cyc)]]))
+    
+    # Check for missing management in this cycle
+    mgmt_in_cycle <- pt_data |> 
+      filter(cycle == cyc, panel == "4. Mgmt") |> 
+      pull(value)
+    is_mgmt_incomplete <- any(is.na(mgmt_in_cycle))
+    
+    if (cyc > n_given) {
+      # Data recorded beyond the official count
+      kb <- kb |> column_spec(col_idx, background = cb_light[2])
+    } else if (!has_any_data) {
+      # Entirely empty cycles that should have data
+      kb <- kb |> column_spec(col_idx, background = cb_light[4])
+    } else if (is_mgmt_incomplete) {
+      # Partial management data
+      kb <- kb |> column_spec(col_idx, background = cb_light[6])
+    }
+  }
+  
+  return(kb)
 }
 
+# Run audit for flagged records
 walk(problem_ids, function(pid) {
-  print(view_pt_hx(pid, gic_encoded))
-  
-  # Add a visual spacer between tables so they don't merge
+  print(view_pt_hx(pid, gic_encoded, audit_data = patient_audit, show_empty = TRUE))
   cat("\n<br><br>\n") 
 })
 ```
-
-```{r}
-#| label: fix_extraneous-data
-
-# Filter problem IDs out of working dataset until correct values determined
-gic_wrk <- gic_encoded |> 
-  filter(!record_id %in% problem_ids)
-
-message("Excluded ", length(problem_ids), " records with ambiguous cycle data.")
-message("Remaining number of patients: ", nrow(gic_wrk))
-```
-
-::: {.callout-note}
-### Action Taken: Exclusion of Ambiguous Records
-
-**Issue:** 4 records were identified with extraneous cycle data (data present for cycles beyond the recorded `cycles_given`).
-**Investigation:** Visual inspection confirmed data inconsistencies (e.g., Record 146 has data for Cycle 1 and Cycle 12 only; Record 498 has zero-values in Cycle 8).
-**Resolution:** These records have been excluded from the analysis dataset pending clarification.
-:::
 
 
 ## Treatment Adherence Logic
@@ -203,7 +178,7 @@ Verify that the administered cycles do not exceed prescribed cycles.
 #| label: assess_cycle-counts
 
 # Check that `cycles_given` <= `cycles_prescribed`
-over_treated <- gic_wrk |> 
+over_treated <- gic_encoded |> 
   filter(cycles_given > cycles_prescribed) |> 
   select(record_id, cycles_prescribed, cycles_given) |> 
   mutate(excess = cycles_given - cycles_prescribed) |> 
@@ -230,7 +205,7 @@ Verify that pre-calculated fields match their components.
 bmi_tol <- 0.5
 rate_tol <- 1.0
 
-composite_audit <- gic_wrk |> 
+composite_audit <- gic_encoded |> 
   select(record_id, height_0, weight_0, bmi_0, 
          cycles_given, cycles_prescribed, completion_rate) |> 
   mutate(
@@ -356,21 +331,6 @@ if (nrow(transfusion_error_records) > 0) {
 }
 ```
 
-
-```{r}
-#| label: fix_transfusions
-```
-
-
-## Temporal Consistency
-Verify that event dates occur within logical timeframes.
-```{r}
-#| label: assess_temporal-logic
-
-# Check death_date vs study time window
-
-```
-
 # Numeric Range Validation
 ## Body Measurement Outliers
 Identify clinically impossible values for height and weight.
@@ -386,7 +346,7 @@ limits <- list(
 )
 
 # Identify outliers
-body_outliers <- gic_wrk |> 
+body_outliers <- gic_encoded |> 
   select(record_id, height_0, weight_0, bmi_0) |> 
   filter(
     height_0 < limits$ht_min | height_0 > limits$ht_max |
@@ -407,7 +367,7 @@ if (nrow(body_outliers) > 0) {
 }
 
 # Visualize results
-gic_wrk |> 
+gic_encoded |> 
   select(height_0, weight_0, bmi_0) |> 
   pivot_longer(everything(), names_to = "measure", values_to = "value") |> 
   ggplot(aes(x = value)) +
@@ -415,20 +375,6 @@ gic_wrk |>
   facet_wrap(~measure, scales = "free") +
   theme_minimal() +
   labs(title = "Distribution of Body Measurements", x = NULL, y = "Count")
-```
-
-```{r}
-#| label: fix_body-measurements
-
-# Temporary resolution for DAT-020
-gic_wrk <- gic_wrk |> 
-  mutate(
-    # Fix suspected height typo
-    `height_0` = if_else(record_id == 614, 149.8, height_0),
-    # Recalculate BMI
-    bmi_0 = if_else(record_id == 614, weight_0 / (height_0 / 100)^2, bmi_0)
-  )
-
 ```
 
 ::: {.callout-note}
@@ -477,7 +423,7 @@ Apply grading logic to raw laboratory values using `grading_rules.csv`.
 rules <- read_csv(here("data", "grading_rules.csv"), show_col_types = FALSE)
 
 # Pivot, Grade, and Pivot Back
-gic_graded <- gic_wrk |> 
+gic_graded <- gic_encoded |> 
   # Pivot Long
   select(record_id, matches("_\\d+$")) |> 
   pivot_longer(
@@ -500,7 +446,7 @@ gic_graded <- gic_wrk |>
   pivot_wider(names_from = new_col, values_from = label)
 
 # Join back to main data
-gic_validated <- gic_wrk |> 
+gic_validated <- gic_encoded |> 
   left_join(gic_graded, by = "record_id")
 
 # Print a random sample of grades to see if it worked, will perform audit later
@@ -529,9 +475,15 @@ gic_validated |>
   kable_styling(full_width = FALSE)
 ```
 
+## Adverse Event Counts
+```{r}
+#| 
+```
+
+
 # Export
 ```{r}
-#| label: save_final-data
+#| label: save_validated-data
 
 # Define path to file
 gic_validated_path <- here("data", "processed", "gic_validated.rds")
