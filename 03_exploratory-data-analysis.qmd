@@ -17,4 +17,238 @@ gic_validated <- readRDS(here("data", "processed", "gic_validated.rds"))
 ```
 
 
+```{r}
+#| label: engineer-ae-variables
+
+# Identify all adverse event columns and pivot to check per-cycle status
+ae_data <- gic_validated |> 
+  select(record_id, matches("grade_\\d+$")) |> 
+  pivot_longer(
+    cols = -record_id,
+    names_to = c("ae_type", "cycle"),
+    names_pattern = "(.*)_grade_(\\d+)$",
+    values_to = "grade"
+  ) |> 
+  mutate(
+    cycle = as.integer(cycle),
+    grade_num = as.numeric(str_extract(grade, "\\d")),
+    is_ae = !is.na(grade_num) & grade_num > 0,
+    is_severe = !is.na(grade_num) & grade_num >= 3
+  )
+
+# Summarize at patient level
+ae_summary <- ae_data |> 
+  group_by(record_id) |> 
+  summarize(
+    ae_cycle_count = n_distinct(cycle[is_ae == TRUE]),
+    ae_early = if_else(any(is_ae == TRUE & cycle <= 4), 1, 0),
+    had_severe_ae = if_else(any(is_severe == TRUE), 1, 0),
+    severe_ae_early = if_else(any(is_severe == TRUE & cycle <= 4), 1, 0),
+    .groups = "drop"
+  )
+
+# Join back to main dataset
+gic_models <- gic_validated |> 
+  left_join(ae_summary, by = "record_id") |> 
+  mutate(
+    had_any_ae = if_else(ae_cycle_count > 0, 1, 0)
+  )
+```
+
+```{r}
+#| label: tbl-ae-summary
+#| tbl-cap: "Summary of Adverse Events by HIV Status"
+
+gic_models |> 
+  group_by(hiv_status) |> 
+  summarize(
+    total_pts = n(),
+    
+    any_ae_n = sum(had_any_ae),
+    any_ae_pct = (any_ae_n / total_pts) * 100,
+    
+    severe_ae_n = sum(had_severe_ae),
+    severe_ae_pct = (severe_ae_n / total_pts) * 100,
+    
+    early_ae_n = sum(ae_early),
+    early_ae_pct = (early_ae_n / total_pts) * 100,
+    
+    severe_early_ae_n = sum(severe_ae_early),
+    severe_early_ae_pct = (severe_early_ae_n / total_pts) * 100,
+    .groups = "drop"
+  ) |> 
+  mutate(
+    "Any AE (%)" = paste0(any_ae_n, " (", round(any_ae_pct, 2), "%)"),
+    "Severe AE (%)" = paste0(severe_ae_n, " (", round(severe_ae_pct, 2), "%)"),
+    "Early AE (%)" = paste0(early_ae_n, " (", round(early_ae_pct, 2), "%)"),
+    "Severe Early AE (%)" = paste0(severe_early_ae_n, " (", round(severe_early_ae_pct, 2), "%)")
+  ) |> 
+  select(hiv_status, total_pts, "Any AE (%)", "Severe AE (%)", "Early AE (%)", "Severe Early AE (%)") |> 
+  kbl(booktabs = TRUE, align = "lcccc") |> 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+# Model Building
+## Prelim Tables for covariates
+```{r}
+#| label: tbl-simple
+
+# Helper to format the tables quickly
+make_kbl_table <- function(tab, cap) {
+  tab |> 
+    as.data.frame.matrix() |> 
+    kbl(booktabs = TRUE, caption = cap) |> 
+    kable_styling(full_width = FALSE, position = "left", font_size = 12)
+}
+
+# Any AE vs HIV
+make_kbl_table(
+  table(Any_AE = gic_models$had_any_ae, HIV = gic_models$hiv_status),
+  "Counts: Any AE vs HIV Status"
+)
+
+# Severe AE vs HIV
+make_kbl_table(
+  table(Severe_AE = gic_models$had_severe_ae, HIV = gic_models$hiv_status),
+  "Counts: Severe AE vs HIV Status"
+)
+
+# Early AE vs HIV
+make_kbl_table(
+  table(Early_AE = gic_models$ae_early, HIV = gic_models$hiv_status),
+  "Counts: Early AE (C1-4) vs HIV Status"
+)
+
+# Severe Early AE vs HIV
+make_kbl_table(
+  table(Severe_Early_AE = gic_models$severe_ae_early, HIV = gic_models$hiv_status),
+  "Counts: Severe Early AE (C1-4) vs HIV Status"
+)
+
+# table(gic_models$cancer_stage, gic_models$hiv_status)
+# 
+# table(gic_models$chemo_type, gic_models$hiv_status)
+# 
+# table(gic_models$tx_intent, gic_models$hiv_status)
+```
+
+```{r}
+#| label: tbl-toxicity-raw-counts
+
+# Any AE vs HIV
+table(Any_AE = gic_models$had_any_ae, HIV = gic_models$hiv_status) |> 
+  as.data.frame.matrix() |> 
+  kbl(booktabs = TRUE, caption = "Any AE vs HIV Status") |> 
+  kable_styling(full_width = FALSE, position = "left") |> 
+  add_header_above(c("Any AE Status" = 1, "HIV Status" = 2))
+
+# Severe AE vs HIV
+table(Severe_AE = gic_models$had_severe_ae, HIV = gic_models$hiv_status) |> 
+  as.data.frame.matrix() |> 
+  kbl(booktabs = TRUE, caption = "Severe AE vs HIV Status") |> 
+  kable_styling(full_width = FALSE, position = "left") |> 
+  add_header_above(c("Severe AE Status" = 1, "HIV Status" = 2))
+
+# Early AE vs HIV
+table(Early_AE = gic_models$ae_early, HIV = gic_models$hiv_status) |> 
+  as.data.frame.matrix() |> 
+  kbl(booktabs = TRUE, caption = "Early AE (C1-4) vs HIV Status") |> 
+  kable_styling(full_width = FALSE, position = "left") |> 
+  add_header_above(c("Early AE Status" = 1, "HIV Status" = 2))
+```
+
+
+:::{.callout-warning collapse="false"}
+### Warning: Categorical Variables with Insufficient Patients
+
+- For cancer stage, only 3 HIV positive patients were stage II
+- For chemo type, all of the types had at least 10 HIV-negative patients
+  - Platinum/Paclitaxel and LCV/5-FU had 6 and 8 HIV-positive patients, respectively
+  - CapeOX, FOLFOX4, and Capecitabine had 4, 2, and 2 HIV-positive patients, respectively
+:::
+
+## Simple Logistic: Full treatment period
+```{r}
+#| label: model-simple-full
+
+model_any_simple <- glm(had_any_ae ~ hiv_status, 
+                        data = gic_models, family = binomial)
+
+model_severe_simple <- glm(had_severe_ae ~ hiv_status,
+                           data = gic_models, family = binomial)
+
+# summary(model_any_simple)
+summary(model_severe_simple)
+```
+
+## Simple logistic: Early treatment period
+```{r}
+#| label: model-simple-early
+
+model_any_early_simple <- glm(ae_early ~ hiv_status,
+                              data = gic_models, family = binomial)
+model_severe_early_simple <- glm(severe_ae_early ~ hiv_status,
+                                 data = gic_models, family = binomial)
+
+# summary(model_any_early_simple)
+summary(model_severe_early_simple)
+```
+
+## Multivariate Logistic: Full treatment period
+
+```{r}
+#| label: model-basic-full
+
+model_any_basic <- glm(had_any_ae ~ hiv_status + cancer_stage + chemo_type + tx_intent,
+                       data = gic_models, family = binomial)
+
+model_severe_basic <- glm(had_severe_ae ~ hiv_status + cancer_stage + chemo_type + tx_intent,
+                       data = gic_models, family = binomial)
+
+# summary(model_any_basic)
+summary(model_severe_basic)
+```
+
+## Multivariate Logistic: Early treatment period
+
+```{r}
+#| label: model-basic-full
+
+model_any_early_basic <- glm(ae_early ~ hiv_status + cancer_stage + chemo_type + tx_intent,
+                       data = gic_models, family = binomial)
+
+model_severe_early_basic <- glm(severe_ae_early ~ hiv_status + cancer_stage + chemo_type + tx_intent,
+                       data = gic_models, family = binomial)
+
+summary(model_any_early_basic)
+summary(model_severe_early_basic)
+```
+
+## $\chi^2$ Tests (HIV vs Early Events)
+
+```{r}
+#| label: tests-chi-sq
+
+# Any early AE
+table_any_early <- table(gic_models$ae_early, gic_models$hiv_status)
+chisq_any <- if(any(table_any_early == 0)) "Incalculable (100% rate)" else chisq.test(table_any_early)
+
+# Severe early AE
+table_severe_early <- table(gic_models$severe_ae_early, gic_models$hiv_status)
+chisq_severe <- if(any(table_severe_early == 0)) "Incalculable (100% rate)" else chisq.test(table_severe_early)
+
+print(table_any_early)
+print(chisq_any)
+
+print(table_severe_early)
+print(chisq_severe)
+```
+
+
+
+
+
+
+
+
 
