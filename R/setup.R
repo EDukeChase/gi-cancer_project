@@ -5,6 +5,7 @@ library(knitr)              # Used for running R code in Quarto
 library(RColorBrewer)       # Color palettes to enable color-blind friendliness
 library(scales)             # Simplify palette visualization
 library(tidyverse)          # Essential R packages (Can pare down later)
+library(broom)              # 
 
 
 # --- Set seed for reproducibility ---

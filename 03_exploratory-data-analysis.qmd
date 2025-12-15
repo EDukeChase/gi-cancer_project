@@ -93,18 +93,45 @@ gic_models |>
 # Model Building
 
 ## Simple Logistic: Full treatment period
+### Simple logistic model of any adverse events by HIV status
 ```{r}
-#| label: model-simple-full
+#| label: model-any_simple
 
 model_any_simple <- glm(had_any_ae ~ hiv_status, 
                         data = gic_models, family = binomial)
 
+# summary(model_any_simple)
+```
+Invalid model due to having a 100% adverse event rate in the HIV-positive group.
+
+### Simple logistic model of any severe adverse events by HIV status
+```{r}
+#| label: model-severe-simple
+
+
 model_severe_simple <- glm(had_severe_ae ~ hiv_status,
                            data = gic_models, family = binomial)
 
-# summary(model_any_simple)
 summary(model_severe_simple)
 ```
+```{r}
+#| label: tbl-severe-multivariate-summary
+#| tbl-cap: "Multivariate Predictors of Severe Adverse Events (Adjusted)"
+
+tidy(model_severe_simple, conf.int = TRUE, exponentiate = TRUE) |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    `OR (95% CI)` = paste0(round(estimate, 2), " (", 
+                           round(conf.low, 2), " - ", 
+                           round(conf.high, 2), ")"),
+    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3)))
+  ) |>
+  select(Term = term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left")
+```
+
+
 
 ## Multivariate Logistic: Full treatment period
 
@@ -195,6 +222,35 @@ chisq_severe <- if(any(table_severe_early == 0)) "Incalculable (100% rate)" else
 chisq_any
 chisq_severe
 ```
+
+<!-- ## Early Period Models -->
+<!-- ```{r} -->
+<!-- #| label: model-simple-early -->
+
+<!-- # Simple logistic for early period -->
+<!-- model_any_early_simple <- glm(ae_early ~ hiv_status,  -->
+<!--                               data = gic_models, family = binomial) -->
+
+<!-- model_severe_early_simple <- glm(severe_ae_early ~ hiv_status,  -->
+<!--                                  data = gic_models, family = binomial) -->
+
+<!-- summary(model_any_early_simple) -->
+<!-- summary(model_severe_early_simple) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #| label: model-basic-early -->
+
+<!-- # Multivariate logistic for early period -->
+<!-- model_any_early_basic <- glm(ae_early ~ hiv_status + cancer_stage + chemo_type + tx_intent,  -->
+<!--                              data = gic_models, family = binomial) -->
+
+<!-- model_severe_early_basic <- glm(severe_ae_early ~ hiv_status + cancer_stage + chemo_type + tx_intent,  -->
+<!--                                 data = gic_models, family = binomial) -->
+
+<!-- summary(model_any_early_basic) -->
+<!-- summary(model_severe_early_basic) -->
+<!-- ``` -->
 
 
 
