@@ -57,7 +57,7 @@ gic_models <- gic_validated |>
 
 ```{r}
 #| label: tbl-ae-summary
-#| tbl-cap: "Summary of Adverse Events by HIV Status"
+#| tbl-cap: "Summary of adverse events by HIV status"
 
 gic_models |> 
   group_by(hiv_status) |> 
@@ -78,90 +78,19 @@ gic_models |>
     .groups = "drop"
   ) |> 
   mutate(
+    "HIV Status" = hiv_status,
+    "Total Patients" = total_pts,
     "Any AE (%)" = paste0(any_ae_n, " (", round(any_ae_pct, 2), "%)"),
     "Severe AE (%)" = paste0(severe_ae_n, " (", round(severe_ae_pct, 2), "%)"),
     "Early AE (%)" = paste0(early_ae_n, " (", round(early_ae_pct, 2), "%)"),
     "Severe Early AE (%)" = paste0(severe_early_ae_n, " (", round(severe_early_ae_pct, 2), "%)")
   ) |> 
-  select(hiv_status, total_pts, "Any AE (%)", "Severe AE (%)", "Early AE (%)", "Severe Early AE (%)") |> 
+  select("HIV Status", "Total Patients", "Any AE (%)", "Severe AE (%)", "Early AE (%)", "Severe Early AE (%)") |> 
   kbl(booktabs = TRUE, align = "lcccc") |> 
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
 # Model Building
-## Prelim Tables for covariates
-```{r}
-#| label: tbl-simple
-
-# 1. Any AE vs HIV
-table(Any_AE = gic_models$had_any_ae, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE, caption = "Any AE vs HIV Status") |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Any AE (0=No, 1=Yes)" = 1, "HIV Status" = 2))
-
-# 2. Severe AE vs HIV
-table(Severe_AE = gic_models$had_severe_ae, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE, caption = "Severe AE (Grades 3-4) vs HIV Status") |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Severe AE (0=No, 1=Yes)" = 1, "HIV Status" = 2))
-
-# 3. Early AE vs HIV
-table(Early_AE = gic_models$ae_early, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE, caption = "Early AE (Cycles 1-4) vs HIV Status") |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Early AE (0=No, 1=Yes)" = 1, "HIV Status" = 2))
-
-# 4. Severe Early AE vs HIV
-table(Severe_Early_AE = gic_models$severe_ae_early, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE, caption = "Severe Early AE (Cycles 1-4) vs HIV Status") |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Severe Early AE (0=No, 1=Yes)" = 1, "HIV Status" = 2))
-
-# table(gic_models$cancer_stage, gic_models$hiv_status)
-# 
-# table(gic_models$chemo_type, gic_models$hiv_status)
-# 
-# table(gic_models$tx_intent, gic_models$hiv_status)
-```
-
-```{r}
-#| label: tbl-toxicity-raw-counts
-
-# Any AE vs HIV
-table(Any_AE = gic_models$had_any_ae, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE, caption = "Any AE vs HIV Status") |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Any AE Status" = 1, "HIV Status" = 2))
-
-# Severe AE vs HIV
-table(Severe_AE = gic_models$had_severe_ae, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE, caption = "Severe AE vs HIV Status") |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Severe AE Status" = 1, "HIV Status" = 2))
-
-# Early AE vs HIV
-table(Early_AE = gic_models$ae_early, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE, caption = "Early AE (C1-4) vs HIV Status") |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Early AE Status" = 1, "HIV Status" = 2))
-```
-
-
-:::{.callout-warning collapse="false"}
-### Warning: Categorical Variables with Insufficient Patients
-
-- For cancer stage, only 3 HIV positive patients were stage II
-- For chemo type, all of the types had at least 10 HIV-negative patients
-  - Platinum/Paclitaxel and LCV/5-FU had 6 and 8 HIV-positive patients, respectively
-  - CapeOX, FOLFOX4, and Capecitabine had 4, 2, and 2 HIV-positive patients, respectively
-:::
 
 ## Simple Logistic: Full treatment period
 ```{r}
@@ -177,20 +106,41 @@ model_severe_simple <- glm(had_severe_ae ~ hiv_status,
 summary(model_severe_simple)
 ```
 
-## Simple logistic: Early treatment period
+## Multivariate Logistic: Full treatment period
+
 ```{r}
-#| label: model-simple-early
+#| label: tbl-stage-vs-hiv-status
+#| tbl-cap: "Cancer stage vs HIV status"
 
-model_any_early_simple <- glm(ae_early ~ hiv_status,
-                              data = gic_models, family = binomial)
-model_severe_early_simple <- glm(severe_ae_early ~ hiv_status,
-                                 data = gic_models, family = binomial)
-
-# summary(model_any_early_simple)
-summary(model_severe_early_simple)
+table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |> 
+  as.data.frame.matrix() |> 
+  kbl(booktabs = TRUE) |> 
+  kable_styling(full_width = FALSE, position = "left") |> 
+  add_header_above(c("Cancer Stage" = 1, "HIV Status" = 2))
 ```
 
-## Multivariate Logistic: Full treatment period
+```{r}
+#| label: tbl-chemo-type-vs-hiv-status
+#| tbl-cap: "Chemotherapy type vs HIV status"
+
+table(Stage = gic_models$chemo_type, HIV = gic_models$hiv_status) |> 
+  as.data.frame.matrix() |> 
+  kbl(booktabs = TRUE) |> 
+  kable_styling(full_width = FALSE, position = "left") |> 
+  add_header_above(c("Chemo Type" = 1, "HIV Status" = 2))
+```
+
+```{r}
+#| label: tbl-tx-intent-vs-hiv-status
+#| tbl-cap: "Treatment intent vs HIV status"
+
+table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |> 
+  as.data.frame.matrix() |> 
+  kbl(booktabs = TRUE) |> 
+  kable_styling(full_width = FALSE, position = "left") |> 
+  add_header_above(c("Treatment Intent" = 1, "HIV Status" = 2))
+```
+
 
 ```{r}
 #| label: model-basic-full
@@ -205,39 +155,45 @@ model_severe_basic <- glm(had_severe_ae ~ hiv_status + cancer_stage + chemo_type
 summary(model_severe_basic)
 ```
 
-## Multivariate Logistic: Early treatment period
+## $\chi^2$ Tests (HIV vs Early Events)
 
 ```{r}
-#| label: model-basic-early
+#| label: tbl-any-early-contingency
+#| tbl-cap: "Contingency table of early adverse events (cycles 1-4) vs HIV status"
 
-model_any_early_basic <- glm(ae_early ~ hiv_status + cancer_stage + chemo_type + tx_intent,
-                       data = gic_models, family = binomial)
+table_any_early <- table(early_ae = factor(gic_models$ae_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status)
 
-model_severe_early_basic <- glm(severe_ae_early ~ hiv_status + cancer_stage + chemo_type + tx_intent,
-                       data = gic_models, family = binomial)
+table_any_early |> 
+  as.data.frame.matrix() |> 
+  kbl(booktabs = TRUE) |> 
+  kable_styling(full_width = FALSE, position = "left") |> 
+  add_header_above(c("Any Early AE" = 1, "HIV Status" = 2))
+```
+```{r}
+#| label: tbl-severe-early-contingency
+#| tbl-cap: "Contingency table of severe early adverse events (cycles 1-4) vs HIV status"
 
-summary(model_any_early_basic)
-summary(model_severe_early_basic)
+table_severe_early <- table(severe_early_ae = factor(gic_models$severe_ae_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status)
+
+table_severe_early |> 
+  as.data.frame.matrix() |> 
+  kbl(booktabs = TRUE) |> 
+  kable_styling(full_width = FALSE, position = "left") |> 
+  add_header_above(c("Severe Early AE" = 1, "HIV Status" = 2))
 ```
 
-## $\chi^2$ Tests (HIV vs Early Events)
 
 ```{r}
 #| label: tests-chi-sq
 
 # Any early AE
-table_any_early <- table(gic_models$ae_early, gic_models$hiv_status)
 chisq_any <- if(any(table_any_early == 0)) "Incalculable (100% rate)" else chisq.test(table_any_early)
 
 # Severe early AE
-table_severe_early <- table(gic_models$severe_ae_early, gic_models$hiv_status)
 chisq_severe <- if(any(table_severe_early == 0)) "Incalculable (100% rate)" else chisq.test(table_severe_early)
 
-print(table_any_early)
-print(chisq_any)
-
-print(table_severe_early)
-print(chisq_severe)
+chisq_any
+chisq_severe
 ```
 
 
