@@ -41,9 +41,9 @@ ae_summary <- ae_data |>
   group_by(record_id) |> 
   summarize(
     ae_cycle_count = n_distinct(cycle[is_ae == TRUE]),
-    ae_early = if_else(any(is_ae == TRUE & cycle <= 4), 1, 0),
+    ae_early = if_else(any(is_ae == TRUE & cycle <= 2), 1, 0),
     had_severe_ae = if_else(any(is_severe == TRUE), 1, 0),
-    severe_ae_early = if_else(any(is_severe == TRUE & cycle <= 4), 1, 0),
+    severe_ae_early = if_else(any(is_severe == TRUE & cycle <= 2), 1, 0),
     .groups = "drop"
   )
 
@@ -184,7 +184,7 @@ table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |>
 model_any_basic <- glm(had_any_ae ~ hiv_status + cancer_stage + chemo_type + tx_intent,
                        data = gic_models, family = binomial)
 
-# summary(model_any_basic)
+summary(model_any_basic)
 ```
 Invalid model due to having a 100% adverse event rate in the HIV-positive group.
 
@@ -273,7 +273,6 @@ table_severe_early |>
 
 # Any Early AE (Cycles 1-4)
 cat("Chi-Squared Test: Any Early AE (C1-4) vs HIV Status\n")
-# Note: This may trigger a warning if any cell counts are 0
 print(chisq.test(table_any_early))
 
 cat("\n\n")
