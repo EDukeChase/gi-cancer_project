@@ -115,18 +115,27 @@ model_severe_simple <- glm(had_severe_ae ~ hiv_status,
 summary(model_severe_simple)
 ```
 ```{r}
-#| label: tbl-severe-multivariate-summary
-#| tbl-cap: "Multivariate Predictors of Severe Adverse Events (Adjusted)"
+#| label: tbl-severe-simple-or-clean
+#| tbl-cap: "Association between HIV Status and Severe Adverse Events (Grades 3-4)"
 
 tidy(model_severe_simple, conf.int = TRUE, exponentiate = TRUE) |>
   filter(term != "(Intercept)") |>
+  # Clean up the name and prepare for the reference row
   mutate(
+    Term = str_replace(term, "hiv_statusPositive", "HIV Positive"),
     `OR (95% CI)` = paste0(round(estimate, 2), " (", 
                            round(conf.low, 2), " - ", 
                            round(conf.high, 2), ")"),
-    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3)))
+    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))),
+    std.error = round(std.error, 3)
   ) |>
-  select(Term = term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
+  select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
+  # Add the reference row at the top
+  add_row(Term = "HIV Negative (Reference)", 
+          `OR (95% CI)` = "1.00", 
+          `Std. Error` = NA, 
+          `P-value` = NA, 
+          .before = 1) |>
   kbl(booktabs = TRUE) |>
   kable_styling(full_width = FALSE, position = "left")
 ```
@@ -168,19 +177,68 @@ table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |>
   add_header_above(c("Treatment Intent" = 1, "HIV Status" = 2))
 ```
 
-
+### Basic logistic model of any adverse events by HIV status
 ```{r}
-#| label: model-basic-full
+#| label: model-any-basic
 
 model_any_basic <- glm(had_any_ae ~ hiv_status + cancer_stage + chemo_type + tx_intent,
                        data = gic_models, family = binomial)
 
+# summary(model_any_basic)
+```
+Invalid model due to having a 100% adverse event rate in the HIV-positive group.
+
+### Basic logicstic model of any severe adverse events by HIV status
+```{r}
+#| label: model-severe-basic
+
 model_severe_basic <- glm(had_severe_ae ~ hiv_status + cancer_stage + chemo_type + tx_intent,
                        data = gic_models, family = binomial)
 
-# summary(model_any_basic)
 summary(model_severe_basic)
 ```
+
+```{r}
+#| label: tbl-severe-multivariate-or
+#| tbl-cap: "Adjusted Odds Ratios for Severe Adverse Events (Grades 3-4)"
+
+tidy(model_severe_basic, conf.int = TRUE, exponentiate = TRUE) |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    # Clean up term names
+    Term = case_when(
+      term == "hiv_statusPositive" ~ "HIV Positive",
+      term == "cancer_stageStage III" ~ "Stage III",
+      term == "cancer_stageStage IV" ~ "Stage IV",
+      term == "chemo_typePlatinum/5-FU" ~ "Platinum/5-FU",
+      term == "chemo_typeLCV/5-FU" ~ "LCV/5-FU",
+      term == "chemo_typeCapeOX" ~ "CapeOX",
+      term == "chemo_typeFOLFOX4" ~ "FOLFOX4",
+      term == "chemo_typeCapecitabine" ~ "Capecitabine",
+      term == "tx_intentPalliative" ~ "Palliative Intent",
+      TRUE ~ term
+    ),
+    `OR (95% CI)` = paste0(round(estimate, 2), " (", 
+                           round(conf.low, 2), " - ", 
+                           round(conf.high, 2), ")"),
+    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))),
+    std.error = round(std.error, 3)
+  ) |>
+  select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
+  # Add reference rows for clarity
+  add_row(Term = "HIV Negative (Ref)", `OR (95% CI)` = "1.00", .before = 1) |>
+  add_row(Term = "Stage II (Ref)", `OR (95% CI)` = "1.00", .before = 3) |>
+  add_row(Term = "Platinum/Paclitaxel (Ref)", `OR (95% CI)` = "1.00", .before = 6) |>
+  add_row(Term = "Curative Intent (Ref)", `OR (95% CI)` = "1.00", .before = 12) |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  pack_rows("HIV Status", 1, 2) |>
+  pack_rows("Cancer Stage", 3, 5) |>
+  pack_rows("Chemotherapy Regimen", 6, 11) |>
+  pack_rows("Treatment Intent", 12, 13)
+```
+
+
 
 ## $\chi^2$ Tests (HIV vs Early Events)
 
@@ -213,14 +271,16 @@ table_severe_early |>
 ```{r}
 #| label: tests-chi-sq
 
-# Any early AE
-chisq_any <- if(any(table_any_early == 0)) "Incalculable (100% rate)" else chisq.test(table_any_early)
+# Any Early AE (Cycles 1-4)
+cat("Chi-Squared Test: Any Early AE (C1-4) vs HIV Status\n")
+# Note: This may trigger a warning if any cell counts are 0
+print(chisq.test(table_any_early))
 
-# Severe early AE
-chisq_severe <- if(any(table_severe_early == 0)) "Incalculable (100% rate)" else chisq.test(table_severe_early)
+cat("\n\n")
 
-chisq_any
-chisq_severe
+# Severe Early AE (Cycles 1-4)
+cat("Chi-Squared Test: Severe Early AE (C1-4) vs HIV Status\n")
+print(chisq.test(table_severe_early))
 ```
 
 <!-- ## Early Period Models -->
