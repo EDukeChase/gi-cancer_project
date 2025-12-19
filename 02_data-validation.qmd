@@ -476,9 +476,7 @@ gic_validated |>
 ```
 
 ## Adverse Event Counts
-```{r}
-#| 
-```
+
 
 
 # Export
