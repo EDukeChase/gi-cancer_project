@@ -90,6 +90,63 @@ gic_models |>
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
+# Generate various ways of counting adverse events
+```{r}
+#| label: engineer-ae-counts
+
+add_cycle_ae_measures <- function(df, na_as_zero = FALSE) {
+  grade_cols <- names(df)[str_detect(names(df), "_grade_([1-9]|1[0-2])$")]
+  
+  long <- df |> 
+    select(record_id, cycles_prescribed, cycles_given, all_of(grade_cols)) |> 
+    pivot_longer(
+      cols = all_of(grade_cols),
+      names_to = "grade_var",
+      values_to = "grade_raw"
+    ) |> 
+    mutate(
+      cycle  = as.integer(str_extract(grade_var, "\\d+$")),
+      marker = str_remove(grade_var, "_grade_\\d+$"),
+      grade  = suppressWarnings(as.numeric(grade_raw)),
+      grade_was_non_numeric = !is.na(grade_raw) & is.na(grade)
+    )
+  
+  if (na_as_zero) {
+    long <- long |> mutate(grade = replace_na(grade, 0))
+  }
+  
+  cycle_summary <- long |> 
+    group_by(record_id, cycles_prescribed, cycles_given, cycle) |> 
+    summarize(
+      n_measured = sum(!is.na(grade)),
+      ae_sum_grade = if_else(n_measured == 0, NA_real_, sum(grade, na.rm = TRUE)),
+      ae_max_grade = if_else(n_measured == 0, NA_real_, max(grade, na.rm = TRUE)),
+      ae_n_events = if_else(n_measured == 0, NA_real_, sum(grade > 0, na.rm = TRUE)),
+      ae_n_severe = if_else(n_measured == 0, NA_real_, sum(grade >= 3, na.rm = TRUE)),
+      .groups = "drop"
+    ) |> 
+    mutate(
+      ae_any = if_else(is.na(ae_n_events), NA, ae_n_events > 0),
+      ae_severe_any = if_else(is.na(ae_n_severe), NA, ae_n_severe > 0)
+    )
+  
+  wide <- cycle_summary |> 
+    pivot_wider(
+      id_cols = c(record_id, cycles_prescribed, cycles_given),
+      names_from = cycle,
+      values_from = c(n_measured, ae_sum_grade, ae_max_grade, ae_n_events, ae_n_severe, ae_any, ae_severe_any),
+      names_glue = "{.value}_{cycle}"
+    )
+  
+  df |> 
+    left_join(wide, by = c("record_id", "cycles_prescribed", "cycles_given"))
+}
+
+gic_models2 <- add_cycle_ae_measures(gic_models, na_as_zero = FALSE)
+```
+
+
+
 # Model Building
 
 ## Simple Logistic: Full treatment period
