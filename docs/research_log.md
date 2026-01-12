@@ -53,6 +53,30 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- *Resolved Tasks:* MET-001
 		- [ ] MET-002 [P1]: Adverse Event Grading Rules
 
+## Planned Analysis & Feature Engineering (PLN)
+*Planned analysis-ready derived variables and dataset assembly tasks (not data problems).*
+
+- **PLN-001 [P2]: Cycle-level adverse event summaries**
+  - **Status:** Open
+  - **Created:** 2026-01-12
+  - **Last updated:** 2026-01-12
+  - **Location:** `03_exploratory-data-analysis.qmd` (chunks: `engineer-ae-variables`, `tbl-ae-by-pt`, `tbl-ae-by-cycle`)
+  - **Summary:** Add cycle-level derived variables summarizing adverse events from existing per-cycle grade columns, and incorporate them into the analysis dataset used for modeling/reporting.
+  - **Impact:** Enable per-cycle adverse event summaries/models and prevent having to rely only on whole-treatment summaries.
+  - **Scope:** All patients in `gic_validated`; cycles 1–12; uses existing `*_grade_#` columns.
+  - **Actions:**
+    - [x] Merge cycle-level adverse event counting logic into `engineer-ae-variables` from `engineer-ae-counts`, then remove `engineer-ae-counts`.
+	- [x] Fix grade parsing so numeric extraction works reliably.
+	- [x] Update `tbl-ae-summary` (and/or add a new table) to usefully display new cycle-level summaries.
+	- [ ] Improve table metric choices
+	- [ ] Generate plots to explore new cycle-level AE variables stratified by `hiv_status`.
+	- [ ] Validate against raw grade columns to confirm derived values.
+		- [ ] Spot check against a small set of patients/cycles.
+		- [ ] Thorough validation pass.
+  - **Timeline:**
+	- 2026-01-12: Merged `engineer-ae-variables` and `engineer-ae-counts` and dropped the latter. Added table describing the meanings of new variables that were created. Built tables summarizing new variables by `hiv_status` (`tbl-ae-by-pt`, `tbl-ae-by-cycle`).
+    - 2025-12-18: Discussed adding cycle-level adverse event measures to better tie adverse events to clinical variables (e.g., `hosp_days_#`) for clinically oriented analysis. (source: Zoom meeting).
+
 ## Data Integrity & Anomalies (DAT)
 *Issues regarding the accuracy, completeness, or logic of the raw data.*
 
@@ -60,12 +84,14 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Update:* [2025-12-05] (Email from Dr. Mazhindu) Received DOI links for definitive formulas for both ALBI score and Creatinine Clearance.
 	- *Update:* [2025-12-02] (Zoom meeting) Dr. Mazhindu confirmed these are derived variables. Calculation formulas were not immediately available; follow-up email sent same day.
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+		- **Current location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`).
 	- *Summary:* Columns are entirely empty.
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
 		- *No Action:* Leave columns in place, do not include in analysis.
 	- *Task:* Confirm if data are missing, or if columns should be removed.
 - [/] **DAT-009 [P2]: Cycle 10 hospitalization variable**
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+		- **Current location:** 
 	- *Summary:* `Hospitalization.required...10` is identical to `Was.the.cycle.delayed...10`.
 	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
 		- *No Action:* Assume data are correct.
@@ -77,9 +103,11 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Summary:* `different_administered.csv` contains corrected administration counts for 6 patients.
 - [/] **DAT-019 [P2]: Extraneous cycle data**
 	- *Update:* [2025-12-18] Removed cycle 12 data for record_id 146, updated cycles given data for record_id 27, 498, and 766 to reflect data presence in `01_data-cleaning.qmd` (Chunk: `apply_manual-patches`). For record_id 498, they don't have any bloodwork data.
+		- **Current location:** 
 	- *Update:* [2025-12-05] (Email from Dr. Mazhindu) Confirmed that for record_id 146, only cycle 1 was administered and cycle 12 values should be disregarded.
 	- *Update:* [2025-12-02] (Zoom meeting) Dr. Mazhindu stated that for patients where there is a mismatch between recorded number of cycles given, and the number of cycles which actually contain data, the latter should be considered more accurate barring other irregularities.
     - *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `assess_extraneous-data`).
+		- **Current location:** 
     - *Summary:* 4 patients (Record IDs: 27, 146, 498, 766) have data recorded for cycles beyond their `cycles_given` count.
 		- *Investigation:* The patients with record IDs 27, 498, and 766 had some amount of data for one more cycle than prescribed. The patient with record ID 146 had expected data for cycle 1, but also had data for cycle 12.
 	- *Temporary Resolution*: [2025-12-01] in `02_data-validation.qmd` (Chunk: `fix_extraneous-data`).
@@ -87,6 +115,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Task:* Check if that should count as a cycle completed or not.
 - [ ] **DAT-023 [P3]: Plotting warning (Body measurements)**
 	- *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `assess_body-measurements`).
+		- **Current location:** 
     - *Summary:* `ggplot` warning: "Removed 21 rows containing non-finite values".
     - *Task:* Verify if these correspond exactly to the known `NA`s in Height, Weight, and BMI, or if valid data is being excluded.
 
@@ -123,8 +152,9 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Task:* Define a wrapper function (e.g., `safe_save_rds`) to handle the interactive overwrite prompt logic.
 - [ ] **TEC-006 [P2]: Fix 'File Path Too Long' Warnings**
     - *Observed:* 
-		- [2025-11-30] in `01_data-analysis.qmd`.
-		- [2025-12-02] in `02_data-analysis.qmd` in Chunk(`assess_body-measurements`)
+		- [2025-11-30] in `01_data-cleaning.qmd`.
+		- [2025-12-02] in `02_data-cleaning.qmd` in Chunk(`assess_body-measurements`)
+		- **Current location:** 
     - *Issue:* RStudio fails to copy font files to the cache because the OneDrive path exceeds 260 characters.
     - *Attempted Resolutions:* 
 		1. Set `embed-resources: false` in `_quarto.yml`. (Result: Error persisted during interactive chunk execution).
@@ -132,10 +162,18 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Task:* Disable "Show output inline for all R Markdown documents" in RStudio Global Options to bypass the notebook cache entirely.
 - [ ] **TEC-007 [P1]: Audit adverse event grading**
     - *Location:* `02_data-validation.qmd` (Chunk: `derive_adverse-events`).
+		- **Current location:** 
     - *Task:* Verify that the adverse event grading logic correctly assigned values (e.g., check that `ast_5` values map to the correct `ast_grade_5` labels) and ensure missing values (`NA`) were handled correctly.
-- [ ] **TEC-008 [P4] Adjust chunk naming**
-	- *Location:* `01_data-analysis.qmd`, `02_data-validation.qmd`
-	- *Task:* Replace underscores in chunk names with dashes to comply with quarto best practices
+- **TEC-008 [P4] Adjust chunk naming**
+	- **Status:** In progress
+	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `research_log.md`
+	- **Summary:** Rename chunk labels to use dashes to comply with Quarto best practices and update all references in `research_log.md` so chunk pointers remain navigable.
+	- **Actions:**
+		- [ ] Update chunk references in active log entries to match current chunk labels.
+		- [ ] For archived entries, keep original chunk labels and add a dated `Current location:` line only when the original chunk label no longer exists.
+	- **Timeline (newest first):**
+		- 2026-01-09 — Renamed chunk labels in `01_data-cleaning.qmd` and `02_data-validation.qmd` (replaced underscores with dashes). Research log references still need to be updated.
+		- 2025-12-12 — Observed inconsistent/noncompliant chunk naming in `01_data-cleaning.qmd`, `02_data-validation.qmd`.
 - [ ] **TEC-009 [P3] Fine-grained lab missingness audit**
 	- *Task:* Develop secondary audit to check for internal lab panel completeness (e.g., cases where LFT is present but CBC is missing within a cycle)
 
@@ -156,7 +194,9 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 
 - [x] **DAT-001: ANC Column Duplication**
 	- *Resolved:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-names`).
+		- **Current location:** 
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-names`).
+		- **Current location:** 
 	- *Summary:* The raw Excel file contained several columns with identical or mislabeled headers.
 	- *Details:*
       - *ANC Duplication:* `ANC.3...108` and `ANC.3...109` were identical. Removed `...109`, renamed `...108` to `ANC.3`.
@@ -167,71 +207,92 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 
 - [x] **DAT-002: Redundant data columns**
 	- *Resolved:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`).
+		- **Current location:** 
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+		- **Current location:** 
 	- *Summary:* Several columns identified as duplicates or artifacts.
 	- *Details:*
 		- *Redundant Content:* `Febrile.Neutropenia` (duplicate of `ANC`) and `HyperK+` (duplicate of `HypoK+`) were removed for all cycles.
 		- *Duplicate Column:* `Hypernatramia.Na+.3` (identical to `Hyponatramia.Na+.3`) was removed.
 		- *Documentation Artifacts:* All `Cycle #` spacer columns removed.
 - [x] **DAT-003: Inconsistent Variable Naming**
-	- *Resolved:* [2025-11-28] in `01_data-cleaning.qmd` (Chunk: `fix_longitudinal-consistency`).
+	- *Resolved:* [2025-11-28] in `01_data-cleaning.qmd` (Chunk: `fix_longitudinal-consistency`)
+		- **Current location:** .
 	- *Observed:*[2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_longitudinal-consistency`).
+		- **Current location:** 
 	- *Summary:* Several longitudinal variables had minor inconsistencies, missing suffixes, or typos.
 	- *Details:*
 		- *Harmonized:* Capitalized all stems (`DBIL`, `HB`, `TBIL`), realigned with original naming scheme (`HypoNa+`).
 		- *Corrected:* Applied missing suffixes (`Hospitalization.days.2`), fixed typos (`Hospitalization.required.due.to.toxicity?`).
 - [x] **DAT-011: General Variable Renaming**
 	- *Resolved:* [2025-11-29] in `01_data-cleaning.qmd` (Chunk: `apply_standard-names`).
+		- **Current location:** 
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-names`).
+		- **Current location:** 
 	- *Summary:* Raw variable names contained factor levels and long strings.
 	- *Details:* 
 		- *Standardized:* Simplified names and converted all to snake case. Baseline measurements denoted with `_0` suffix. Longitudinal measurements denoted with `_#` suffix for appropriate cycle number.
 - [x] **DAT-012: Factors Encoded as Numeric**
 	- *Resolved:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
+		- **Current location:** 
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
+		- **Current location:** 
 	- *Summary:* Categorical variables were imported as numeric. 
 	- *Details:* 
 	  - *Coerced Data Types:* Converted to factors with explicit labels based on variable names from `IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx`.
 - [x] **DAT-013: Empty Columns as Logical**
 	- *Resolved:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
+		- **Current location:** 
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
+		- **Current location:** 
 	- *Summary:* `cr_clear_0`, `albi_score_0`, and `dbil_12` are stored as `logical` because they contain only `NA`.
 	- *Details:*
 	  - *Coerced Data Types:* Converted all to `numeric`.
 - [x] **DAT-014: Date Precision**
 	- *Resolved:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
+		- **Current location:** 
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
+		- **Current location:** 
 	- *Summary:* `death_date` is stored as `POSIXct` (DateTime).
 	- *Details:* 
 		- *Coerced Data Type:* Converted to `Date` class.
 - [x] **DAT-017: Invalid `sex` Level** 
 	- *Resolved:* [2025-12-01] in `01_data-cleaning.qmd` (Chunk: `fix_dat-017_sex-error`).
+		- **Current location:** 
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `audit_encoding_static-factor`).
+		- **Current location:** 
 	- *Summary:* The variable `sex` contained the raw value `3`.
     - *Details:*
 		- *Patched Data Error:* Corrected raw value of `3` to `1` (Male) per confirmation from Dr. Mazhindu [2025-10-08].
 - [x] **MET-001 [P3]: Febrile Neutropenia vs. ANC**
 	- *Resolved:* [2025-12-01] Definition confirmed by Dr. Mazhindu in email.
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+		- **Current location:** 
 	- *Summary:* Raw data had `ANC` and `Febrile.Neutropenia` as identical columns.
 	- *Details:*
 		- *Confirmation:* `Dr. Mazhindu confirmed that using `ANC` as a proxy for the analysis is acceptable given the lack of fever data. The deletion of the redundant column stands.
 - [x] **DAT-005 [P2]: Baseline vs. cycle 1 electrolytes**
 	- *Resolved:* [2025-12-02] During Zoom meeting, Dr. Mazhindu confirmed that data was recorded during cycle 1
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+		- **Current location:** 
 	- *Summary:* `HypoNa+.1` is identical to `Baseline.Na+` (same for Potassium). This pattern does not hold for other biomarkers.
 - [x] **DAT-010 [P1]: Cancer stage encoding ambiguity**
 	- *Resolved:* [2025-12-02] Updated encoding in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`)
+		- **Current location:** 
 	- *Update:* [2025-12-01](Email from Dr. Maxhindu) Confirmed `4` indicates "Stage IV", as treatment implies known stage.
 	- *Observed:* [2025-11-28] in `01_data-cleaning.qmd` (Chunk: `apply_standard-names`).
+		- **Current location:** 
 	- *Summary:* The column name implies `4` could mean either "Stage IV" or "Unknown/Undocumented".
 	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`)
+		- **Current location:** 
 		- *Use Ambiguous Label:* Map a value of `4` as "Stage IV / Unknown".
 - [x] **DAT-015 [P2]: Residence factor level mismatch**
 	- *Resolved:* [2025-12-05] (Zoom meeting) Dr. Mazhindu confirmed the temporary resolution was the right correction.
 	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
+		- **Current location:** 
 	- *Summary:* The documented encoding for `residence` is "1 = urban; 2 = rural; 3 = peri-urban", but observed levels are 0, 1, and 2.
 	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
+		- **Current location:** 
 		- *Alternate Encoding:* Will assume 0 = urban, 1 = rural, 2 = peri-urban.
 - [x] **DAT-020 [P2]: Body measurement outlier**
 	- *Resolved:* [2025-12-18] Moved definitive fix to `01_data-cleaning.qmd` (Chunk: `apply-manual-patches`). BMI recalculated to maintain data integrity.

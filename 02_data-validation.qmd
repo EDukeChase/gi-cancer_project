@@ -25,7 +25,7 @@ gic_encoded <- readRDS(here("data", "processed", "gic_encoded.rds"))
 Verify that `cycles_given` matches the actual presence of data in the cycle columns. Flag patients who have data present in cycles after their administered number.
 
 ```{r}
-#| label: assess_extraneous-data
+#| label: assess-extraneous-data
 
 # Pivot longitudinal data to make finding missing data easier
 real_data_map <- gic_encoded |> 
@@ -99,7 +99,7 @@ if (length(problem_ids) > 0) {
 :::
 
 ```{r}
-#| label: investigate_extraneous-data
+#| label: investigate-extraneous-data
 #| results: asis
 
 view_pt_hx <- function(pid, df, audit_data = NULL, show_empty = TRUE) {
@@ -175,7 +175,7 @@ walk(problem_ids, function(pid) {
 ## Treatment Adherence Logic
 Verify that the administered cycles do not exceed prescribed cycles.
 ```{r}
-#| label: assess_cycle-counts
+#| label: assess-cycle-counts
 
 # Check that `cycles_given` <= `cycles_prescribed`
 over_treated <- gic_encoded |> 
@@ -199,7 +199,7 @@ if (nrow(over_treated) > 0) {
 ## Composite Variable Checks
 Verify that pre-calculated fields match their components.
 ```{r}
-#| label: assess_calculated-vars
+#| label: assess-calculated-vars
 
 # Define tolerance thresholds
 bmi_tol <- 0.5
@@ -243,7 +243,7 @@ if (nrow(composite_audit) > 0) {
 ```
 # Transfusion Logic Check
 ```{r}
-#| label: assess_transfusions
+#| label: assess-transfusions
 
 # [DAT-008] Audit transfusion data for consistency and unit volume errors.
 
@@ -303,7 +303,7 @@ transfusion_summary |>
 :::
 
 ```{r}
-#| label: investigate_transfusion-records
+#| label: investigate-transfusion-records
 
 # Define the combined error condition (Given=Yes, Units=0/NA) OR (Units>0, Given=No/NA)
 transfusion_error_records <- transfusion_long |> 
@@ -336,7 +336,7 @@ if (nrow(transfusion_error_records) > 0) {
 Identify clinically impossible values for height and weight.
 
 ```{r}
-#| label: assess_body-measurements
+#| label: assess-body-measurements
 
 # Set wide limits to try and only catch errors, not outliers
 limits <- list(
@@ -387,7 +387,7 @@ gic_encoded |>
 ## Biomarker Range Checks
 Scan laboratory values for biologically impossible values (e.g., negative counts, values 10x above physiological max, etc.).
 ```{r}
-#| label: assess_biomarker-ranges
+#| label: assess-biomarker-ranges
 
 # Generate summary stats for longitudinal variables
 
@@ -398,14 +398,14 @@ Scan laboratory values for biologically impossible values (e.g., negative counts
 Examine patterns of missing data.
 
 ```{r}
-#| label: assess_missingness
+#| label: assess-missingness
 
 # Visualize missingness by cycle
 
 ```
 
 ```{r}
-#| label: assess_panel-missingness
+#| label: assess-panel-missingness
 
 # Examine missingness patterns by blood panel across cycle to identify unexpectedly missing data
 
@@ -417,7 +417,7 @@ Examine patterns of missing data.
 Apply grading logic to raw laboratory values using `grading_rules.csv`.
 
 ```{r}
-#| label: derive_adverse-events
+#| label: derive-adverse-events
 
 # Load adverse event grading rules
 rules <- read_csv(here("data", "grading_rules.csv"), show_col_types = FALSE)
@@ -481,7 +481,7 @@ gic_validated |>
 
 # Export
 ```{r}
-#| label: save_validated-data
+#| label: save-validated-data
 
 # Define path to file
 gic_validated_path <- here("data", "processed", "gic_validated.rds")

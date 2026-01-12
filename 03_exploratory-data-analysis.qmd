@@ -16,64 +16,122 @@ gic_validated <- readRDS(here("data", "processed", "gic_validated.rds"))
 # Load Libraries
 ```
 
+# Variable Engineering
 
 ```{r}
 #| label: engineer-ae-variables
 
-# Identify all adverse event columns and pivot to check per-cycle status
-ae_data <- gic_validated |> 
-  select(record_id, matches("grade_\\d+$")) |> 
+# Identify adverse event grade columns
+grade_cols <- names(gic_validated)[str_detect(names(gic_validated), "_grade_([1-9]|1[0-2])$")]
+### Should I include baselines as well?
+
+# Create long table to easily engineer new variables
+ae_long <- gic_validated |> 
+  select(record_id, cycles_prescribed, cycles_given, all_of(grade_cols)) |> 
   pivot_longer(
-    cols = -record_id,
-    names_to = c("ae_type", "cycle"),
-    names_pattern = "(.*)_grade_(\\d+)$",
-    values_to = "grade"
+    cols = all_of(grade_cols),
+    names_to = "grade_var",
+    values_to = "grade_raw"
   ) |> 
   mutate(
-    cycle = as.integer(cycle),
-    grade_num = as.numeric(str_extract(grade, "\\d")),
-    is_ae = !is.na(grade_num) & grade_num > 0,
-    is_severe = !is.na(grade_num) & grade_num >= 3
+    cycle = as.integer(str_extract(grade_var, "\\d+$")),
+    ae_type = str_remove(grade_var, "_grade_\\d+$"),
+    grade = as.numeric(str_match(grade_raw, "(?i)^\\s*grade\\s*(\\d+)")[,2])
   )
 
-# Summarize at patient level
-ae_summary <- ae_data |> 
+# Patient-level summaries
+ae_summary_pt <- ae_long |> 
   group_by(record_id) |> 
   summarize(
-    ae_cycle_count = n_distinct(cycle[is_ae == TRUE]),
-    ae_early = if_else(any(is_ae == TRUE & cycle <= 2), 1, 0),
-    had_severe_ae = if_else(any(is_severe == TRUE), 1, 0),
-    severe_ae_early = if_else(any(is_severe == TRUE & cycle <= 2), 1, 0),
+    # Distinct cycles with any adverse event grade > 0
+    ae_n_cycles_any = n_distinct(cycle[grade > 0], na.rm = TRUE),
+    
+    # Early window: cycles 1-2
+    ae_any_early = as.integer(any(grade > 0 & cycle <= 2, na.rm = TRUE)),
+    ae_severe_any_pt = as.integer(any(grade >= 3, na.rm = TRUE)),
+    ae_severe_any_early = as.integer(any(grade >= 3 & cycle <= 2, na.rm = TRUE)),
+    ae_any_pt = as.integer(any(grade > 0, na.rm = TRUE)),
     .groups = "drop"
   )
 
-# Join back to main dataset
-gic_models <- gic_validated |> 
-  left_join(ae_summary, by = "record_id") |> 
+# Cycle-level summaries
+cycle_summary <- ae_long |> 
+  group_by(record_id, cycles_prescribed, cycles_given, cycle) |> 
+  summarize(
+    ae_n_markers_measured = sum(!is.na(grade)),
+    
+    ae_sum_grade_raw = sum(grade, na.rm = TRUE),
+    ae_n_events_raw = sum(grade > 0, na.rm = TRUE),
+    ae_n_severe_raw = sum(grade >= 3, na.rm = TRUE),
+    
+    ae_max_grade_raw = suppressWarnings(max(grade, na.rm = TRUE)),
+    
+    .groups = "drop"
+  ) |> 
   mutate(
-    had_any_ae = if_else(ae_cycle_count > 0, 1, 0)
+    ae_sum_grade = if_else(ae_n_markers_measured == 0, NA_real_, ae_sum_grade_raw),
+    ae_n_events = if_else(ae_n_markers_measured == 0, NA_real_, ae_n_events_raw),
+    ae_n_severe = if_else(ae_n_markers_measured == 0, NA_real_, ae_n_severe_raw),
+    
+    ae_max_grade = if_else(ae_n_markers_measured == 0, NA_real_, ae_max_grade_raw),
+    
+    ae_any = if_else(is.na(ae_n_events), NA, ae_n_events > 0),
+    ae_severe_any = if_else(is.na(ae_n_severe), NA, ae_n_severe > 0)
+  ) |> 
+  select(-ends_with("raw"))
+
+ae_cycle_wide <- cycle_summary |>
+  pivot_wider(
+    id_cols = c(record_id, cycles_prescribed, cycles_given),
+    names_from = cycle,
+    values_from = c(ae_n_markers_measured, ae_sum_grade, ae_max_grade, ae_n_events, ae_n_severe, ae_any, ae_severe_any),
+    names_glue = "{.value}_{cycle}"
   )
+
+# Merge datasets for analysis
+gic_models <- gic_validated |>
+  left_join(ae_summary_pt, by = "record_id") |>
+  left_join(ae_cycle_wide, by = c("record_id", "cycles_prescribed", "cycles_given"))
 ```
 
+## Summary of new adverse event (AE) variables
+
+| Variable                  | Level   | Type          | Meaning                                                                                                   |
+| ------------------------- | ------- | ------------- | --------------------------------------------------------------------------------------------------------- |
+| `ae_n_cycles_any`         | Patient | int (0-12)    | Number of distinct cycles where the patient had any AE (at least one `grade > 0`).                        |
+| `ae_any_pt`               | Patient | int (0/1)     | Flag: did the patient have any AE (`grade > 0`) at any point in treatment?                                |
+| `ae_any_early`            | Patient | int (0/1)     | Flag: did the patient have any AE (`grade > 0`) in cycles 1–2?                                            |
+| `ae_severe_any_pt`        | Patient | int (0/1)     | Flag: did the patient have any severe AE (`grade >= 3`) across all cycles?                                |
+| `ae_severe_any_early`     | Patient | int (0/1)     | Flag: did the patient have any severe AE (`grade >= 3`) in cycles 1–2?                                    |
+| `ae_n_markers_measured_#` | Cycle   | int (0–12)    | For cycle #, number of AE markers with a non-missing numeric grade.                                       |
+| `ae_sum_grade_#`          | Cycle   | numeric / NA  | For cycle #, sum of numeric AE grades across markers (NA if `ae_n_markers_measured_# == 0`).              |
+| `ae_max_grade_#`          | Cycle   | numeric / NA  | For cycle #, maximum numeric AE grade across markers (NA if `ae_n_markers_measured_# == 0`).              |
+| `ae_n_events_#`           | Cycle   | numeric / NA  | For cycle #, count of AEs across markers (`grade > 0`) (NA if `ae_n_markers_measured_# == 0`).            |
+| `ae_n_severe_#`           | Cycle   | numeric / NA  | For cycle #, count of severe AEs across markers (`grade >= 3`) (NA if `ae_n_markers_measured_# == 0`).    |
+| `ae_any_#`                | Cycle   | logical / NA  | For cycle #, flag: any AE this cycle (`ae_n_events_# > 0`) (NA if `ae_n_markers_measured_# == 0`).        |
+| `ae_severe_any_#`         | Cycle   | logical / NA  | For cycle #, flag: any severe AE this cycle (`ae_n_severe_# > 0`) (NA if `ae_n_markers_measured_# == 0`). |
+
+
+
 ```{r}
-#| label: tbl-ae-summary
-#| tbl-cap: "Summary of adverse events by HIV status"
+#| label: tbl-ae-by-pt
+#| tbl-cap: "Patient-level summary of adverse events (AEs) by HIV status. 'Early' refers to the first 2 treatment cycles."
 
 gic_models |> 
   group_by(hiv_status) |> 
   summarize(
     total_pts = n(),
     
-    any_ae_n = sum(had_any_ae),
+    any_ae_n = sum(ae_any_pt),
     any_ae_pct = (any_ae_n / total_pts) * 100,
     
-    severe_ae_n = sum(had_severe_ae),
+    severe_ae_n = sum(ae_severe_any_pt),
     severe_ae_pct = (severe_ae_n / total_pts) * 100,
     
-    early_ae_n = sum(ae_early),
+    early_ae_n = sum(ae_any_early),
     early_ae_pct = (early_ae_n / total_pts) * 100,
     
-    severe_early_ae_n = sum(severe_ae_early),
+    severe_early_ae_n = sum(ae_severe_any_early),
     severe_early_ae_pct = (severe_early_ae_n / total_pts) * 100,
     .groups = "drop"
   ) |> 
@@ -90,287 +148,292 @@ gic_models |>
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
-# Generate various ways of counting adverse events
 ```{r}
-#| label: engineer-ae-counts
+#| label: tbl-ae-by-cycle
+#| tbl-cap: "Cycle-level AE summaries by HIV status (among patients with any AE grading recorded in the cycle)"
+#| results: asis
 
-add_cycle_ae_measures <- function(df, na_as_zero = FALSE) {
-  grade_cols <- names(df)[str_detect(names(df), "_grade_([1-9]|1[0-2])$")]
-  
-  long <- df |> 
-    select(record_id, cycles_prescribed, cycles_given, all_of(grade_cols)) |> 
-    pivot_longer(
-      cols = all_of(grade_cols),
-      names_to = "grade_var",
-      values_to = "grade_raw"
-    ) |> 
-    mutate(
-      cycle  = as.integer(str_extract(grade_var, "\\d+$")),
-      marker = str_remove(grade_var, "_grade_\\d+$"),
-      grade  = suppressWarnings(as.numeric(grade_raw)),
-      grade_was_non_numeric = !is.na(grade_raw) & is.na(grade)
-    )
-  
-  if (na_as_zero) {
-    long <- long |> mutate(grade = replace_na(grade, 0))
-  }
-  
-  cycle_summary <- long |> 
-    group_by(record_id, cycles_prescribed, cycles_given, cycle) |> 
-    summarize(
-      n_measured = sum(!is.na(grade)),
-      ae_sum_grade = if_else(n_measured == 0, NA_real_, sum(grade, na.rm = TRUE)),
-      ae_max_grade = if_else(n_measured == 0, NA_real_, max(grade, na.rm = TRUE)),
-      ae_n_events = if_else(n_measured == 0, NA_real_, sum(grade > 0, na.rm = TRUE)),
-      ae_n_severe = if_else(n_measured == 0, NA_real_, sum(grade >= 3, na.rm = TRUE)),
-      .groups = "drop"
-    ) |> 
-    mutate(
-      ae_any = if_else(is.na(ae_n_events), NA, ae_n_events > 0),
-      ae_severe_any = if_else(is.na(ae_n_severe), NA, ae_n_severe > 0)
-    )
-  
-  wide <- cycle_summary |> 
-    pivot_wider(
-      id_cols = c(record_id, cycles_prescribed, cycles_given),
-      names_from = cycle,
-      values_from = c(n_measured, ae_sum_grade, ae_max_grade, ae_n_events, ae_n_severe, ae_any, ae_severe_any),
-      names_glue = "{.value}_{cycle}"
-    )
-  
-  df |> 
-    left_join(wide, by = c("record_id", "cycles_prescribed", "cycles_given"))
+# Function to calculate mean, standard deviation, and range
+fmt_mean_sd_range <- function(x, digits = 1) {
+  x <- x[!is.na(x)]
+  if (length(x) == 0) return(NA_character_)
+  m <- mean(x); s <- stats::sd(x)
+  rng <- range(x)
+  paste0(
+    round(m, digits), " (", round(s, digits), "); ",
+    round(rng[[1]], digits), "–", round(rng[[2]], digits)
+  )
 }
 
-gic_models2 <- add_cycle_ae_measures(gic_models, na_as_zero = FALSE)
-```
-
-
-
-# Model Building
-
-## Simple Logistic: Full treatment period
-### Simple logistic model of any adverse events by HIV status
-```{r}
-#| label: model-any_simple
-
-model_any_simple <- glm(had_any_ae ~ hiv_status, 
-                        data = gic_models, family = binomial)
-
-# summary(model_any_simple)
-```
-Invalid model due to having a 100% adverse event rate in the HIV-positive group.
-
-### Simple logistic model of any severe adverse events by HIV status
-```{r}
-#| label: model-severe-simple
-
-
-model_severe_simple <- glm(had_severe_ae ~ hiv_status,
-                           data = gic_models, family = binomial)
-
-summary(model_severe_simple)
-```
-```{r}
-#| label: tbl-severe-simple-or-clean
-#| tbl-cap: "Association between HIV Status and Severe Adverse Events (Grades 3-4)"
-
-tidy(model_severe_simple, conf.int = TRUE, exponentiate = TRUE) |>
-  filter(term != "(Intercept)") |>
-  # Clean up the name and prepare for the reference row
-  mutate(
-    Term = str_replace(term, "hiv_statusPositive", "HIV Positive"),
-    `OR (95% CI)` = paste0(round(estimate, 2), " (", 
-                           round(conf.low, 2), " - ", 
-                           round(conf.high, 2), ")"),
-    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))),
-    std.error = round(std.error, 3)
+# Pivot cycle-level vars back to long form for summarizing
+ae_cycle_long <- gic_models |>
+  select(
+    record_id, hiv_status,
+    matches("^ae_n_markers_measured_\\d+$"),
+    matches("^ae_n_events_\\d+$"),
+    matches("^ae_n_severe_\\d+$"),
+    matches("^ae_sum_grade_\\d+$"),
+    matches("^ae_max_grade_\\d+$"),
+    matches("^ae_any_\\d+$"),
+    matches("^ae_severe_any_\\d+$")
   ) |>
-  select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
-  # Add the reference row at the top
-  add_row(Term = "HIV Negative (Reference)", 
-          `OR (95% CI)` = "1.00", 
-          `Std. Error` = NA, 
-          `P-value` = NA, 
-          .before = 1) |>
-  kbl(booktabs = TRUE) |>
-  kable_styling(full_width = FALSE, position = "left")
-```
-
-
-
-## Multivariate Logistic: Full treatment period
-
-```{r}
-#| label: tbl-stage-vs-hiv-status
-#| tbl-cap: "Cancer stage vs HIV status"
-
-table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE) |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Cancer Stage" = 1, "HIV Status" = 2))
-```
-
-```{r}
-#| label: tbl-chemo-type-vs-hiv-status
-#| tbl-cap: "Chemotherapy type vs HIV status"
-
-table(Stage = gic_models$chemo_type, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE) |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Chemo Type" = 1, "HIV Status" = 2))
-```
-
-```{r}
-#| label: tbl-tx-intent-vs-hiv-status
-#| tbl-cap: "Treatment intent vs HIV status"
-
-table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE) |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Treatment Intent" = 1, "HIV Status" = 2))
-```
-
-### Basic logistic model of any adverse events by HIV status
-```{r}
-#| label: model-any-basic
-
-model_any_basic <- glm(had_any_ae ~ hiv_status + cancer_stage + chemo_type + tx_intent,
-                       data = gic_models, family = binomial)
-
-summary(model_any_basic)
-```
-Invalid model due to having a 100% adverse event rate in the HIV-positive group.
-
-### Basic logicstic model of any severe adverse events by HIV status
-```{r}
-#| label: model-severe-basic
-
-model_severe_basic <- glm(had_severe_ae ~ hiv_status + cancer_stage + chemo_type + tx_intent,
-                       data = gic_models, family = binomial)
-
-summary(model_severe_basic)
-```
-
-```{r}
-#| label: tbl-severe-multivariate-or
-#| tbl-cap: "Adjusted Odds Ratios for Severe Adverse Events (Grades 3-4)"
-
-tidy(model_severe_basic, conf.int = TRUE, exponentiate = TRUE) |>
-  filter(term != "(Intercept)") |>
-  mutate(
-    # Clean up term names
-    Term = case_when(
-      term == "hiv_statusPositive" ~ "HIV Positive",
-      term == "cancer_stageStage III" ~ "Stage III",
-      term == "cancer_stageStage IV" ~ "Stage IV",
-      term == "chemo_typePlatinum/5-FU" ~ "Platinum/5-FU",
-      term == "chemo_typeLCV/5-FU" ~ "LCV/5-FU",
-      term == "chemo_typeCapeOX" ~ "CapeOX",
-      term == "chemo_typeFOLFOX4" ~ "FOLFOX4",
-      term == "chemo_typeCapecitabine" ~ "Capecitabine",
-      term == "tx_intentPalliative" ~ "Palliative Intent",
-      TRUE ~ term
-    ),
-    `OR (95% CI)` = paste0(round(estimate, 2), " (", 
-                           round(conf.low, 2), " - ", 
-                           round(conf.high, 2), ")"),
-    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))),
-    std.error = round(std.error, 3)
+  pivot_longer(
+    cols = -c(record_id, hiv_status),
+    names_to = c("metric", "cycle"),
+    names_pattern = "^(.*)_(\\d+)$",
+    values_to = "value"
   ) |>
-  select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
-  # Add reference rows for clarity
-  add_row(Term = "HIV Negative (Ref)", `OR (95% CI)` = "1.00", .before = 1) |>
-  add_row(Term = "Stage II (Ref)", `OR (95% CI)` = "1.00", .before = 3) |>
-  add_row(Term = "Platinum/Paclitaxel (Ref)", `OR (95% CI)` = "1.00", .before = 6) |>
-  add_row(Term = "Curative Intent (Ref)", `OR (95% CI)` = "1.00", .before = 12) |>
-  kbl(booktabs = TRUE) |>
-  kable_styling(full_width = FALSE, position = "left") |>
-  pack_rows("HIV Status", 1, 2) |>
-  pack_rows("Cancer Stage", 3, 5) |>
-  pack_rows("Chemotherapy Regimen", 6, 11) |>
-  pack_rows("Treatment Intent", 12, 13)
+  mutate(cycle = as.integer(cycle)) |>
+  pivot_wider(names_from = metric, values_from = value)
+
+# Summarize by HIV status & cycle
+ae_cycle_summ <- ae_cycle_long |>
+  group_by(hiv_status, cycle) |>
+  summarize(
+    total_pts = n(),
+
+    measured_n = sum(ae_n_markers_measured > 0, na.rm = TRUE),
+    measured_pct = 100 * measured_n / total_pts,
+
+    any_ae_n = sum(ae_any == TRUE, na.rm = TRUE),
+    any_ae_pct_measured = if_else(measured_n == 0, NA_real_, 100 * any_ae_n / measured_n),
+
+    severe_ae_n = sum(ae_severe_any == TRUE, na.rm = TRUE),
+    severe_ae_pct_measured = if_else(measured_n == 0, NA_real_, 100 * severe_ae_n / measured_n),
+
+    n_events_mean_sd = fmt_mean_sd_range(ae_n_events),
+    n_severe_mean_sd = fmt_mean_sd_range(ae_n_severe),
+    sum_grade_mean_sd = fmt_mean_sd_range(ae_sum_grade),
+    max_grade_mean_sd = fmt_mean_sd_range(ae_max_grade, digits = 0),
+
+    .groups = "drop"
+  ) |>
+  mutate(
+    `Cycle` = cycle,
+    `Patients w/ any AE grading recorded` = paste0(measured_n, " (", round(measured_pct, 1), "%)"),
+    `Any AE in cycle (%, among measured)` = paste0(any_ae_n, " (", round(any_ae_pct_measured, 1), "%)"),
+    `Any severe AE in cycle (%, among measured)` = paste0(severe_ae_n, " (", round(severe_ae_pct_measured, 1), "%)"),
+    `# AEs in cycle, mean (SD); range` = n_events_mean_sd,
+    `# severe AEs in cycle, mean (SD); range` = n_severe_mean_sd,
+    `Sum of AE grades in cycle, mean (SD); range` = sum_grade_mean_sd,
+    `Max grade in cycle, mean (SD); range` = max_grade_mean_sd
+  ) |>
+  select(
+    hiv_status, `Cycle`,
+    `Patients w/ any AE grading recorded`,
+    `Any AE in cycle (%, among measured)`,
+    `Any severe AE in cycle (%, among measured)`,
+    `# AEs in cycle, mean (SD); range`,
+    `# severe AEs in cycle, mean (SD); range`,
+    `Sum of AE grades in cycle, mean (SD); range`,
+    `Max grade in cycle, mean (SD); range`
+  )
+
+# Print one table per HIV status, too busy having it all in one table
+ae_cycle_summ |>
+  group_by(hiv_status) |>
+  group_walk(\(df, key) {
+    cat("\n\n### HIV status:", as.character(key$hiv_status), "\n\n")
+    df |>
+      select(-hiv_status) |>
+      kbl(booktabs = TRUE, align = "lccccccc") |>
+      kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |>
+      print()
+  }, .keep = TRUE)
 ```
 
 
+<!-- # Model Building -->
 
-## $\chi^2$ Tests (HIV vs Early Events)
-
-```{r}
-#| label: tbl-any-early-contingency
-#| tbl-cap: "Contingency table of early adverse events (cycles 1-4) vs HIV status"
-
-table_any_early <- table(early_ae = factor(gic_models$ae_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status)
-
-table_any_early |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE) |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Any Early AE" = 1, "HIV Status" = 2))
-```
-```{r}
-#| label: tbl-severe-early-contingency
-#| tbl-cap: "Contingency table of severe early adverse events (cycles 1-4) vs HIV status"
-
-table_severe_early <- table(severe_early_ae = factor(gic_models$severe_ae_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status)
-
-table_severe_early |> 
-  as.data.frame.matrix() |> 
-  kbl(booktabs = TRUE) |> 
-  kable_styling(full_width = FALSE, position = "left") |> 
-  add_header_above(c("Severe Early AE" = 1, "HIV Status" = 2))
-```
-
-
-```{r}
-#| label: tests-chi-sq
-
-# Any Early AE (Cycles 1-4)
-cat("Chi-Squared Test: Any Early AE (C1-4) vs HIV Status\n")
-print(chisq.test(table_any_early))
-
-cat("\n\n")
-
-# Severe Early AE (Cycles 1-4)
-cat("Chi-Squared Test: Severe Early AE (C1-4) vs HIV Status\n")
-print(chisq.test(table_severe_early))
-```
-
-<!-- ## Early Period Models -->
+<!-- ## Simple Logistic: Full treatment period -->
+<!-- ### Simple logistic model of any adverse events by HIV status -->
 <!-- ```{r} -->
-<!-- #| label: model-simple-early -->
+<!-- #| label: model-any_simple -->
 
-<!-- # Simple logistic for early period -->
-<!-- model_any_early_simple <- glm(ae_early ~ hiv_status,  -->
-<!--                               data = gic_models, family = binomial) -->
+<!-- model_any_simple <- glm(ae_any_pt ~ hiv_status,  -->
+<!--                         data = gic_models, family = binomial) -->
 
-<!-- model_severe_early_simple <- glm(severe_ae_early ~ hiv_status,  -->
-<!--                                  data = gic_models, family = binomial) -->
-
-<!-- summary(model_any_early_simple) -->
-<!-- summary(model_severe_early_simple) -->
+<!-- # summary(model_any_simple) -->
 <!-- ``` -->
+<!-- Invalid model due to having a 100% adverse event rate in the HIV-positive group. -->
 
+<!-- ### Simple logistic model of any severe adverse events by HIV status -->
 <!-- ```{r} -->
-<!-- #| label: model-basic-early -->
+<!-- #| label: model-severe-simple -->
 
-<!-- # Multivariate logistic for early period -->
-<!-- model_any_early_basic <- glm(ae_early ~ hiv_status + cancer_stage + chemo_type + tx_intent,  -->
-<!--                              data = gic_models, family = binomial) -->
 
-<!-- model_severe_early_basic <- glm(severe_ae_early ~ hiv_status + cancer_stage + chemo_type + tx_intent,  -->
-<!--                                 data = gic_models, family = binomial) -->
+<!-- model_severe_simple <- glm(ae_severe_any_pt ~ hiv_status, -->
+<!--                            data = gic_models, family = binomial) -->
 
-<!-- summary(model_any_early_basic) -->
-<!-- summary(model_severe_early_basic) -->
+<!-- summary(model_severe_simple) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- #| label: tbl-severe-simple-or-clean -->
+<!-- #| tbl-cap: "Association between HIV Status and Severe Adverse Events (Grades 3-4)" -->
+
+<!-- tidy(model_severe_simple, conf.int = TRUE, exponentiate = TRUE) |> -->
+<!--   filter(term != "(Intercept)") |> -->
+<!--   # Clean up the name and prepare for the reference row -->
+<!--   mutate( -->
+<!--     Term = str_replace(term, "hiv_statusPositive", "HIV Positive"), -->
+<!--     `OR (95% CI)` = paste0(round(estimate, 2), " (",  -->
+<!--                            round(conf.low, 2), " - ",  -->
+<!--                            round(conf.high, 2), ")"), -->
+<!--     p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))), -->
+<!--     std.error = round(std.error, 3) -->
+<!--   ) |> -->
+<!--   select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |> -->
+<!--   # Add the reference row at the top -->
+<!--   add_row(Term = "HIV Negative (Reference)",  -->
+<!--           `OR (95% CI)` = "1.00",  -->
+<!--           `Std. Error` = NA,  -->
+<!--           `P-value` = NA,  -->
+<!--           .before = 1) |> -->
+<!--   kbl(booktabs = TRUE) |> -->
+<!--   kable_styling(full_width = FALSE, position = "left") -->
 <!-- ``` -->
 
 
 
+<!-- ## Multivariate Logistic: Full treatment period -->
 
+<!-- ```{r} -->
+<!-- #| label: tbl-stage-vs-hiv-status -->
+<!-- #| tbl-cap: "Cancer stage vs HIV status" -->
+
+<!-- table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |>  -->
+<!--   as.data.frame.matrix() |>  -->
+<!--   kbl(booktabs = TRUE) |>  -->
+<!--   kable_styling(full_width = FALSE, position = "left") |>  -->
+<!--   add_header_above(c("Cancer Stage" = 1, "HIV Status" = 2)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #| label: tbl-chemo-type-vs-hiv-status -->
+<!-- #| tbl-cap: "Chemotherapy type vs HIV status" -->
+
+<!-- table(Stage = gic_models$chemo_type, HIV = gic_models$hiv_status) |>  -->
+<!--   as.data.frame.matrix() |>  -->
+<!--   kbl(booktabs = TRUE) |>  -->
+<!--   kable_styling(full_width = FALSE, position = "left") |>  -->
+<!--   add_header_above(c("Chemo Type" = 1, "HIV Status" = 2)) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #| label: tbl-tx-intent-vs-hiv-status -->
+<!-- #| tbl-cap: "Treatment intent vs HIV status" -->
+
+<!-- table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |>  -->
+<!--   as.data.frame.matrix() |>  -->
+<!--   kbl(booktabs = TRUE) |>  -->
+<!--   kable_styling(full_width = FALSE, position = "left") |>  -->
+<!--   add_header_above(c("Treatment Intent" = 1, "HIV Status" = 2)) -->
+<!-- ``` -->
+
+<!-- ### Basic logistic model of any adverse events by HIV status -->
+<!-- ```{r} -->
+<!-- #| label: model-any-basic -->
+
+<!-- model_any_basic <- glm(ae_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent, -->
+<!--                        data = gic_models, family = binomial) -->
+
+<!-- summary(model_any_basic) -->
+<!-- ``` -->
+<!-- Invalid model due to having a 100% adverse event rate in the HIV-positive group. -->
+
+<!-- ### Basic logicstic model of any severe adverse events by HIV status -->
+<!-- ```{r} -->
+<!-- #| label: model-severe-basic -->
+
+<!-- model_severe_basic <- glm(ae_severe_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent, -->
+<!--                        data = gic_models, family = binomial) -->
+
+<!-- summary(model_severe_basic) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #| label: tbl-severe-multivariate-or -->
+<!-- #| tbl-cap: "Adjusted Odds Ratios for Severe Adverse Events (Grades 3-4)" -->
+
+<!-- tidy(model_severe_basic, conf.int = TRUE, exponentiate = TRUE) |> -->
+<!--   filter(term != "(Intercept)") |> -->
+<!--   mutate( -->
+<!--     # Clean up term names -->
+<!--     Term = case_when( -->
+<!--       term == "hiv_statusPositive" ~ "HIV Positive", -->
+<!--       term == "cancer_stageStage III" ~ "Stage III", -->
+<!--       term == "cancer_stageStage IV" ~ "Stage IV", -->
+<!--       term == "chemo_typePlatinum/5-FU" ~ "Platinum/5-FU", -->
+<!--       term == "chemo_typeLCV/5-FU" ~ "LCV/5-FU", -->
+<!--       term == "chemo_typeCapeOX" ~ "CapeOX", -->
+<!--       term == "chemo_typeFOLFOX4" ~ "FOLFOX4", -->
+<!--       term == "chemo_typeCapecitabine" ~ "Capecitabine", -->
+<!--       term == "tx_intentPalliative" ~ "Palliative Intent", -->
+<!--       TRUE ~ term -->
+<!--     ), -->
+<!--     `OR (95% CI)` = paste0(round(estimate, 2), " (",  -->
+<!--                            round(conf.low, 2), " - ",  -->
+<!--                            round(conf.high, 2), ")"), -->
+<!--     p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))), -->
+<!--     std.error = round(std.error, 3) -->
+<!--   ) |> -->
+<!--   select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |> -->
+<!--   # Add reference rows for clarity -->
+<!--   add_row(Term = "HIV Negative (Ref)", `OR (95% CI)` = "1.00", .before = 1) |> -->
+<!--   add_row(Term = "Stage II (Ref)", `OR (95% CI)` = "1.00", .before = 3) |> -->
+<!--   add_row(Term = "Platinum/Paclitaxel (Ref)", `OR (95% CI)` = "1.00", .before = 6) |> -->
+<!--   add_row(Term = "Curative Intent (Ref)", `OR (95% CI)` = "1.00", .before = 12) |> -->
+<!--   kbl(booktabs = TRUE) |> -->
+<!--   kable_styling(full_width = FALSE, position = "left") |> -->
+<!--   pack_rows("HIV Status", 1, 2) |> -->
+<!--   pack_rows("Cancer Stage", 3, 5) |> -->
+<!--   pack_rows("Chemotherapy Regimen", 6, 11) |> -->
+<!--   pack_rows("Treatment Intent", 12, 13) -->
+<!-- ``` -->
+
+
+
+<!-- ## $\chi^2$ Tests (HIV vs Early Events) -->
+
+<!-- ```{r} -->
+<!-- #| label: tbl-any-early-contingency -->
+<!-- #| tbl-cap: "Contingency table of early adverse events (cycles 1-4) vs HIV status" -->
+
+<!-- table_any_early <- table(early_ae = factor(gic_models$ae_any_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status) -->
+
+<!-- table_any_early |>  -->
+<!--   as.data.frame.matrix() |>  -->
+<!--   kbl(booktabs = TRUE) |>  -->
+<!--   kable_styling(full_width = FALSE, position = "left") |>  -->
+<!--   add_header_above(c("Any Early AE" = 1, "HIV Status" = 2)) -->
+<!-- ``` -->
+<!-- ```{r} -->
+<!-- #| label: tbl-severe-early-contingency -->
+<!-- #| tbl-cap: "Contingency table of severe early adverse events (cycles 1-4) vs HIV status" -->
+
+<!-- table_severe_early <- table(severe_early_ae = factor(gic_models$ae_severe_any_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status) -->
+
+<!-- table_severe_early |>  -->
+<!--   as.data.frame.matrix() |>  -->
+<!--   kbl(booktabs = TRUE) |>  -->
+<!--   kable_styling(full_width = FALSE, position = "left") |>  -->
+<!--   add_header_above(c("Severe Early AE" = 1, "HIV Status" = 2)) -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+<!-- #| label: tests-chi-sq -->
+
+<!-- # Any Early AE (Cycles 1-4) -->
+<!-- cat("Chi-Squared Test: Any Early AE (C1-4) vs HIV Status\n") -->
+<!-- print(chisq.test(table_any_early)) -->
+
+<!-- cat("\n\n") -->
+
+<!-- # Severe Early AE (Cycles 1-4) -->
+<!-- cat("Chi-Squared Test: Severe Early AE (C1-4) vs HIV Status\n") -->
+<!-- print(chisq.test(table_severe_early)) -->
+<!-- ``` -->
 
 
 

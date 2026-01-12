@@ -19,14 +19,8 @@ library(lubridate)  # Handle date data
 
 gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx"))
 ```
-
 ```{r}
-gic_raw |> filter(record_id %in% c(14, 231)) |> select(record_id, `Total.number.chemo.cycles.prescribed`, `Total.number.of.chemotherapy.administered`, `Chemotherapy.completion.rates.(%)`, contains("delayed"))
-```
-
-
-```{r}
-#| label: apply_manual-patches
+#| label: apply-manual-patches
 
 gic_raw <- gic_raw |> 
   mutate(
@@ -63,7 +57,7 @@ gic_raw <- gic_raw |>
 # Structural Cleaning
 ## Duplicate Column Names
 ```{r}
-#| label: assess_duplicate-names
+#| label: assess-duplicate-names
 
 # Get list of names which were identical in excel file
 dupe_names <- gic_raw |> 
@@ -131,7 +125,7 @@ pair_audit |>
 
 
 ```{r}
-#| label: fix_duplicate-names
+#| label: fix-duplicate-names
 
 gic_renamed <- gic_raw |> 
   # Fix identically names columns
@@ -162,7 +156,7 @@ gic_renamed <- gic_raw |>
 
 ## Redundant Data Content
 ```{r}
-#| label: assess_duplicate-content
+#| label: assess-duplicate-content
 
 # Check for variables that have the exact same contents
 dupe_cont <- names(gic_renamed)[duplicated(as.list(gic_renamed))]
@@ -211,7 +205,7 @@ duplicate_map |>
 :::
 
 ```{r}
-#| label: fix_duplicate-content
+#| label: fix-duplicate-content
 
 # Remove `Cycle` columns, and redundant `Febrile.Neutropenia` and `HyperK+` columns
 gic_renamed <- gic_renamed |> 
@@ -225,7 +219,7 @@ gic_renamed <- gic_renamed |>
 
 ## Longitudinal Variable Consistency
 ```{r}
-#| label: assess_longitudinal-consistency
+#| label: assess-longitudinal-consistency
 
 # Filter for names ending in a cycle number
 cycle_vars <- names(gic_renamed)[str_detect(names(gic_renamed), "\\.\\d{1,2}$")]
@@ -335,7 +329,7 @@ format_audit_table(grid_data)
 :::
 
 ```{r}
-#| label: fix_longitudinal-consistency
+#| label: fix-longitudinal-consistency
 
 gic_renamed <- gic_renamed |> 
   # Fix DBIL
@@ -383,7 +377,7 @@ format_audit_table(grid_data)
 ## Standardize Variable Names
 
 ```{r}
-#| label: apply_standard-names
+#| label: apply-standard-names
 
 gic_renamed <- gic_renamed |> 
   # Name standardization
@@ -486,7 +480,7 @@ gic_renamed <- gic_renamed |>
 # Structural Integrity Audit
 ## Completeness Check (Grid)
 ```{r}
-#| label: audit_structure-completeness
+#| label: audit-structure-completeness
 
 # Recheck cycle vars
 final_cycle_vars <- names(gic_renamed)[str_detect(names(gic_renamed), "\\_\\d{1,2}$")]
@@ -496,7 +490,7 @@ format_audit_table(final_name_audit)
 
 ## Row and Deletion Integrity
 ```{r}
-#| label: audit_structure-integrity
+#| label: audit-structure-integrity
 
 # Row integrity
 if(nrow(gic_raw) != nrow(gic_renamed)) {
@@ -518,7 +512,7 @@ if (length(unlist(found_trash)) > 0) {
 
 ## Traceability: Static Variables
 ```{r}
-#| label: audit_traceability_static-vars
+#| label: audit-traceability-static-vars
 
 # Static variable integrity verification
 ## Load Glossary
@@ -581,7 +575,7 @@ static_audit |>
 
 ## Traceability: Longitudinal Variables
 ```{r}
-#| label: audit_traceability_longitudinal-vars
+#| label: audit-traceability-longitudinal-vars
 
 # Cycle variable integrity validation
 ## Get all variables, both baseline and cyclic
@@ -650,7 +644,7 @@ The renaming audit confirmed that data integrity was preserved during variable n
 
 ## Checkpoint
 ```{r}
-#| label: save_renamed-data
+#| label: save-renamed-data
 
 # Define path to file
 gic_renamed_path <- here("data", "processed", "gic_renamed.rds")
@@ -677,7 +671,7 @@ if (file.exists(gic_renamed_path) && interactive()) {
 ## Diagnostic Scan
 
 ```{r}
-#| label: assess_data-types
+#| label: assess-data-types
 
 # Helper function to get info on data types
 scan_types <- function(df) {
@@ -745,7 +739,7 @@ type_report |>
 
 ## Apply Type Coercion
 ```{r}
-#| label: apply_type-coercion
+#| label: apply-type-coercion
 
 gic_encoded <- gic_renamed |> 
   mutate(
@@ -871,7 +865,7 @@ gic_encoded <- gic_renamed |>
 # Encoding Audit
 ## Audit Helper Functions
 ```{r}
-#| label: def_audit-functions
+#| label: def-audit-functions
 
 # Function to audit numeric/date variables
 audit_numeric_logic <- function(df_pre, df_post, var_list) {
@@ -989,7 +983,7 @@ get_cycle_factor_grid <- function(audit_df) {
   - String representations of dates must match.
 
 ```{r}
-#| label: audit_encoding_static-numeric
+#| label: audit-encoding-static-numeric
 
 sn_vars <- names(gic_encoded)[map_lgl(gic_encoded, ~ is.numeric(.) | is.Date(.))] |> 
   str_subset("_[1-9]\\d*$", negate = TRUE)
@@ -1017,7 +1011,7 @@ results |>
   - No new `NA`s should be introduced during type coercion.
 
 ```{r}
-#| label: audit_encode_longitudinal-numeric
+#| label: audit-encode-longitudinal-numeric
 
 cn_vars <- names(gic_encoded)[map_lgl(gic_encoded, ~ is.numeric(.) | is.Date(.))] |> 
   str_subset("_[1-9]\\d*$", negate = FALSE)
@@ -1039,7 +1033,7 @@ format_cycle_grid(results)
   - The total count of non-missing values must remain identical before and after encoding.
 
 ```{r}
-#| label: audit_encoding_static-factor
+#| label: audit-encoding-static-factor
 
 sf_vars <- names(gic_encoded)[map_lgl(gic_encoded, is.factor)] |> 
   str_subset("_\\d+$", negate = TRUE)
@@ -1059,7 +1053,7 @@ format_factor_audit_table(sf_audit)
   - The total count of non-missing values must remain identical before and after encoding.
 
 ```{r}
-#| label: audit_encoding_longitudinal-factor
+#| label: audit-encoding-longitudinal-factor
 
 cf_vars <- names(gic_encoded)[map_lgl(gic_encoded, is.factor)] |> 
   str_subset("_\\d+$", negate = FALSE)
