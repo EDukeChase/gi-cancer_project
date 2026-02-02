@@ -168,7 +168,7 @@ fmt_mean_sd_range <- function(x, digits = 1) {
 # Pivot cycle-level vars back to long form for summarizing
 ae_cycle_long <- gic_models |>
   select(
-    record_id, hiv_status,
+    record_id, hiv_status, cycles_prescribed, cycles_given,
     matches("^ae_n_markers_measured_\\d+$"),
     matches("^ae_n_events_\\d+$"),
     matches("^ae_n_severe_\\d+$"),
@@ -178,7 +178,7 @@ ae_cycle_long <- gic_models |>
     matches("^ae_severe_any_\\d+$")
   ) |>
   pivot_longer(
-    cols = -c(record_id, hiv_status),
+    cols = -c(record_id, hiv_status, cycles_prescribed, cycles_given),
     names_to = c("metric", "cycle"),
     names_pattern = "^(.*)_(\\d+)$",
     values_to = "value"
@@ -241,6 +241,105 @@ ae_cycle_summ |>
       print()
   }, .keep = TRUE)
 ```
+
+```{r}
+#| label: prep-ae-cycle-plot-data
+
+# Build cycle-level dataset from gic_models for plotting
+ae_cycle_measured <- ae_cycle_long |> 
+  filter(ae_n_markers_measured > 0) |> 
+  mutate(
+    pct_complete = if_else(is.na(cycles_prescribed) | cycles_prescribed <= 0,
+                           NA_real_,
+                           cycle / cycles_prescribed),
+    pct_bin = cut(
+      pct_complete,
+      breaks = seq(0, 1, by = 0.1),
+      include.lowest = TRUE,
+      right = TRUE
+    )
+  )
+
+summarize_metric <- function(df, var) {
+  df |> 
+    group_by(hiv_status, cycle) |> 
+    summarize(
+      n = sum(!is.na(.data[[var]])),
+      mean = mean(.data[[var]], na.rm = TRUE),
+      q25 = quantile(.data[[var]], 0.25, na.rm = TRUE),
+      q75 = quantile(.data[[var]], 0.75, na.rm = TRUE),
+      min = min(.data[[var]], na.rm = TRUE),
+      max = max(.data[[var]], na.rm = TRUE),
+      .groups = "drop"
+    )
+}
+
+ae_events_summ <- summarize_metric(ae_cycle_measured, "ae_n_events")
+ae_severe_summ <- summarize_metric(ae_cycle_measured, "ae_n_severe")
+ae_sumgrade_summ <- summarize_metric(ae_cycle_measured, "ae_sum_grade")
+```
+
+```{r}
+#| label: plt-ae-n-events
+#| fig-cap: "Initially higher trend for number of adverse events amongst HIV positive patients, but the mean drops below that of HIV negative patients after cycle 4. Need to investigate, but could have to do with high early dropout rates, or possibly related to patients with HIV generally having fewer cycles of chemotherapy prescribed."
+
+ggplot(ae_events_summ, aes(x = cycle, group = hiv_status, color = hiv_status, fill = hiv_status)) +
+  geom_ribbon(aes(ymin = min, ymax = max), alpha = 0.2, color = NA) +
+  geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.5, color = NA) +
+  geom_line(aes(y = mean), linewidth = 1) +
+  geom_point(aes(y = mean), size = 2) +
+  scale_x_continuous(breaks = 1:12) +
+  labs(title = "Adverse events per cycle",
+       subtitle = "Mean (line) with IQR and min–max bands among cycles with any AE grading recorded", 
+       x = "Treatment cycle", 
+       y = "Number of AEs", 
+       color = "HIV status", fill = "HIV status") +
+  theme_minimal()
+```
+
+```{r}
+#| label: plt-ae-n-severe
+#| fig-cap: "Not a very noticable difference based on the means or IQRs. The HIV negative patients tend to have higher max number of severe adverse events per cycle, but as noted before, I'd guess that relates to how few cycles HIV positive patients tend to complete, and the total number of HIV negative patients compared to positive."
+
+ggplot(ae_severe_summ, aes(x = cycle, group = hiv_status, color = hiv_status, fill = hiv_status)) +
+  geom_ribbon(aes(ymin = min, ymax = max), alpha = 0.2, color = NA) +
+  geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.5, color = NA) +
+  geom_line(aes(y = mean), linewidth = 1) +
+  geom_point(aes(y = mean), size = 2) +
+  scale_x_continuous(breaks = 1:12) +
+  labs(
+    title = "Severe adverse events per cycle",
+    subtitle = "Grade ≥ 3; mean (line) with IQR and min–max bands among measured cycles",
+    x = "Treatment cycle",
+    y = "Number of severe AEs",
+    color = "HIV status",
+    fill = "HIV status"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| label: plt-ae-sum-grade
+#| fig-cap: "No significant visual difference by HIV status early on other than the IQR/Max decreasing faster than for HIV negative patients, but this likely is related to the number of patients still getting chemotherapy."
+
+ggplot(ae_sumgrade_summ, aes(x = cycle, group = hiv_status, color = hiv_status, fill = hiv_status)) +
+  geom_ribbon(aes(ymin = min, ymax = max), alpha = 0.2, color = NA) +
+  geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.5, color = NA) +
+  geom_line(aes(y = mean), linewidth = 1) +
+  geom_point(aes(y = mean), size = 2) +
+  scale_x_continuous(breaks = 1:12) +
+  labs(
+    title = "Cumulative AE grade burden per cycle",
+    subtitle = "Sum of numeric AE grades across markers; mean (line) with IQR and min–max bands",
+    x = "Treatment cycle",
+    y = "Sum of AE grades",
+    color = "HIV status",
+    fill = "HIV status"
+  ) +
+  theme_minimal()
+```
+
+
 
 
 <!-- # Model Building -->

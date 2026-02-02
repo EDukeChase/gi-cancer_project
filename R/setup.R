@@ -6,6 +6,7 @@ library(RColorBrewer)       # Color palettes to enable color-blind friendliness
 library(scales)             # Simplify palette visualization
 library(tidyverse)          # Essential R packages (Can pare down later)
 library(broom)              # 
+library(patchwork)
 
 
 # --- Set seed for reproducibility ---

@@ -69,7 +69,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- [x] Fix grade parsing so numeric extraction works reliably.
 	- [x] Update `tbl-ae-summary` (and/or add a new table) to usefully display new cycle-level summaries.
 	- [ ] Improve table metric choices
-	- [ ] Generate plots to explore new cycle-level AE variables stratified by `hiv_status`.
+	- [x] Generate plots to explore new cycle-level AE variables stratified by `hiv_status`.
 	- [ ] Validate against raw grade columns to confirm derived values.
 		- [ ] Spot check against a small set of patients/cycles.
 		- [ ] Thorough validation pass.
