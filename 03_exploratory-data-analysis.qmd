@@ -382,7 +382,188 @@ ggplot(ae_sumgrade_summ, aes(x = cycle, group = hiv_status, color = hiv_status, 
 
 
 # Model Building
-## Simple Logistic:
+## Any (Severe) Adverse Events as Outcomes
+### Simple Logistic: Full treatment period
+#### Simple logistic model of any adverse events by HIV status
+```{r}
+#| label: model-any-simple
+
+model_any_simple <- glm(ae_any_pt ~ hiv_status,
+                        data = gic_models, family = binomial)
+
+# summary(model_any_simple)
+```
+Invalid model due to having a 100% adverse event rate in the HIV-positive group.
+
+#### Simple logistic model of any severe adverse events by HIV status
+```{r}
+#| label: model-severe-simple
+
+
+model_severe_simple <- glm(ae_severe_any_pt ~ hiv_status,
+                           data = gic_models, family = binomial)
+
+summary(model_severe_simple)
+```
+
+```{r}
+#| label: tbl-severe-simple-or-clean
+#| tbl-cap: "Association between HIV Status and Severe Adverse Events (Grades 3-4)"
+
+tidy(model_severe_simple, conf.int = TRUE, exponentiate = TRUE) |>
+  filter(term != "(Intercept)") |>
+  # Clean up the name and prepare for the reference row
+  mutate(
+    Term = str_replace(term, "hiv_statusPositive", "HIV Positive"),
+    `OR (95% CI)` = paste0(round(estimate, 2), " (",
+                           round(conf.low, 2), " - ",
+                           round(conf.high, 2), ")"),
+    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))),
+    std.error = round(std.error, 3)
+  ) |>
+  select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
+  # Add the reference row at the top
+  add_row(Term = "HIV Negative (Reference)",
+          `OR (95% CI)` = "1.00",
+          `Std. Error` = NA,
+          `P-value` = NA,
+          .before = 1) |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left")
+```
+
+
+
+### Multivariate Logistic: Full treatment period
+
+```{r}
+#| label: tbl-stage-vs-hiv-status
+#| tbl-cap: "Cancer stage vs HIV status"
+
+table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Cancer Stage" = 1, "HIV Status" = 2))
+```
+
+```{r}
+#| label: tbl-chemo-type-vs-hiv-status
+#| tbl-cap: "Chemotherapy type vs HIV status"
+
+table(Stage = gic_models$chemo_type, HIV = gic_models$hiv_status) |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Chemo Type" = 1, "HIV Status" = 2))
+```
+
+```{r}
+#| label: tbl-tx-intent-vs-hiv-status
+#| tbl-cap: "Treatment intent vs HIV status"
+
+table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Treatment Intent" = 1, "HIV Status" = 2))
+```
+
+#### Basic logistic model of any adverse events by HIV status
+```{r}
+#| label: model-any-basic
+
+model_any_basic <- glm(ae_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent,
+                       data = gic_models, family = binomial)
+
+summary(model_any_basic)
+```
+Invalid model due to having a 100% adverse event rate in the HIV-positive group.
+
+#### Basic logicstic model of any severe adverse events by HIV status
+```{r}
+#| label: model-severe-basic
+
+model_severe_basic <- glm(ae_severe_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent,
+                       data = gic_models, family = binomial)
+
+summary(model_severe_basic)
+```
+
+```{r}
+#| label: tbl-severe-multivariate-or
+#| tbl-cap: "Adjusted Odds Ratios for Severe Adverse Events (Grades 3-4)"
+
+tidy(model_severe_basic, conf.int = TRUE, exponentiate = TRUE) |>
+  filter(term != "(Intercept)") |>
+  mutate(
+    # Clean up term names
+    Term = case_when(
+      term == "hiv_statusPositive" ~ "HIV Positive",
+      term == "cancer_stageStage III" ~ "Stage III",
+      term == "cancer_stageStage IV" ~ "Stage IV",
+      term == "chemo_typePlatinum/5-FU" ~ "Platinum/5-FU",
+      term == "chemo_typeLCV/5-FU" ~ "LCV/5-FU",
+      term == "chemo_typeCapeOX" ~ "CapeOX",
+      term == "chemo_typeFOLFOX4" ~ "FOLFOX4",
+      term == "chemo_typeCapecitabine" ~ "Capecitabine",
+      term == "tx_intentPalliative" ~ "Palliative Intent",
+      TRUE ~ term
+    ),
+    `OR (95% CI)` = paste0(round(estimate, 2), " (",
+                           round(conf.low, 2), " - ",
+                           round(conf.high, 2), ")"),
+    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))),
+    std.error = round(std.error, 3)
+  ) |>
+  select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
+  # Add reference rows for clarity
+  add_row(Term = "HIV Negative (Ref)", `OR (95% CI)` = "1.00", .before = 1) |>
+  add_row(Term = "Stage II (Ref)", `OR (95% CI)` = "1.00", .before = 3) |>
+  add_row(Term = "Platinum/Paclitaxel (Ref)", `OR (95% CI)` = "1.00", .before = 6) |>
+  add_row(Term = "Curative Intent (Ref)", `OR (95% CI)` = "1.00", .before = 12) |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  pack_rows("HIV Status", 1, 2) |>
+  pack_rows("Cancer Stage", 3, 5) |>
+  pack_rows("Chemotherapy Regimen", 6, 11) |>
+  pack_rows("Treatment Intent", 12, 13)
+```
+
+
+
+### $\chi^2$ Tests (HIV vs Early Events)
+
+```{r}
+#| label: tbl-any-early-contingency
+#| tbl-cap: "Contingency table of early adverse events (cycles 1-2) vs HIV status"
+
+table_any_early <- table(early_ae = factor(gic_models$ae_any_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status)
+
+table_any_early |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Any Early AE" = 1, "HIV Status" = 2))
+```
+
+
+<!-- ```{r} -->
+<!-- #| label: tests-chi-sq -->
+
+<!-- # Any Early AE (Cycles 1-2) -->
+<!-- cat("Chi-Squared Test: Any Early AE (C1-2) vs HIV Status\n") -->
+<!-- print(chisq.test(table_any_early)) -->
+
+<!-- cat("\n\n") -->
+
+<!-- # Severe Early AE (Cycles 1-2) -->
+<!-- cat("Chi-Squared Test: Severe Early AE (C1-2) vs HIV Status\n") -->
+<!-- print(chisq.test(table_severe_early)) -->
+<!-- ``` -->
+
+## HIV as Outcome
+### Simple Logistic:
 ```{r}
 #|label: model-hiv-simple
 
@@ -416,9 +597,7 @@ tidy(model_hiv_simple, conf.int = TRUE, exponentiate = TRUE) |>
 
 **Summary:** Simple logistic regression model with mean max adverse event grade as the sole regressor and HIV negative as the reference value of the outcome variable. Each one-unit increase in mean max adverse event grade (per measured cycle) is associated with a 97% increase in the odds of the patient being HIV positive.
 
-
-
-## Basic Logistic
+### Basic Logistic
 ```{r}
 #| label: model-hiv-basic
 
@@ -453,206 +632,237 @@ tidy(model_hiv_basic, conf.int = TRUE, exponentiate = TRUE) |>
   select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
   kbl(booktabs = TRUE) |>
   kable_styling(full_width = FALSE, position = "left")
+```
+```{r}
+#| label: tbl-severe-early-contingency
+#| tbl-cap: "Contingency table of severe early adverse events (cycles 1-2) vs HIV status"
 
+table_severe_early <- table(severe_early_ae = factor(gic_models$ae_severe_any_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status)
+
+table_severe_early |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Severe Early AE" = 1, "HIV Status" = 2))
+```
+
+# Exploring Hospital Stays Due to Toxicity by HIV Status
+```{r}
+#| label: prep-hosp-days
+
+hosp_cols <- names(gic_models)[str_detect(names(gic_models), "^hosp_days_([1-9]|1[0-2])$")]
+
+hosp_long <- gic_models |> 
+  select(record_id, hiv_status, cycles_given, all_of(hosp_cols)) |> 
+  pivot_longer(
+    cols = all_of(hosp_cols),
+    names_to = "cycle_var",
+    values_to = "hosp_days"
+  ) |> 
+  mutate(
+    cycle = as.integer(str_extract(cycle_var, "\\d+"))
+  )
+
+# Patient-level summaries
+hosp_pt <- hosp_long |> 
+  group_by(record_id, hiv_status, cycles_given) |> 
+  summarize(
+    hosp_days_total = sum(hosp_days, na.rm = TRUE),
+    .groups = "drop"
+  ) |> 
+  mutate(
+    hosp_days_per_cycle_given = if_else(is.na(cycles_given) | cycles_given <= 0,
+                                        NA_real_,
+                                        hosp_days_total / cycles_given)
+  )
+
+```
+
+```{r}
+#| label: tbl-hosp-by-pt
+#| tbl-cap: "Hospital days attributable to toxicity by HIV status"
+
+hosp_pt |>
+  group_by(hiv_status) |>
+  summarize(
+    n_patients = n(),
+
+    hosp_days_total_mean_sd = fmt_mean_sd_range(hosp_days_total, 1),
+    hosp_days_per_cycle_given_mean_sd = fmt_mean_sd_range(hosp_days_per_cycle_given, 1),
+    .groups = "drop"
+  ) |>
+  mutate(
+    `HIV Status` = hiv_status,
+    `Patients (N)` = n_patients,
+    `Total hosp days, mean (SD)` = hosp_days_total_mean_sd,
+    `Hosp days / cycles_given, mean (SD)` = hosp_days_per_cycle_given_mean_sd
+  ) |>
+  select(
+    `HIV Status`, `Patients (N)`,
+    `Total hosp days, mean (SD)`,
+    `Hosp days / cycles_given, mean (SD)`
+  ) |>
+  kbl(booktabs = TRUE, align = "lcccc") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+```{r}
+#| label: prep-hosp-vs-severe-cycle
+
+severe_cols <- names(gic_models)[str_detect(names(gic_models), "^ae_n_severe_([1-9]|1[0-2])$")]
+measured_cols <- names(gic_models)[str_detect(names(gic_models), "^ae_n_markers_measured_([1-9]|1[0-2])$")]
+
+severe_long <- gic_models |> 
+  select(record_id, all_of(severe_cols)) |> 
+  pivot_longer(
+    cols = all_of(severe_cols),
+    names_to = "cycle_var",
+    values_to = "ae_n_severe"
+  ) |> 
+  mutate(cycle = as.integer(str_extract(cycle_var, "\\d+"))) |> 
+  select(-cycle_var)
+
+measured_long <- gic_models |> 
+  select(record_id, all_of(measured_cols)) |> 
+  pivot_longer(
+    cols = all_of(measured_cols),
+    names_to = "cycle_var",
+    values_to = "ae_n_markers_measured"
+  ) |> 
+  mutate(cycle = as.integer(str_extract(cycle_var, "\\d+$"))) |> 
+  select(-cycle_var)
+
+hosp_severe_cycle <- hosp_long |> 
+  left_join(severe_long, by = c("record_id", "cycle")) |> 
+  left_join(measured_long, by = c("record_id", "cycle")) |> 
+  mutate(ae_measured = ae_n_markers_measured > 0)
+```
+
+```{r}
+#| label: prep-hosp-vs-burden
+
+burden_cols <- names(gic_models)[str_detect(names(gic_models), "^ae_sum_grade_([1-9]|1[0-2])$")]
+
+burden_long <- gic_models |>
+  select(record_id, all_of(burden_cols)) |>
+  pivot_longer(
+    cols = all_of(burden_cols),
+    names_to = "cycle_var",
+    values_to = "ae_sum_grade"
+  ) |>
+  mutate(cycle = as.integer(str_extract(cycle_var, "\\d+$"))) |>
+  select(-cycle_var)
+
+hosp_burden_cycle <- hosp_long |>
+  left_join(burden_long, by = c("record_id", "cycle")) |>
+  left_join(measured_long, by = c("record_id", "cycle")) |>
+  mutate(
+    ae_measured = ae_n_markers_measured > 0,
+    ae_sum_grade_int = as.integer(round(ae_sum_grade)),  # keeps grouping stable
+    ae_sum_grade_bin = cut(
+      ae_sum_grade_int,
+      breaks = c(-1, 0, 2, 5, 10, Inf),
+      labels = c("0", "1–2", "3–5", "6–10", "11+"),
+      right = TRUE
+    )
+  )
+```
+
+
+```{r}
+#| label: tbl-hosp-vs-severe
+
+hosp_severe_cycle |> 
+  filter(ae_measured) |> 
+  group_by(hiv_status, ae_n_severe) |> 
+  summarize(
+    n_cycles = sum(!is.na(hosp_days)),
+    hosp_days_mean_sd = fmt_mean_sd_range(hosp_days),
+    .groups = "drop"
+  ) |> 
+  mutate(
+    `HIV Status` = hiv_status,
+    `# severe AEs in cycle` = ae_n_severe,
+    `Cycles` = n_cycles,
+    `Hosp days, mean (SD); range` = hosp_days_mean_sd
+  ) |> 
+  select(`HIV Status`, `# severe AEs in cycle`, `Cycles`, `Hosp days, mean (SD); range`) |> 
+  kbl(booktabs = TRUE, align = "lccc") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+```{r}
+#| label: plt-hosp-vs-severe
+#| fig-cap: "Mean hospital days vs number of severe AEs in the cycle, by HIV status"
+
+hosp_severe_summ <- hosp_severe_cycle |>
+  filter(ae_measured) |>
+  group_by(hiv_status, ae_n_severe) |>
+  summarize(
+    mean_hosp_days = mean(hosp_days, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(hosp_severe_summ, aes(x = ae_n_severe, y = mean_hosp_days, color = hiv_status, group = hiv_status)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    x = "Number of severe AEs in cycle",
+    y = "Mean hospital days (toxicity) in cycle",
+    color = "HIV status"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| label: tbl-hosp-vs-burden
+#| tbl-cap: "Hospital days vs AE burden (sum of grades in cycle), by HIV status (among cycles with any AE grading recorded)"
+
+hosp_burden_cycle |>
+  filter(ae_measured) |>
+  group_by(hiv_status, ae_sum_grade_bin) |>
+  summarize(
+    n_cycles = sum(!is.na(hosp_days)),
+    hosp_days_mean_sd = fmt_mean_sd_range(hosp_days, 1),
+    .groups = "drop"
+  ) |>
+  mutate(
+    `HIV Status` = hiv_status,
+    `AE burden (sum of grades), bin` = as.character(ae_sum_grade_bin),
+    `Cycles` = n_cycles,
+    `Hosp days, mean (SD); range` = hosp_days_mean_sd
+  ) |>
+  select(`HIV Status`, `AE burden (sum of grades), bin`, `Cycles`, `Hosp days, mean (SD); range`) |>
+  kbl(booktabs = TRUE, align = "lccc") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
 
 
-<!-- model_any_basic <- glm(ae_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent, -->
-<!--                        data = gic_models, family = binomial) -->
 
+```{r}
+#| label: plt-hosp-vs-burden
+#| fig-cap: "Mean hospital days vs AE burden (sum of grades in cycle), by HIV status"
 
+hosp_burden_summ <- hosp_burden_cycle |>
+  filter(ae_measured) |>
+  group_by(hiv_status, ae_sum_grade_bin) |>
+  summarize(
+    mean_hosp_days = mean(hosp_days, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(ae_sum_grade_bin = factor(ae_sum_grade_bin, levels = c("0", "1–2", "3–5", "6–10", "11+")))
 
-
-<!-- ## Simple Logistic: Full treatment period -->
-<!-- ### Simple logistic model of any adverse events by HIV status -->
-<!-- ```{r} -->
-<!-- #| label: model-any_simple -->
-
-<!-- model_any_simple <- glm(ae_any_pt ~ hiv_status, -->
-<!--                         data = gic_models, family = binomial) -->
-
-<!-- # summary(model_any_simple) -->
-<!-- ``` -->
-<!-- Invalid model due to having a 100% adverse event rate in the HIV-positive group. -->
-
-<!-- ### Simple logistic model of any severe adverse events by HIV status -->
-<!-- ```{r} -->
-<!-- #| label: model-severe-simple -->
-
-
-<!-- model_severe_simple <- glm(ae_severe_any_pt ~ hiv_status, -->
-<!--                            data = gic_models, family = binomial) -->
-
-<!-- summary(model_severe_simple) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- #| label: tbl-severe-simple-or-clean -->
-<!-- #| tbl-cap: "Association between HIV Status and Severe Adverse Events (Grades 3-4)" -->
-
-<!-- tidy(model_severe_simple, conf.int = TRUE, exponentiate = TRUE) |> -->
-<!--   filter(term != "(Intercept)") |> -->
-<!--   # Clean up the name and prepare for the reference row -->
-<!--   mutate( -->
-<!--     Term = str_replace(term, "hiv_statusPositive", "HIV Positive"), -->
-<!--     `OR (95% CI)` = paste0(round(estimate, 2), " (", -->
-<!--                            round(conf.low, 2), " - ", -->
-<!--                            round(conf.high, 2), ")"), -->
-<!--     p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))), -->
-<!--     std.error = round(std.error, 3) -->
-<!--   ) |> -->
-<!--   select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |> -->
-<!--   # Add the reference row at the top -->
-<!--   add_row(Term = "HIV Negative (Reference)", -->
-<!--           `OR (95% CI)` = "1.00", -->
-<!--           `Std. Error` = NA, -->
-<!--           `P-value` = NA, -->
-<!--           .before = 1) |> -->
-<!--   kbl(booktabs = TRUE) |> -->
-<!--   kable_styling(full_width = FALSE, position = "left") -->
-<!-- ``` -->
-
-
-
-<!-- ## Multivariate Logistic: Full treatment period -->
-
-<!-- ```{r} -->
-<!-- #| label: tbl-stage-vs-hiv-status -->
-<!-- #| tbl-cap: "Cancer stage vs HIV status" -->
-
-<!-- table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |> -->
-<!--   as.data.frame.matrix() |> -->
-<!--   kbl(booktabs = TRUE) |> -->
-<!--   kable_styling(full_width = FALSE, position = "left") |> -->
-<!--   add_header_above(c("Cancer Stage" = 1, "HIV Status" = 2)) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- #| label: tbl-chemo-type-vs-hiv-status -->
-<!-- #| tbl-cap: "Chemotherapy type vs HIV status" -->
-
-<!-- table(Stage = gic_models$chemo_type, HIV = gic_models$hiv_status) |> -->
-<!--   as.data.frame.matrix() |> -->
-<!--   kbl(booktabs = TRUE) |> -->
-<!--   kable_styling(full_width = FALSE, position = "left") |> -->
-<!--   add_header_above(c("Chemo Type" = 1, "HIV Status" = 2)) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- #| label: tbl-tx-intent-vs-hiv-status -->
-<!-- #| tbl-cap: "Treatment intent vs HIV status" -->
-
-<!-- table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |> -->
-<!--   as.data.frame.matrix() |> -->
-<!--   kbl(booktabs = TRUE) |> -->
-<!--   kable_styling(full_width = FALSE, position = "left") |> -->
-<!--   add_header_above(c("Treatment Intent" = 1, "HIV Status" = 2)) -->
-<!-- ``` -->
-
-<!-- ### Basic logistic model of any adverse events by HIV status -->
-<!-- ```{r} -->
-<!-- #| label: model-any-basic -->
-
-<!-- model_any_basic <- glm(ae_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent, -->
-<!--                        data = gic_models, family = binomial) -->
-
-<!-- summary(model_any_basic) -->
-<!-- ``` -->
-<!-- Invalid model due to having a 100% adverse event rate in the HIV-positive group. -->
-
-<!-- ### Basic logicstic model of any severe adverse events by HIV status -->
-<!-- ```{r} -->
-<!-- #| label: model-severe-basic -->
-
-<!-- model_severe_basic <- glm(ae_severe_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent, -->
-<!--                        data = gic_models, family = binomial) -->
-
-<!-- summary(model_severe_basic) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- #| label: tbl-severe-multivariate-or -->
-<!-- #| tbl-cap: "Adjusted Odds Ratios for Severe Adverse Events (Grades 3-4)" -->
-
-<!-- tidy(model_severe_basic, conf.int = TRUE, exponentiate = TRUE) |> -->
-<!--   filter(term != "(Intercept)") |> -->
-<!--   mutate( -->
-<!--     # Clean up term names -->
-<!--     Term = case_when( -->
-<!--       term == "hiv_statusPositive" ~ "HIV Positive", -->
-<!--       term == "cancer_stageStage III" ~ "Stage III", -->
-<!--       term == "cancer_stageStage IV" ~ "Stage IV", -->
-<!--       term == "chemo_typePlatinum/5-FU" ~ "Platinum/5-FU", -->
-<!--       term == "chemo_typeLCV/5-FU" ~ "LCV/5-FU", -->
-<!--       term == "chemo_typeCapeOX" ~ "CapeOX", -->
-<!--       term == "chemo_typeFOLFOX4" ~ "FOLFOX4", -->
-<!--       term == "chemo_typeCapecitabine" ~ "Capecitabine", -->
-<!--       term == "tx_intentPalliative" ~ "Palliative Intent", -->
-<!--       TRUE ~ term -->
-<!--     ), -->
-<!--     `OR (95% CI)` = paste0(round(estimate, 2), " (",  -->
-<!--                            round(conf.low, 2), " - ",  -->
-<!--                            round(conf.high, 2), ")"), -->
-<!--     p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))), -->
-<!--     std.error = round(std.error, 3) -->
-<!--   ) |> -->
-<!--   select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |> -->
-<!--   # Add reference rows for clarity -->
-<!--   add_row(Term = "HIV Negative (Ref)", `OR (95% CI)` = "1.00", .before = 1) |> -->
-<!--   add_row(Term = "Stage II (Ref)", `OR (95% CI)` = "1.00", .before = 3) |> -->
-<!--   add_row(Term = "Platinum/Paclitaxel (Ref)", `OR (95% CI)` = "1.00", .before = 6) |> -->
-<!--   add_row(Term = "Curative Intent (Ref)", `OR (95% CI)` = "1.00", .before = 12) |> -->
-<!--   kbl(booktabs = TRUE) |> -->
-<!--   kable_styling(full_width = FALSE, position = "left") |> -->
-<!--   pack_rows("HIV Status", 1, 2) |> -->
-<!--   pack_rows("Cancer Stage", 3, 5) |> -->
-<!--   pack_rows("Chemotherapy Regimen", 6, 11) |> -->
-<!--   pack_rows("Treatment Intent", 12, 13) -->
-<!-- ``` -->
-
-
-
-<!-- ## $\chi^2$ Tests (HIV vs Early Events) -->
-
-<!-- ```{r} -->
-<!-- #| label: tbl-any-early-contingency -->
-<!-- #| tbl-cap: "Contingency table of early adverse events (cycles 1-4) vs HIV status" -->
-
-<!-- table_any_early <- table(early_ae = factor(gic_models$ae_any_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status) -->
-
-<!-- table_any_early |>  -->
-<!--   as.data.frame.matrix() |>  -->
-<!--   kbl(booktabs = TRUE) |>  -->
-<!--   kable_styling(full_width = FALSE, position = "left") |>  -->
-<!--   add_header_above(c("Any Early AE" = 1, "HIV Status" = 2)) -->
-<!-- ``` -->
-<!-- ```{r} -->
-<!-- #| label: tbl-severe-early-contingency -->
-<!-- #| tbl-cap: "Contingency table of severe early adverse events (cycles 1-4) vs HIV status" -->
-
-<!-- table_severe_early <- table(severe_early_ae = factor(gic_models$ae_severe_any_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status) -->
-
-<!-- table_severe_early |>  -->
-<!--   as.data.frame.matrix() |>  -->
-<!--   kbl(booktabs = TRUE) |>  -->
-<!--   kable_styling(full_width = FALSE, position = "left") |>  -->
-<!--   add_header_above(c("Severe Early AE" = 1, "HIV Status" = 2)) -->
-<!-- ``` -->
-
-
-<!-- ```{r} -->
-<!-- #| label: tests-chi-sq -->
-
-<!-- # Any Early AE (Cycles 1-4) -->
-<!-- cat("Chi-Squared Test: Any Early AE (C1-4) vs HIV Status\n") -->
-<!-- print(chisq.test(table_any_early)) -->
-
-<!-- cat("\n\n") -->
-
-<!-- # Severe Early AE (Cycles 1-4) -->
-<!-- cat("Chi-Squared Test: Severe Early AE (C1-4) vs HIV Status\n") -->
-<!-- print(chisq.test(table_severe_early)) -->
-<!-- ``` -->
+ggplot(hosp_burden_summ, aes(x = ae_sum_grade_bin, y = mean_hosp_days, color = hiv_status, group = hiv_status)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  labs(
+    x = "AE burden in cycle (sum of grades), binned",
+    y = "Mean hospital days (toxicity) in cycle",
+    color = "HIV status"
+  ) +
+  theme_minimal()
+```
 
 
 
