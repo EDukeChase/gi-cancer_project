@@ -6,7 +6,7 @@ bibliography: references.bib
 # Load Data & Libraries
 ```{r}
 #| label: setup
-#| include: false
+#| warning: false
 
 source("R/setup.R")
 
@@ -115,8 +115,8 @@ gic_models <- gic_validated |>
 | `ae_mean_max_grade`       | Patient | numeric / NA | Mean of the per-cycle maximum AE grade across cycles.                                                            |
 | `ae_mean_sum_grade`       | Patient | numeric / NA | Mean of the per-cycle sum of AE grades across cycles.                                                            |
 | ------------------------- | ------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
-| `ae_sum_grade_#`          | Cycle   | numeric / NA | For cycle {#}, sum of numeric AE grades across markers (NA if `ae_n_markers_measured_# == 0`).                   |
-| `ae_max_grade_#`          | Cycle   | numeric / NA | For cycle {#}, maximum numeric AE grade across markers (NA if `ae_n_markers_measured_# == 0`).                   |
+| `ae_sum_grade_#`          | Cycle   | numeric / NA | For cycle {#}, sum of AE grades across markers (NA if `ae_n_markers_measured_# == 0`).                   |
+| `ae_max_grade_#`          | Cycle   | numeric / NA | For cycle {#}, maximum AE grade across markers (NA if `ae_n_markers_measured_# == 0`).                   |
 | `ae_n_events_#`           | Cycle   | numeric / NA | For cycle {#}, count of AEs across markers (`grade > 0`) (NA if `ae_n_markers_measured_# == 0`).                 |
 | `ae_n_severe_#`           | Cycle   | numeric / NA | For cycle {#}, count of severe AEs across markers (`grade >= 3`) (NA if `ae_n_markers_measured_# == 0`).         |
 | `ae_any_#`                | Cycle   | logical / NA | For cycle {#}, flag: any AE this cycle (`ae_n_events_# > 0`) (NA if `ae_n_markers_measured_# == 0`).             |
@@ -127,7 +127,7 @@ gic_models <- gic_validated |>
 ## Patient-Level Adverse Event Variables
 ```{r}
 #| label: tbl-ae-by-pt
-#| tbl-cap: "Patient-level AE summaries by HIV status. Means are computed across cycles with any AE grading recorded."
+#| tbl-cap: "Patient-level AE summaries by HIV status."
 
 fmt_n_pct <- function(x, digits = 1) {
   n <- sum(x == 1, na.rm = TRUE)
@@ -194,7 +194,7 @@ pt_wide |>
 ## Cycle-Level Adverse Event Variables
 ```{r}
 #| label: tbl-ae-by-cycle
-#| tbl-cap: "Cycle-level AE summaries by HIV status (among patients with any AE grading recorded in the cycle)"
+#| tbl-cap: "Cycle-level AE summaries by HIV status."
 #| results: asis
 
 # Pivot cycle-level vars back to long form for summarizing
@@ -242,9 +242,9 @@ ae_cycle_summ <- ae_cycle_long |>
   ) |>
   mutate(
     `Cycle` = cycle,
-    `Patients w/ any AE grading recorded` = paste0(measured_n, " (", round(measured_pct, 1), "%)"),
-    `Any AE in cycle (%, among measured)` = paste0(any_ae_n, " (", round(any_ae_pct_measured, 1), "%)"),
-    `Any severe AE in cycle (%, among measured)` = paste0(severe_ae_n, " (", round(severe_ae_pct_measured, 1), "%)"),
+    `Patients (%)` = paste0(measured_n, " (", round(measured_pct, 1), "%)"),
+    `Any AE in cycle (%)` = paste0(any_ae_n, " (", round(any_ae_pct_measured, 1), "%)"),
+    `Any severe AE in cycle (%)` = paste0(severe_ae_n, " (", round(severe_ae_pct_measured, 1), "%)"),
     `# AEs in cycle, mean (SD); range` = n_events_mean_sd,
     `# severe AEs in cycle, mean (SD); range` = n_severe_mean_sd,
     `Sum of AE grades in cycle, mean (SD); range` = sum_grade_mean_sd,
@@ -252,9 +252,9 @@ ae_cycle_summ <- ae_cycle_long |>
   ) |>
   select(
     hiv_status, `Cycle`,
-    `Patients w/ any AE grading recorded`,
-    `Any AE in cycle (%, among measured)`,
-    `Any severe AE in cycle (%, among measured)`,
+    `Patients (%)`,
+    `Any AE in cycle (%)`,
+    `Any severe AE in cycle (%)`,
     `# AEs in cycle, mean (SD); range`,
     `# severe AEs in cycle, mean (SD); range`,
     `Sum of AE grades in cycle, mean (SD); range`,
@@ -308,7 +308,7 @@ ggplot(gic_models, aes(x = hiv_status, y = ae_mean_events, fill = hiv_status, co
   geom_boxplot(width = 0.15, alpha = 0.6, outlier.alpha = 1) +
   labs(
     title = "Patient-level mean AEs per measured cycle",
-    subtitle = "Violin = distribution; box = IQR; line = median; whiskers/outliers as in boxplot",
+    subtitle = "Violin = distribution; box = IQR; line = median; dots = outliers",
     x = "HIV status",
     y = "Mean number of AEs per cycle",
     fill = "HIV status",
@@ -326,7 +326,7 @@ ggplot(gic_models, aes(x = hiv_status, y = ae_mean_sum_grade, fill = hiv_status,
   geom_boxplot(width = 0.15, alpha = 0.6, outlier.alpha = 1) +
   labs(
     title = "Patient-level mean AE grade burden per measured cycle",
-    subtitle = "Violin = distribution; box = IQR; line = median; whiskers/outliers as in boxplot",
+    subtitle = "Violin = distribution; box = IQR; line = median; dots = outliers",
     x = "HIV status",
     y = "Mean sum of AE grades per cycle",
     fill = "HIV status",
@@ -363,7 +363,7 @@ summarize_metric <- function(df, var) {
     group_by(hiv_status, cycle) |> 
     summarize(
       n = sum(!is.na(.data[[var]])),
-      mean = mean(.data[[var]], na.rm = TRUE),
+      median = median(.data[[var]], na.rm = TRUE),
       q25 = quantile(.data[[var]], 0.25, na.rm = TRUE),
       q75 = quantile(.data[[var]], 0.75, na.rm = TRUE),
       min = min(.data[[var]], na.rm = TRUE),
@@ -385,8 +385,8 @@ ae_sumgrade_summ <- summarize_metric(ae_cycle_measured, "ae_sum_grade")
 ggplot(ae_events_summ, aes(x = cycle, group = hiv_status, color = hiv_status, fill = hiv_status)) +
   geom_ribbon(aes(ymin = min, ymax = max), alpha = 0.2, color = NA) +
   geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.5, color = NA) +
-  geom_line(aes(y = mean), linewidth = 1) +
-  geom_point(aes(y = mean), size = 2) +
+  geom_line(aes(y = median), linewidth = 1) +
+  geom_point(aes(y = median), size = 2) +
   scale_x_continuous(breaks = 1:12) +
   labs(title = "Adverse events per cycle",
        subtitle = "Mean (line) with IQR and min–max bands among cycles with any AE grading recorded", 
@@ -436,6 +436,88 @@ ggplot(ae_sumgrade_summ, aes(x = cycle, group = hiv_status, color = hiv_status, 
     fill = "HIV status"
   ) +
   theme_minimal()
+```
+
+# Descriptive Statistics
+```{r}
+#| label: tbl-stage-vs-hiv-status
+#| tbl-cap: "Cancer stage vs HIV status"
+
+table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Cancer Stage" = 1, "HIV Status" = 2))
+```
+
+```{r}
+#| label: tbl-chemo-type-vs-hiv-status
+#| tbl-cap: "Chemotherapy type vs HIV status"
+
+table(Stage = gic_models$chemo_type, HIV = gic_models$hiv_status) |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Chemo Type" = 1, "HIV Status" = 2))
+```
+
+```{r}
+#| label: tbl-tx-intent-vs-hiv-status
+#| tbl-cap: "Treatment intent vs HIV status"
+
+table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Treatment Intent" = 1, "HIV Status" = 2))
+```
+
+```{r}
+cycles_summ <- gic_models |>
+  mutate(
+    completion_rate = if_else(
+      is.na(cycles_prescribed) | cycles_prescribed <= 0,
+      NA_real_,
+      cycles_given / cycles_prescribed
+    )
+  ) |>
+  group_by(hiv_status) |>
+  summarize(
+    n_patients = n(),
+    cycles_prescribed = fmt_mean_sd_range(cycles_prescribed, digits = 1),
+    cycles_given = fmt_mean_sd_range(cycles_given, digits = 1),
+    completion_rate = fmt_mean_sd_range(completion_rate, digits = 2),
+    .groups = "drop"
+  ) |>
+  mutate(
+    `HIV Status` = hiv_status,
+    `Patients (N)` = n_patients,
+    `Cycles prescribed, mean (SD); range` = cycles_prescribed,
+    `Cycles given, mean (SD); range` = cycles_given,
+    `Completion rate, mean (SD); range` = completion_rate
+  ) |>
+  select(
+    `HIV Status`,
+    `Patients (N)`,
+    `Cycles prescribed, mean (SD); range`,
+    `Cycles given, mean (SD); range`,
+    `Completion rate, mean (SD); range`
+  )
+
+cycles_summ |>
+  kbl(booktabs = TRUE, align = "lcccc") |>
+  kable_styling(full_width = FALSE, position = "left")
+```
+```{r}
+hiv_pos <- gic_validated |> filter(hiv_status == "Positive")
+hiv_neg <- gic_validated |> filter(hiv_status == "Negative")
+
+
+hist(hiv_pos$cycles_prescribed, breaks = c(0:12), freq = FALSE)
+```
+
+```{r}
+hist(hiv_neg$cycles_prescribed, breaks = c(0:12), freq = FALSE)
 ```
 
 
@@ -495,40 +577,6 @@ tidy(model_severe_simple, conf.int = TRUE, exponentiate = TRUE) |>
 
 
 ### Multivariate Logistic: Full treatment period
-
-```{r}
-#| label: tbl-stage-vs-hiv-status
-#| tbl-cap: "Cancer stage vs HIV status"
-
-table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |>
-  as.data.frame.matrix() |>
-  kbl(booktabs = TRUE) |>
-  kable_styling(full_width = FALSE, position = "left") |>
-  add_header_above(c("Cancer Stage" = 1, "HIV Status" = 2))
-```
-
-```{r}
-#| label: tbl-chemo-type-vs-hiv-status
-#| tbl-cap: "Chemotherapy type vs HIV status"
-
-table(Stage = gic_models$chemo_type, HIV = gic_models$hiv_status) |>
-  as.data.frame.matrix() |>
-  kbl(booktabs = TRUE) |>
-  kable_styling(full_width = FALSE, position = "left") |>
-  add_header_above(c("Chemo Type" = 1, "HIV Status" = 2))
-```
-
-```{r}
-#| label: tbl-tx-intent-vs-hiv-status
-#| tbl-cap: "Treatment intent vs HIV status"
-
-table(Stage = gic_models$tx_intent, HIV = gic_models$hiv_status) |>
-  as.data.frame.matrix() |>
-  kbl(booktabs = TRUE) |>
-  kable_styling(full_width = FALSE, position = "left") |>
-  add_header_above(c("Treatment Intent" = 1, "HIV Status" = 2))
-```
-
 #### Basic logistic model of any adverse events by HIV status
 ```{r}
 #| label: model-any-basic
@@ -738,6 +786,7 @@ hosp_pt <- hosp_long |>
 
 ```
 
+## Table of Toxicity-Related Hospitalization by HIV status
 ```{r}
 #| label: tbl-hosp-by-pt
 #| tbl-cap: "Hospital days attributable to toxicity by HIV status"
@@ -828,7 +877,7 @@ hosp_burden_cycle <- hosp_long |>
   )
 ```
 
-
+## Toxicity-Related Hospitalization Based on Number of Severe Adverse Events
 ```{r}
 #| label: tbl-hosp-vs-severe
 
@@ -874,6 +923,7 @@ ggplot(hosp_severe_summ, aes(x = ae_n_severe, y = mean_hosp_days, color = hiv_st
   theme_minimal()
 ```
 
+## Toxicity-Related Hospitalization Based on Adverse Event Burden
 ```{r}
 #| label: tbl-hosp-vs-burden
 #| tbl-cap: "Hospital days vs AE burden (sum of grades in cycle), by HIV status (among cycles with any AE grading recorded)"
