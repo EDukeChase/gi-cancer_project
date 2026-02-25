@@ -19,6 +19,7 @@ library(lubridate)  # Handle date data
 
 gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx"))
 ```
+
 ```{r}
 #| label: apply-manual-patches
 

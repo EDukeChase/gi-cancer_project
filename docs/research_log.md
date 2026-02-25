@@ -150,16 +150,6 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Location:* `R/setup.R`
     - *Goal:* Reduce code duplication by replacing verbose save chunks in `01_data-cleaning.qmd` and `02_data-validation.qmd` with a single function call.
     - *Task:* Define a wrapper function (e.g., `safe_save_rds`) to handle the interactive overwrite prompt logic.
-- [ ] **TEC-006 [P2]: Fix 'File Path Too Long' Warnings**
-    - *Observed:* 
-		- [2025-11-30] in `01_data-cleaning.qmd`.
-		- [2025-12-02] in `02_data-cleaning.qmd` in Chunk(`assess_body-measurements`)
-		- **Current location:** 
-    - *Issue:* RStudio fails to copy font files to the cache because the OneDrive path exceeds 260 characters.
-    - *Attempted Resolutions:* 
-		1. Set `embed-resources: false` in `_quarto.yml`. (Result: Error persisted during interactive chunk execution).
-        2. Created Directory Junction from `.Rproj.user` to `C:/R_Cache/gi-cancer/`. (Result: Error persisted, likely due to RStudio accessing the project via the original long path).
-    - *Task:* Disable "Show output inline for all R Markdown documents" in RStudio Global Options to bypass the notebook cache entirely.
 - [ ] **TEC-007 [P1]: Audit adverse event grading**
     - *Location:* `02_data-validation.qmd` (Chunk: `derive_adverse-events`).
 		- **Current location:** 
@@ -333,3 +323,15 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Original Observation (Duplication):* Columns were mathematically identical (implied 1 unit) in cycles 4, 7, 8, 9, and 11.
     - *New Finding (Active Errors):* Found explicit errors where the `transfusion_given` flag contradicts the `units` count.
     - *Temporary Resolution:* [2025-11-16] Assumed data were correct (No action taken on the columns yet).
+- [x] **TEC-006 [P2]: Fix 'File Path Too Long' Warnings**
+    - **Status:** Resolved
+	- **Created:** 2025-12-02
+	- **Last updated:** 2026-01-13
+	- **Location:** 
+		- [2025-11-30] in `01_data-cleaning.qmd`
+		- [2025-12-02] in `02_data-cleaning.qmd`
+    - **Summary:** RStudio fails to copy font files to the cache because the OneDrive path exceeds 260 characters.
+	- **Timeline:**
+		- [2026-02-25] Copied project files to local directory and will need to manually copy updated files to OneDrive.
+		- [2025-12-02] Created Directory Junction from `.Rproj.user` to `C:/R_Cache/gi-cancer/`. (Result: Error persisted, likely due to RStudio accessing the project via the original long path).
+		- [2025-12-02] Set `embed-resources: false` in `_quarto.yml`. (Result: Error persisted during interactive chunk execution).
