@@ -4,7 +4,8 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 
 **Entry Status Legend**
 - [ ] **Open:** Needs attention or action.
-- [/] **In Progress:** Investigation started or partially implemented.
+- [ ] **In Progress:** Investigation started or partially implemented.
+- [ ] **Blocked:** Work cannot proceed without an external dependency (e.g., awaiting data/clarification/approval).
 - [x] **Resolved:** Fixed or decided (see notes for details).
 
 **Priority Legend**
@@ -81,6 +82,15 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 *Issues regarding the accuracy, completeness, or logic of the raw data.*
 
 - [/] **DAT-007 [P2]: Empty `abli_score_0` and `cr_clear_0`**
+	- **Status:** In Progress
+	- **Created:** 2025-11-16
+	- **Last updated:** 2026-01-16
+	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`)
+	- **Summary:** `albi_score_0` and `cr_clear_0` variables are both empty.
+	- **Scope:** `albi_score_0` and `cr_clear_0`.
+	- **Impact:** Empty variables can't be used for analysis.
+	- **Timeline:**
+		- 
 	- *Update:* [2025-12-05] (Email from Dr. Mazhindu) Received DOI links for definitive formulas for both ALBI score and Creatinine Clearance.
 	- *Update:* [2025-12-02] (Zoom meeting) Dr. Mazhindu confirmed these are derived variables. Calculation formulas were not immediately available; follow-up email sent same day.
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
@@ -139,13 +149,35 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 - [ ] **TEC-002 [P4]: Fix ToC Issue**
 	- *Location:* `01_data-cleaning.qmd`.
 	- *Issue:* Table of contents on right side of rendered HTML pages is no longer dynamic aside from acting as links; it only shows top level headers and the first one is always highlighted, regardless of what link was last clicked. Links do work. Suspect this might have something to do with the `kableExtra::scroll_box()` function used throughout.
-- [/] **TEC-003 [P3]: Update Research Log Format**
-	- *Location:* `research_log.md`.
-	- *Task:* Reorder items under entries in chronological order (See DAT-016 for example).
+- [ ] **TEC-003 [P3]: Update Research Log Format**
+	- **Status:** In progress
+	- **Created:** 2025-12-02
+	- **Last updated:** 2026-01-16
+	- **Location:** `research_log.md`
+	- **Summary:** Standardize log entries to a consistent format with clear timelines, references to implementation locations, and information sources where relevant.
+	- **Impact:** Improves readability and auditability of data decisions and code changes.
+	- **Actions:**
+		- [ ] Update existing entries to the standardized structure as they are touched.
+		- [ ] Ensure timelines use YYYY-MM-DD date formating and that newest entries are listed first.
+	- **Timeline:**
+		- 2026-01-16: Reformatted DAT-001, DAT-021, DAT-022, DAT-002, DAT-003, DAT-004, TEC-003, and TEC-004.
+		- 2025-12-02: Create log entry.
 - [ ] **TEC-004 [P4]: Implement ID Cross-Referencing**
-	- *Location:* `01_data-cleaning.qmd`.
-	- *Goal:* Ensure bidirectional traceability between the code, the report, and the research log.
-	- *Task:* Refactor code comments and callout blocks to explicitly reference Research Log IDS (e.g., `DAT-001`).
+	- **Status:** In progress
+	- **Created:** 2025-12-02
+	- **Last updated:** 2026-01-16
+	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `03_exploratory-data-analysis.qmd`, `research_log.md`
+	- **Summary:** Add bidirectional traceability between code and log entries (code/comments reference log IDs, and log entries point to file + chunk labels where fixes/decisions are implemented).
+	- **Impact:** Improves traceability and reduces duplicated effort when revisiting decisions or debugging.
+	- **Actions:**
+		- [ ] Ensure code that implements changes related to log entries contains comments with relevant log entry (e.g., `[DAT-###]`, `[TEC-###]`) and use it consistently.
+		- [ ] Add missing ID references in relevant chunks across analysis documents.
+		- [ ] Ensure each log entry has a `Location` pointing to the implementing chunk (or “decision only” if no code change).
+		- [ ] Remove callout notes, replace with narrative explanations where appropriate.
+		- [ ] Evaluate callout warnings for relevance.
+	- **Timeline:**
+		- 2026-01-16: Updated code comments in `01_data-cleaning.qmd` to reference DAT-002 (chunk: `fix-duplicate-content`) and DAT-003 (chunk: `fix-longitudinal-consistency`).
+		- 2025-12-02: Add code comments to reference DAT-001, DAT-021, and DAT-022 in `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`).
 - [ ] **TEC-005 [P4]: Create custom save function**
     - *Location:* `R/setup.R`
     - *Goal:* Reduce code duplication by replacing verbose save chunks in `01_data-cleaning.qmd` and `02_data-validation.qmd` with a single function call.
@@ -182,38 +214,73 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	
 ## Archived Log Entries
 
-- [x] **DAT-001: ANC Column Duplication**
-	- *Resolved:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-names`).
-		- **Current location:** 
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-names`).
-		- **Current location:** 
-	- *Summary:* The raw Excel file contained several columns with identical or mislabeled headers.
-	- *Details:*
-      - *ANC Duplication:* `ANC.3...108` and `ANC.3...109` were identical. Removed `...109`, renamed `...108` to `ANC.3`.
-      - *Potassium Naming:* Two columns were named `HyperK+.3`, with no `HypoK+.3`. Renamed the first instance to `HypoK+.3`.
-      - *Cycle 7 Mislabeling:* Variables labeled `.6` in the Cycle 7 section were renamed to Cycle 7.
-- [x] **DAT-021: Potassium Naming**
+- [x] **DAT-001: Cycle 3 ANC Column Duplication**
+	- **Status:** Resolved
+	- **Created:** 2025-11-16
+	- **Last updated:** 2026-12-02
+	- **Location:** `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`)
+	- **Summary:** Data contained two identical columns named "ANC.3", resulting in duplicate variables on import.
+	- **Scope:** Cycle 3; `ANC.3` only.
+	- **Impact:** Avoids duplicate ANC variable. No value changes.
+	- **Timeline:**
+		- 2025-12-02: Split original DAT-001 entry into DAT-001, DAT-021, and DAT-022.
+		- 2025-11-19: Confirmed during Zoom meeting that the second copy was an accidental duplicate, and that the temporary fix was sufficient.
+		- 2025-11-16: Implemented temporary fix in `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`).
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
+	- **Resolution:** Renamed `ANC.3...108` to `ANC.3` and dropped `ANC.3...109`.
+- [x] **DAT-021: Cycle 3 Potassium Naming**
+	- **Status:** Resolved
+	- **Created:** 2025-11-16
+	- **Last updated:** 2026-12-02
+	- **Location:** `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`)
+	- **Summary:** Data contained two columns named `HyperK+.3` resulting in duplicate variables on import.
+	- **Scope:** Cycle 3; potassium hypo/hyper variables.
+	- **Impact:** Fixes mislabeled variable name, prevents incorrect interpretation. No value changes.
+	- **Timeline:**
+		- 2025-12-02: Split original DAT-001 entry into DAT-001, DAT-021, and DAT-022.
+		- 2025-11-19: Confirmed during Zoom meeting that one copy should have been "HypoK+.3", and that the temporary fix was sufficient.
+		- 2025-11-16: Implemented temporary fix in `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`).
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
+	- **Resolution:** Renamed `HyperK+.3...114` to `HypoK+.3`, and retained `HyperK+.3...115` as `HyperK+.3` (based on naming conventions and the variables having identical values).
 - [x] **DAT-022: Cycle 7 Mislabeling**
-
+	- **Status:** Resolved
+	- **Created:** 2025-11-16
+	- **Last updated:** 2025-12-02
+	- **Location:** `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`)
+	- **Summary:** Febrile neutropenia and electrolyte variables in cycle 7 were mislabeled with a `.6` suffix (e.g., the cycle 7 variable for febrile neutropenia was labeled `Febrile.Neutropenia.6`)
+	- **Scope:** Cycle 7, febrile neutropenia and electrolyte variables with incorrect suffix.
+	- **Impact:** Prevents cycle misalignment in analysis. No value changes.
+	- **Timeline:**
+		- 2025-12-02: Split original DAT-001 entry into DAT-001, DAT-021, and DAT-022.
+		- 2025-11-19: Confirmed during Zoom meeting that the columns with the ".6" suffix located in the cycle 7 data block did belong to cycle 7, and that the temporary fix was sufficient.
+		- 2025-11-16: Implemented temporary fix in `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`).
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
+	- **Resolution:** Renamed affected variables so cycle 7 columns use the `.7` suffix, and the correct cycle 6 columns retain the `.6` suffix.
 - [x] **DAT-002: Redundant data columns**
-	- *Resolved:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`).
-		- **Current location:** 
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
-		- **Current location:** 
-	- *Summary:* Several columns identified as duplicates or artifacts.
-	- *Details:*
-		- *Redundant Content:* `Febrile.Neutropenia` (duplicate of `ANC`) and `HyperK+` (duplicate of `HypoK+`) were removed for all cycles.
-		- *Duplicate Column:* `Hypernatramia.Na+.3` (identical to `Hyponatramia.Na+.3`) was removed.
-		- *Documentation Artifacts:* All `Cycle #` spacer columns removed.
-- [x] **DAT-003: Inconsistent Variable Naming**
-	- *Resolved:* [2025-11-28] in `01_data-cleaning.qmd` (Chunk: `fix_longitudinal-consistency`)
-		- **Current location:** .
-	- *Observed:*[2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_longitudinal-consistency`).
-		- **Current location:** 
-	- *Summary:* Several longitudinal variables had minor inconsistencies, missing suffixes, or typos.
-	- *Details:*
-		- *Harmonized:* Capitalized all stems (`DBIL`, `HB`, `TBIL`), realigned with original naming scheme (`HypoNa+`).
-		- *Corrected:* Applied missing suffixes (`Hospitalization.days.2`), fixed typos (`Hospitalization.required.due.to.toxicity?`).
+	- **Status:** Resolved
+	- **Created:** 2025-11-16
+	- **Last updated:** 2025-11-19
+	- **Location:** `01_data-cleaning.qmd` (chunk: `fix-duplicate-content`)
+	- **Summary:** Febrile neutropenia and ANC columns were identical within each cycle. Hypo/hyperkalemia columns were identical within each cycle. Cycle 3 contained a hypernatremia variable, which is nonexistent in all other cycles. Empty cycle label columns (e.g., `Cycle 10`) were present.
+	- **Scope:** All cycles; febrile neutropenia, hyperkalemia, and Cycle # variables. Cycle 3, `Hypernatramia.Na+.3`.
+	- **Impact:** Removed duplicate/redundant variables, prevents incorrect interpretation. No value changes.
+	- **Timeline:**
+		- 2025-11-19: Confirmed during Zoom meeting that the identical columns were due to an incomplete implementation of graded adverse events, and that the fix was sufficient.
+		- 2025-11-16: Implemented fix in `01_data-cleaning.qmd` (Chunk: `fix-duplicate-content`).
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-content`) during initial data import and inspection.
+	- **Resolution:** Removed febrile neutropenia, hyperkalemia and cycle label variables from all cycles. Removed `Hypernatramia.Na+.3`.
+- [x] **DAT-003: Inconsistent Longitudinal Variable Naming**
+	- **Status:** Resolved
+	- **Created:** 2025-11-16
+	- **Last updated:** 2026-11-28
+	- **Location:** `01_data-cleaning.qmd` (Chunk: `fix-longitudinal-consistency`)
+	- **Summary:** `DBIL`, `HB`, and `TBIL` variables had inconsistent capitalization across cycles. Some cycles used `HypoNatramia.Na+` while others used `HypoNa+`. Typo in `Hospitalization.required.due.to.toxicity?` variable in cycles 2 – 12. `Hospitalization.days.2` mislabeled as `Hospitalization.days`.
+	- **Scope:** All cycles, `DBIL`, `HB`, `TBIL`, `HypoNa+`, and `Hospitalization.required.due.to.toxicity?` variables. Cycle 2, `Hospitalization.days.2`
+	- **Impact:** Consistent variable naming for longitudinal data is very helpful during analysis.
+	- **Timeline:**
+		- 2025-11-28: Implemented final fix in `01_data-cleaning.qmd` (Chunk: `fix-longitudinal-consistency`).
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-longitudinal-consistency`) during initial data import and inspection.
+	- **Resolution:** Standardized capitalization of `DBIL`, `HB`, and `TBIL` variables. Renamed all `HypoNatramia.Na+.#` variables to `HypoNa+.#`. Fixed typo ("dur" instead of "due") in `Hospitalization.required.due.to.toxicity?` variables. Added appropriate `.2` suffix to `Hospitalization.days` in cycle 2.
 - [x] **DAT-011: General Variable Renaming**
 	- *Resolved:* [2025-11-29] in `01_data-cleaning.qmd` (Chunk: `apply_standard-names`).
 		- **Current location:** 
@@ -293,11 +360,16 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- *Data Correction:* Replace value of 1498 with 149.8 and recalculate BMI.
 	- *Task:* Determine correct value for `height_0` for this patient. Current value is 1498, suspect it should be 149.8.
 - [x] **DAT-004 [P3]: Zero comorbidities**
-	- *Resolved:* [2025-12-02] (Zoom meeting) Dr. Mazhindu confirmed that this is correct based on the source data.
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
-	- *Summary:* No patients have COPD, Kidney Disease, or Epilepsy recorded.
-	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-		- *No Action:* Assume data are correct.
+	- **Created:** 2025-11-16
+	- **Last updated:** 2025-12-02
+	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`)
+	- **Summary:** Data indicate that no patients have COPD, Kidney Disease, or Epilepsy recorded.
+	- **Scope:** `comorbid_copd`, `comorbid_ckd`, `comorbid_epilepsy` variables.
+	- **Impact:** Important to have accurate medical history information, and confirm when there's a possible anomaly.
+	- **Timeline:**
+		- 2025-12-02: Confirmed in Zoom meeting that no patients had a history of COPD, kidney disease, or epilepsy.
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`) during initial data import and inspection.
+	- **Resolution:** No action required, data were correct.
 - [x] **DAT-016 [P2]: Numeric Column as Character**
 	- *Resolved:* [2025-12-18] Applied definitive fix in `01_data-cleaning.qmd` (Chunk: `apply-manual-patches`). Removed temporary `if_else` coercion from `02_data-validation.qmd` (Chunk: `apply-type-coercion`).
 	- *Update:* [2025-12-02](Email from Dr. Mazhindu) Confirmed "pn" should be `28`.
@@ -326,12 +398,16 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 - [x] **TEC-006 [P2]: Fix 'File Path Too Long' Warnings**
     - **Status:** Resolved
 	- **Created:** 2025-12-02
-	- **Last updated:** 2026-01-13
-	- **Location:** 
-		- [2025-11-30] in `01_data-cleaning.qmd`
-		- [2025-12-02] in `02_data-cleaning.qmd`
+	- **Last updated:** 2026-01-16
+	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`
     - **Summary:** RStudio fails to copy font files to the cache because the OneDrive path exceeds 260 characters.
+	- **Scope:** Project
+	- **Impact:** Extra warning messages, persistent issues with file names being too long could lead to significant issues during analysis.
 	- **Timeline:**
-		- [2026-02-25] Copied project files to local directory and will need to manually copy updated files to OneDrive.
-		- [2025-12-02] Created Directory Junction from `.Rproj.user` to `C:/R_Cache/gi-cancer/`. (Result: Error persisted, likely due to RStudio accessing the project via the original long path).
-		- [2025-12-02] Set `embed-resources: false` in `_quarto.yml`. (Result: Error persisted during interactive chunk execution).
+		- 2026-01-16: Implemented minimal fix.
+		- 2025-12-02: Created Directory Junction from `.Rproj.user` to `C:/R_Cache/gi-cancer/`. (Result: Error persisted, likely due to RStudio accessing the project via the original long path).
+		- 2025-12-02: Set `embed-resources: false` in `_quarto.yml`. (Result: Error persisted during interactive chunk execution).
+		- 2025-12-02: Received similar warning message while working in `02_data-validation.qmd` (chunk: `assess-body-measurements`).
+		- 2025-11-30: Received warning message while working in `01_data-cleaning.qmd` about failing to copy font files to the cache because the OneDrive path exceeds 260 characters.
+	- **Resolution:** Copied project files to local directory and will need to manually copy updated files to OneDrive folder to avoid issues with OneDrive syncing.
+		- **Optional Task:** Set up automated script to upload any changes overnight, but this is low priority unless manual uploading is too unreliable.
