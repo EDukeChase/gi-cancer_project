@@ -81,25 +81,22 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 ## Data Integrity & Anomalies (DAT)
 *Issues regarding the accuracy, completeness, or logic of the raw data.*
 
-- [/] **DAT-007 [P2]: Empty `abli_score_0` and `cr_clear_0`**
+- [ ] **DAT-007 [P2]: Empty `abli_score_0` and `cr_clear_0`**
 	- **Status:** In Progress
 	- **Created:** 2025-11-16
-	- **Last updated:** 2026-01-16
+	- **Last updated:** 2025-12-05
 	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`)
 	- **Summary:** `albi_score_0` and `cr_clear_0` variables are both empty.
 	- **Scope:** `albi_score_0` and `cr_clear_0`.
 	- **Impact:** Empty variables can't be used for analysis.
+	- **Actions:**
+		- [ ] Look up formulas for ALBI score and Creatinine clearance in provided papers.
+		- [ ] Calculate values for `albi_score_0` and `cr_clear_0` for all patients with relevant information.
 	- **Timeline:**
-		- 
-	- *Update:* [2025-12-05] (Email from Dr. Mazhindu) Received DOI links for definitive formulas for both ALBI score and Creatinine Clearance.
-	- *Update:* [2025-12-02] (Zoom meeting) Dr. Mazhindu confirmed these are derived variables. Calculation formulas were not immediately available; follow-up email sent same day.
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
-		- **Current location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`).
-	- *Summary:* Columns are entirely empty.
-	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-		- *No Action:* Leave columns in place, do not include in analysis.
-	- *Task:* Confirm if data are missing, or if columns should be removed.
-- [/] **DAT-009 [P2]: Cycle 10 hospitalization variable**
+		- 2025-12-05: Received email from Dr. Mazhindhu containing DOI links for definitive formulas for both ALBI score and Creatinine Clearance.
+		- 2025-12-02: Learned during Zoom meeting that these are derived variables that can be calculated from other variables in our data.
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-content`) during initial data import and inspection.
+- [ ] **DAT-009 [P2]: Cycle 10 hospitalization variable**
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 		- **Current location:** 
 	- *Summary:* `Hospitalization.required...10` is identical to `Was.the.cycle.delayed...10`.
@@ -111,7 +108,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Update:* [2025-12-01](Email from Dr. Mazhindu) Will discuss during meeting.
 	- *Observed:* [2025-12-01] via email from Dr. Mazhindu [2025-10-08].
 	- *Summary:* `different_administered.csv` contains corrected administration counts for 6 patients.
-- [/] **DAT-019 [P2]: Extraneous cycle data**
+- [ ] **DAT-019 [P2]: Extraneous cycle data**
 	- *Update:* [2025-12-18] Removed cycle 12 data for record_id 146, updated cycles given data for record_id 27, 498, and 766 to reflect data presence in `01_data-cleaning.qmd` (Chunk: `apply_manual-patches`). For record_id 498, they don't have any bloodwork data.
 		- **Current location:** 
 	- *Update:* [2025-12-05] (Email from Dr. Mazhindu) Confirmed that for record_id 146, only cycle 1 was administered and cycle 12 values should be disregarded.
@@ -160,6 +157,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Update existing entries to the standardized structure as they are touched.
 		- [ ] Ensure timelines use YYYY-MM-DD date formating and that newest entries are listed first.
 	- **Timeline:**
+		- 2026-01-21: Reformatted DAT-005, DAT-006, DAT-007, and TEC-003.
 		- 2026-01-16: Reformatted DAT-001, DAT-021, DAT-022, DAT-002, DAT-003, DAT-004, TEC-003, and TEC-004.
 		- 2025-12-02: Create log entry.
 - [ ] **TEC-004 [P4]: Implement ID Cross-Referencing**
@@ -329,10 +327,17 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Details:*
 		- *Confirmation:* `Dr. Mazhindu confirmed that using `ANC` as a proxy for the analysis is acceptable given the lack of fever data. The deletion of the redundant column stands.
 - [x] **DAT-005 [P2]: Baseline vs. cycle 1 electrolytes**
-	- *Resolved:* [2025-12-02] During Zoom meeting, Dr. Mazhindu confirmed that data was recorded during cycle 1
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
-		- **Current location:** 
-	- *Summary:* `HypoNa+.1` is identical to `Baseline.Na+` (same for Potassium). This pattern does not hold for other biomarkers.
+	- **Status:** Resolved
+	- **Created:** 2025-11-16
+	- **Last updated:** 2025-12-02
+	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`)
+	- **Summary:** `HyperK+.1` and `HypoK+.1` are both identical to `Baseline.K+`, and `HypoNa+.1` is identical to `Baseline.Na+`. No other biomarkers exhibit this pattern.
+	- **Scope:** `HyperK+.1`, `HypoK+.1`, `Baseline.K+`, `HypoNa+.1`, `Baseline.Na+`
+	- **Impact:** Prevents double-counting baseline electrolytes and avoids misinterpreting pre-cycle-1 labs as cycle 1 measurements. No value changes.
+	- **Timeline:**
+		- 2025-12-02: Confirmed during Zoom meeting that this is likely due to these labs having been done before cycle 1 commenced, so were logged as both the baseline and the cycle 1 values. 
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-longitudinal-consistency`) during initial data import and inspection.
+	- **Resolution:** Treat baseline and cycle 1 sodium/potassium as redundant measures, and do not include both baseline and cycle 1 versions in the same analysis.
 - [x] **DAT-010 [P1]: Cancer stage encoding ambiguity**
 	- *Resolved:* [2025-12-02] Updated encoding in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`)
 		- **Current location:** 
@@ -360,6 +365,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- *Data Correction:* Replace value of 1498 with 149.8 and recalculate BMI.
 	- *Task:* Determine correct value for `height_0` for this patient. Current value is 1498, suspect it should be 149.8.
 - [x] **DAT-004 [P3]: Zero comorbidities**
+	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2025-12-02
 	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`)
@@ -379,13 +385,17 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Summary:* `ast_1` is stored as a character vector.
 		- *Investigation:* `record_id == 64` contains the value "pn" for `ast_1`.
 - [x] **DAT-006 [P2]: Empty `dbil_12`**
-	- *Resolved:* [2025-12-18] Confirmed as expected clinical/technical missingness; column left as all-NA numeric.
-	- *Update:* [2025-12-02] (Zoom meeting) Dr. Mazhindu confirmed that liver metabolites are sometimes omitted due to chemo toxicity profiles or lab-specific processing variations.
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
-	- *Summary:* Column is entirely empty, however there were other liver panel results for patients in cycle 12.
-	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
-		- *No Action:* Assume data are correct.
-	- *Task:* Confirm if this is expected missingness (not tested) or data loss.
+	- **Status:** Resolved
+	- **Created:** 2025-11-16
+	- **Last updated:** 2025-12-02
+	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`)
+	- **Summary:** The `dbil_12` column in cycle 12 is entirely empty, however there were other liver panel results for patients in cycle 12.
+	- **Scope:** `dbil_12` variable.
+	- **Impact:** Important to have accurate medical history information, and confirm when there's a possible anomaly.
+	- **Timeline:**
+		- 2025-12-02: Confirmed in Zoom meeting that the missingness is not unusual because liver panels tend to be done only when there are indications of liver damage, and some specific metabolites aren't included in certain panels.
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`) during initial data import and inspection.
+	- **Resolution:** No action required.
 - [x] **DAT-008 [P2]: Transfusion Data Inconsistency**
 	- *Resolved:* [2025-12-18] Applied manual patches for 6 records in `01_data-cleaning.qmd` (Chunk: `apply-manual-patches`) using corrected values.
 	- *Update:* [2025-12-05] (Email from Dr. Mazhindu) Received table of corrected values.

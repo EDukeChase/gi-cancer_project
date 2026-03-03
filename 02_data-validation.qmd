@@ -262,29 +262,84 @@ transfusion_long <- gic_encoded |>
   arrange(cycle)
 
 # Summarize by Cycle
+# transfusion_summary <- transfusion_long |> 
+#   group_by(cycle) |> 
+#   summarize(
+#     n_given = sum(transfusion_given == "Yes", na.rm = TRUE),
+#     
+#     # [DAT-008] Check for missing units (Given = Yes, Units = NA/0)
+#     missing_units = sum(transfusion_given == "Yes" & 
+#                         (is.na(transfusion_units) | transfusion_units == 0), na.rm = TRUE),
+#     
+#     # [DAT-008] Check for unexpected units (Given = No, Units > 0)
+#     unexpected_units = sum(transfusion_units > 0 & 
+#                            (transfusion_given != "Yes" | is.na(transfusion_given)), na.rm = TRUE),
+#     
+#     # [DAT-008] Original redundancy check (Given == Units)
+#     is_identical = identical(
+#       as.numeric(transfusion_given == "Yes"), 
+#       as.numeric(transfusion_units)
+#     )
+#   )
+
 transfusion_summary <- transfusion_long |> 
   group_by(cycle) |> 
   summarize(
-    n_given = sum(transfusion_given == "Yes", na.rm = TRUE),
+    n_rows = n(),
+    n_flag_yes = sum(transfusion_given == "Yes", na.rm = TRUE),
+    n_flag_no = sum(transfusion_given == "No", na.rm = TRUE),
+    n_flag_na = sum(is.na(transfusion_given)),
     
-    # [DAT-008] Check for missing units (Given = Yes, Units = NA/0)
-    missing_units = sum(transfusion_given == "Yes" & 
-                        (is.na(transfusion_units) | transfusion_units == 0), na.rm = TRUE),
+    n_units_na = sum(is.na(transfusion_units)),
+    n_units_present = sum(!is.na(transfusion_units)),
+    n_units_pos = sum(transfusion_units > 0, na.rm = TRUE),
+    n_units_zero = sum(transfusion_units == 0, na.rm = TRUE),
     
-    # [DAT-008] Check for unexpected units (Given = No, Units > 0)
-    unexpected_units = sum(transfusion_units > 0 & 
-                           (transfusion_given != "Yes" | is.na(transfusion_given)), na.rm = TRUE),
+    # Check for missing units (Given == Yes && !(Units > 0))
+    flag_yes_units_missing = sum(
+      transfusion_given == "Yes" & is.na(transfusion_units), na.rm = TRUE
+    ),
+    flag_yes_units_not_pos = sum(
+      transfusion_given == "Yes" & !is.na(transfusion_units) & transfusion_units <= 0, na.rm = TRUE
+    ),
     
-    # [DAT-008] Original redundancy check (Given == Units)
-    is_identical = identical(
-      as.numeric(transfusion_given == "Yes"), 
-      as.numeric(transfusion_units)
-    )
+    # Check for unexpected units (Given != Yes && Units > 0)
+    flag_not_yes_units_pos = sum(
+      (transfusion_given != "Yes" | is.na(transfusion_given)) &
+        !is.na(transfusion_units) & transfusion_units > 0, na.rm = TRUE
+    ),
+    
+    # Check for incomplete records (one recorded but not the other)
+    flag_missing_units_filled = sum(
+      is.na(transfusion_given) & !is.na(transfusion_units), na.rm = TRUE
+    ),
+    flag_filled_units_missing = sum(
+      !is.na(transfusion_given) & is.na(transfusion_units), na.rm = TRUE
+    ),
+    
+    # Check for invalid transfusion_units values
+    units_negative = sum(transfusion_units < 0, na.rm = TRUE),
+    
+    # Check for cases with transfusion_given and transfusion_units are the same
+    suspicious_units_equal_flag = {
+      idx <- !is.na(transfusion_given) & !is.na(transfusion_units)
+      given_01 <- as.integer(transfusion_given[idx] == "Yes")
+      units <- transfusion_units[idx]
+      length(units) > 0 && all(units %in% c(0, 1)) && all(units == given_01)
+    },
+    
+    .groups = "drop"
   )
 
 # Print Table
-error_rows <- which(transfusion_summary$missing_units > 0 | 
-                    transfusion_summary$unexpected_units > 0)
+error_rows <- which(
+  transfusion_summary$flag_yes_units_missing > 0 |
+  transfusion_summary$flag_yes_units_not_pos > 0 |
+  transfusion_summary$flag_not_yes_units_pos > 0 |
+  transfusion_summary$flag_missing_units_filled > 0 |
+  transfusion_summary$flag_filled_units_missing > 0 |
+  transfusion_summary$units_negative > 0
+)
 
 transfusion_summary |> 
   kbl(booktabs = TRUE, caption = "Transfusion Logic & Consistency Check") |> 
@@ -305,29 +360,41 @@ transfusion_summary |>
 ```{r}
 #| label: investigate-transfusion-records
 
-# Define the combined error condition (Given=Yes, Units=0/NA) OR (Units>0, Given=No/NA)
-transfusion_error_records <- transfusion_long |> 
+# Identify patient-cycle inconsistencies aligned with assess-transfusions summary logic
+
+transfusion_error_records <- transfusion_long |>
   filter(
-    # Check A: Given but Missing/Zero Units
-    (transfusion_given == "Yes" & (is.na(transfusion_units) | transfusion_units == 0)) |
-    
-    # Check B: Has Units but No/NA Flag
-    (transfusion_units > 0 & (transfusion_given != "Yes" | is.na(transfusion_given)))
-  ) |> 
-  
-  # Select the identifiers and context
-  select(record_id, pgh_number, cycle, transfusion_given, transfusion_units) |> 
+    # A1: Given == Yes but units missing
+    (transfusion_given == "Yes" & is.na(transfusion_units)) |
+
+    # A2: Given == Yes but units not positive (0 or negative)
+    (transfusion_given == "Yes" & !is.na(transfusion_units) & transfusion_units <= 0) |
+
+    # B: Given is No/NA (i.e., not Yes) but units > 0
+    ((transfusion_given != "Yes" | is.na(transfusion_given)) &
+       !is.na(transfusion_units) & transfusion_units > 0) |
+
+    # C1: Units recorded but flag missing (counts as incomplete record)
+    (is.na(transfusion_given) & !is.na(transfusion_units)) |
+
+    # C2: Flag recorded but units missing (counts as incomplete record)
+    (!is.na(transfusion_given) & is.na(transfusion_units)) |
+
+    # D: Invalid negative units
+    (!is.na(transfusion_units) & transfusion_units < 0)
+  ) |>
+  select(record_id, pgh_number, cycle, transfusion_given, transfusion_units) |>
   arrange(record_id, cycle)
 
 # Display the failed records
 if (nrow(transfusion_error_records) > 0) {
-  warning("Found ", nrow(transfusion_error_records), " individual cycle errors requiring review.")
-  transfusion_error_records |> 
-    kbl(caption = "Patient-Cycle Transfusion Inconsistencies") |> 
-    kable_styling(full_width = TRUE) |> 
+  warning("Found ", nrow(transfusion_error_records), " individual patient-cycle transfusion inconsistencies requiring review.")
+  transfusion_error_records |>
+    kbl(caption = "Patient-Cycle Transfusion Inconsistencies") |>
+    kable_styling(full_width = TRUE) |>
     scroll_box(height = "400px")
 } else {
-  message("All individual transfusion records are logically consistent.")
+  message("All individual transfusion records are logically consistent under current audit rules.")
 }
 ```
 
