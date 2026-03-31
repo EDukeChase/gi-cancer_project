@@ -96,6 +96,24 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- 2025-12-05: Received email from Dr. Mazhindhu containing DOI links for definitive formulas for both ALBI score and Creatinine Clearance.
 		- 2025-12-02: Learned during Zoom meeting that these are derived variables that can be calculated from other variables in our data.
 		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-content`) during initial data import and inspection.
+- [ ] **DAT-008 [P2]: Transfusion Data Inconsistency**
+    - **Status:** In progress
+	- **Created:** 2025-11-16
+	- **Last updated:** 2026-01-22
+	- **Location:** `01_data-cleaning.qmd`, `apply-manual-patches`; audit in `02_data-validation.qmd` (chunks: `assess-transfusions`, `investigate-transfusion-records`)
+    - **Summary:** Columns `transfusion_given` and `transfusion_units` show both redundant data entry and active inconsistencies.
+	- **Scope:** Transfusion variables across cycles. Affected record_ids include the 6 patched records, as well as 5 other records as seen in the output of `02_data-validation.qmd` (chunk: `investigate-transfusion-records`).
+	- **Impact:** Can bias transfusion relatedsummaries and any downstream safety/treatment-tolerance analyses if inconsistencies are not resolved.
+	- **Actions:**
+		- [x] Fix/extend mismatch detection logic to catch the overlooked case(s).
+		- [x] Re-run audit across all cycles and regenerate the list of affected record_ids/cycles.
+		- [ ] Determine whether additional manual patches are needed.
+	- **Timeline:**
+		- 2026-01-22: Reopened entry due to finding oversight in transfusion/units mismatch logic relating to NA handling and use of `identical()`. Discovered 5 new records with inconsistencies, but all are of the type where either `transfusion_given == NA` and `transfusion_units == 0` or `transfusion_given == "No"` and `transfusion_units == NA`). Will leave entry open, but assume these are all patients who did not receive a transfusion.
+		- 2025-12-18: Applied manual patches for 6 records in `01_data-cleaning.qmd`) (chunk: `apply-manual-patches`) using corrected values.
+		- 2025-12-05: Received table of corrected values in email from Dr. Mazhindu.
+		- 2025-12-02: Audit in `02_data-validation.qmd` (chunk: `assess-transfusions`) revealed active data mismatches (missing or unexpected blood units) in cycles outside the initial duplication list (email to Dr. Mazhindu on 2025-12-02 contains detailed list so you don't have to go restore an older version of the repo to see everything).
+		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-content`) that `transfusion_given` and `transfusion_units` variables were mathematically identical (implied 1 unit) in cycles 4, 7, 8, 9, and 11. For not, assume data are correct until this is clarified.
 - [ ] **DAT-009 [P2]: Cycle 10 hospitalization variable**
 	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
 		- **Current location:** 
@@ -127,15 +145,32 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Task:* Verify if these correspond exactly to the known `NA`s in Height, Weight, and BMI, or if valid data is being excluded.
 
 ## Methodology (MET)
-*Decisions affecting the statistical plan.*
+*Methodological and analytical decisions affecting the statistical plan.*
 
-- [ ] **MET-002 [P1]: Adverse Event Grading Rules**
-	- *Update:* [2025-12-02] During Zoom meeting, Dr. Mazhindu confirmed **NCI-CTCAE v5** as the definitive reference standard.
-		- *Status:* Document logged in Zotero
-		- *Next Step:* Update `data/grading_rules.csv` to match v5 criteria.
-	- *Observed:* [2020-11-29] in `NOrmal ranges and Adverse Events grading system.xlsx`
-	- *Summary:* Edge case ambiguity in adverse event grading criteria.
-	- *Task:* Secure a definitive reference standard from the Dr. Mazhindu. [Resolved 2025-12-02]
+- [ ] **MET-002 [P2]: Adverse Event Grading Rules**
+	- **Status:** In Progress
+	- **Type:** Inquiry
+	- **Created:** 2025-11-29
+	- **Last updated:** 2025-12-02
+	- **Location:** `02_data-validation.qmd` (chunk: `derive-adverse-events`); `data/grading_rules.csv`
+	- **Summary:** Edge case ambiguity in adverse event grading criteria require a definitive reference standard.
+	- **Decision:** NCI-CTCAE v5 confirmed as the reference standard by Dr. Mazhindu (2025-12-02).
+	- **Actions:**
+		- [x] Consult with Dr. Mazhindu regarding definitive reference standard to use.
+		- [ ] Update `data/grading_rules.csv` to match NCI-CTCAE v5 criteria.
+	- **Timeline:**
+		- 2025-12-02: Dr. Mazhindu confirmed NCI-CTCAE v5 as the definitive reference standard during Zoom meeting. Document logged in Zotero.
+		- 2025-11-29: Observed grading ambiguity in `NOrmal ranges and Adverse Events grading system.xlsx`, particularly with regards to edge cases and units.
+- [ ] **MET-003 [P3]: Adverse event summary measure**
+	- **Status**: Decided
+	- **Type:** Decision
+	- **Created:** 2026-??-??
+	- **Last updated:** 2026-03-04
+	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `engineer-ae-variables`, `tbl-ae-by-pt`, `tbl-ae-by-cycle`)
+	- **Summary:** Multiple candidate measures were explored for summarizing adverse event severity at both the patient- and cycle-levels. Patient-level candidates included `ae_max_grade_pt` `ae_mean_events`, `ae_mean_max_grade`, and `ae_mean_sum_grade`. Cycle-level candidates included `ae_sum_grade_#`, `ae_max_grade_#`, `ae_n_events_#`, and `ae_n_severe_#`. Unused variables were removed from `03_exploratory-data-analysis.qmd`, but can be found in the git history for full specifications and the original definition table.
+	- **Question:** Which summary measure best captures per-patient adverse event severity and is most interpretable?
+	- **Decision:** `ae_max_grade_pt` selected as the primary patient-level measure, and `ae_max_grade_#` selected as the primary cycle-level measure. `ae_n_events_#` and `ae_n_severe_#` were retained for possible use in future models, but all other candidates were removed from the analysis document.
+	- **Rationale:** Max grade is standard in the literature, while cumulative burden type measurements (e.g., `ae_mean_sum_grade`) are uncommon and not used frequently in similar analyses. Settled on decision after Zoom meeting with Dr. Hendricks and Dr. Mazhindu on 2026-03-04.
 
 ## Technical Tasks (TEC)
 *Action items for coding, refactoring, data cleaning, and validation scripts.*
@@ -157,6 +192,8 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Update existing entries to the standardized structure as they are touched.
 		- [ ] Ensure timelines use YYYY-MM-DD date formating and that newest entries are listed first.
 	- **Timeline:**
+		- 2026-01-28: Reformatted MET-002
+		- 2026-01-22: Reformatted DAT-008 and TEC-004.
 		- 2026-01-21: Reformatted DAT-005, DAT-006, DAT-007, and TEC-003.
 		- 2026-01-16: Reformatted DAT-001, DAT-021, DAT-022, DAT-002, DAT-003, DAT-004, TEC-003, and TEC-004.
 		- 2025-12-02: Create log entry.
@@ -396,15 +433,6 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- 2025-12-02: Confirmed in Zoom meeting that the missingness is not unusual because liver panels tend to be done only when there are indications of liver damage, and some specific metabolites aren't included in certain panels.
 		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`) during initial data import and inspection.
 	- **Resolution:** No action required.
-- [x] **DAT-008 [P2]: Transfusion Data Inconsistency**
-	- *Resolved:* [2025-12-18] Applied manual patches for 6 records in `01_data-cleaning.qmd` (Chunk: `apply-manual-patches`) using corrected values.
-	- *Update:* [2025-12-05] (Email from Dr. Mazhindu) Received table of corrected values.
-    - *Update:* [2025-12-02] Audit revealed active data mismatches (missing units/unexpected units) in cycles outside the initial duplication list.
-    - *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
-    - *Summary:* Columns `transfusion_given` and `transfusion_units` show both redundant data entry and active inconsistencies.
-    - *Original Observation (Duplication):* Columns were mathematically identical (implied 1 unit) in cycles 4, 7, 8, 9, and 11.
-    - *New Finding (Active Errors):* Found explicit errors where the `transfusion_given` flag contradicts the `units` count.
-    - *Temporary Resolution:* [2025-11-16] Assumed data were correct (No action taken on the columns yet).
 - [x] **TEC-006 [P2]: Fix 'File Path Too Long' Warnings**
     - **Status:** Resolved
 	- **Created:** 2025-12-02
