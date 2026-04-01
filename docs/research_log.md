@@ -161,16 +161,18 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Timeline:**
 		- 2025-12-02: Dr. Mazhindu confirmed NCI-CTCAE v5 as the definitive reference standard during Zoom meeting. Document logged in Zotero.
 		- 2025-11-29: Observed grading ambiguity in `NOrmal ranges and Adverse Events grading system.xlsx`, particularly with regards to edge cases and units.
-- [ ] **MET-003 [P3]: Adverse event summary measure**
-	- **Status**: Decided
+- [ ] **MET-004: Chemotherapy type grouping**
+	- **Status:** Decided
 	- **Type:** Decision
-	- **Created:** 2026-??-??
-	- **Last updated:** 2026-03-04
-	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `engineer-ae-variables`, `tbl-ae-by-pt`, `tbl-ae-by-cycle`)
-	- **Summary:** Multiple candidate measures were explored for summarizing adverse event severity at both the patient- and cycle-levels. Patient-level candidates included `ae_max_grade_pt` `ae_mean_events`, `ae_mean_max_grade`, and `ae_mean_sum_grade`. Cycle-level candidates included `ae_sum_grade_#`, `ae_max_grade_#`, `ae_n_events_#`, and `ae_n_severe_#`. Unused variables were removed from `03_exploratory-data-analysis.qmd`, but can be found in the git history for full specifications and the original definition table.
-	- **Question:** Which summary measure best captures per-patient adverse event severity and is most interpretable?
-	- **Decision:** `ae_max_grade_pt` selected as the primary patient-level measure, and `ae_max_grade_#` selected as the primary cycle-level measure. `ae_n_events_#` and `ae_n_severe_#` were retained for possible use in future models, but all other candidates were removed from the analysis document.
-	- **Rationale:** Max grade is standard in the literature, while cumulative burden type measurements (e.g., `ae_mean_sum_grade`) are uncommon and not used frequently in similar analyses. Settled on decision after Zoom meeting with Dr. Hendricks and Dr. Mazhindu on 2026-03-04.
+	- **Created:** 2026-03-31
+	- **Last updated:** 2026-03-31
+	- **Location:** `01_data-cleaning.qmd` (chunk: `collapse-chemo-type`)
+	- **Summary:** `chemo_type` originally had 8 levels. Three clinically similar levels were collapsed into a single group, and two empty levels were dropped, leaving four levels in the variable for analysis.
+	- **Question:** How should we handle only having 2-4 HIV-positive patients in three of the chemotherapy type levels? What about empty levels?
+	- **Decision:** Collapsed CapeOX, FOLFOX4, and Capecitabine into a single "Oxaliplatin/Fluoropyrimidine" group, and empty levels (Irinotecan and Other) were dropped from the variable.
+	- **Rationale:** CapeOX, FOLFOX4, and Capecitabine can be considered clinically equivalent for this analysis (confirmed by Dr. Mazhindu in a Zoom meeting on 2026-03-04). Each also had fewer than 5 HIV-positive patients, which is below our minimum threshold used throughout this preject. Empty levels were dropped to avoid downsteam issues.
+	- **Actions:**
+		- [ ] Verify with Dr. Mazhindu that this was the correct way to combine the chemo types.
 
 ## Technical Tasks (TEC)
 *Action items for coding, refactoring, data cleaning, and validation scripts.*
@@ -192,7 +194,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Update existing entries to the standardized structure as they are touched.
 		- [ ] Ensure timelines use YYYY-MM-DD date formating and that newest entries are listed first.
 	- **Timeline:**
-		- 2026-01-28: Reformatted MET-002
+		- 2026-03-31: Reformatted MET-002
 		- 2026-01-22: Reformatted DAT-008 and TEC-004.
 		- 2026-01-21: Reformatted DAT-005, DAT-006, DAT-007, and TEC-003.
 		- 2026-01-16: Reformatted DAT-001, DAT-021, DAT-022, DAT-002, DAT-003, DAT-004, TEC-003, and TEC-004.
@@ -449,3 +451,14 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- 2025-11-30: Received warning message while working in `01_data-cleaning.qmd` about failing to copy font files to the cache because the OneDrive path exceeds 260 characters.
 	- **Resolution:** Copied project files to local directory and will need to manually copy updated files to OneDrive folder to avoid issues with OneDrive syncing.
 		- **Optional Task:** Set up automated script to upload any changes overnight, but this is low priority unless manual uploading is too unreliable.
+
+- [x] **MET-003: Adverse event summary measure**
+	- **Status**: Decided
+	- **Type:** Decision
+	- **Created:** 2026-03-31
+	- **Last updated:** 2026-03-31
+	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `engineer-ae-variables`, `tbl-ae-by-pt`, `tbl-ae-by-cycle`)
+	- **Summary:** Multiple candidate measures were explored for summarizing adverse event severity at both the patient- and cycle-levels. Patient-level candidates included `ae_max_grade_pt` `ae_mean_events`, `ae_mean_max_grade`, and `ae_mean_sum_grade`. Cycle-level candidates included `ae_sum_grade_#`, `ae_max_grade_#`, `ae_n_events_#`, and `ae_n_severe_#`. Unused variables were removed from `03_exploratory-data-analysis.qmd`, but can be found in the git history for full specifications and the original definition table.
+	- **Question:** Which summary measure best captures per-patient adverse event severity and is most interpretable?
+	- **Decision:** `ae_max_grade_pt` selected as the primary patient-level measure, and `ae_max_grade_#` selected as the primary cycle-level measure. `ae_n_events_#` and `ae_n_severe_#` were retained for possible use in future models, but all other candidates were removed from the analysis document.
+	- **Rationale:** Max grade is standard in the literature, while cumulative burden type measurements (e.g., `ae_mean_sum_grade`) are uncommon and not used frequently in similar analyses. Settled on decision after Zoom meeting with Dr. Hendricks and Dr. Mazhindu on 2026-03-04.

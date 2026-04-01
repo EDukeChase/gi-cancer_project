@@ -841,6 +841,20 @@ gic_encoded <- gic_renamed |>
   )
 ```
 
+```{r}
+#| label: collapse-chemo-type
+
+# [MET-004] Collapse oxaliplatin-based regimens (CapeOX, FOLFOX4, and 
+# Capecitabine) into a single level
+
+gic_encoded <- gic_encoded |> 
+  mutate(
+    chemo_type = fct_collapse(chemo_type,
+      "Oxaliplatin/Fluoropyrimidine" = c("CapeOX", "FOLFOX4", "Capecitabine")
+    ) |> fct_drop()
+  )
+```
+
 :::{.callout-warning collapse="false"}
 ### Warning: Encoding anomalies flagged
 
@@ -863,6 +877,9 @@ gic_encoded <- gic_renamed |>
 * `death_date` imported as `POSIXct`.
   * Coerced to Date.
 :::
+
+
+
 
 # Encoding Audit
 ## Audit Helper Functions
@@ -904,8 +921,10 @@ audit_factor_logic <- function(df_pre, df_post, var_list) {
     ) |> 
       count(variable, raw_value, new_label) |> 
       filter(!is.na(raw_value)) |> 
-      
-      mutate(is_error = is.na(new_label))
+      mutate(is_error = is.na(new_label)) |>
+      group_by(variable, new_label) |>
+      mutate(is_collapsed = !is.na(new_label) & n_distinct(raw_value) > 1) |>
+      ungroup()
   }) |> 
     arrange(variable, as.numeric(raw_value))
 }
@@ -916,6 +935,7 @@ format_factor_audit_table <- function(audit_df) {
   # Identify rows for coloring
   row_pass <- which(!audit_df$is_error)
   row_fail <- which(audit_df$is_error)
+  row_collapsed <- which(audit_df$is_collapsed)
   
   audit_df |>
     arrange(variable, raw_value) |> 
@@ -927,6 +947,7 @@ format_factor_audit_table <- function(audit_df) {
     # Apply coloring
     row_spec(row_pass, background = cb_light[1]) |> 
     row_spec(row_fail, background = cb_light[2]) |> 
+    row_spec(row_collapsed, background = cb_light[6]) |> 
     
     scroll_box(height = "400px")
 }
