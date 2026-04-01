@@ -97,7 +97,7 @@ gic_models <- gic_validated |>
   left_join(ae_cycle_wide, by = c("record_id", "cycles_prescribed", "cycles_given"))
 ```
 
-## Summary of new adverse event (AE) variables
+## Adverse Event Variables
 
 | Variable                  | Level   | Type         | Meaning                                                                                                          |
 | ------------------------- | ------- | ------------ | ---------------------------------------------------------------------------------------------------------------- |
@@ -115,7 +115,7 @@ gic_models <- gic_validated |>
 
 
 
-## Patient-Level Adverse Event Variables
+## Patient-Level AE Summaries
 ```{r}
 #| label: tbl-ae-by-pt
 #| tbl-cap: "Patient-level AE summaries by HIV status."
@@ -186,8 +186,7 @@ pt_wide |>
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
 
-## Cycle-Level Adverse Event 
-
+## Cycle-Level AE Summaries
 ```{r}
 #| label: tbl-ae-by-cycle
 #| tbl-cap: "Cycle-level AE summaries by HIV status."
@@ -249,12 +248,6 @@ for (status in split(ae_cycle_summ, ae_cycle_summ$hiv_status)) {
 }
 ```
 
-
-
-
-# Plots for Adverse Event Metrics
-## Plots of Patient-Level Adverse Event Metrics
-
 ```{r}
 #| label: plt-ae-max-grade-pt
 #| fig-cap: "Distribution of maximum AE grade by HIV status."
@@ -277,8 +270,6 @@ gic_models |>
   theme_minimal()
 ```
 
-
-## Plots of Cycle-Level Adverse Event Metrics
 
 ```{r}
 #| label: prep-ae-cycle-plot-data
@@ -423,6 +414,7 @@ table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |>
   add_header_above(c("Cancer Stage" = 1, "HIV Status" = 2))
 ```
 
+## Patient & Treatment Characteristics
 ```{r}
 #| label: tbl-chemo-type-by-hiv
 #| tbl-cap: "Chemotherapy type by HIV status: patient counts, within-group proportions, and cycles prescribed"
@@ -576,9 +568,6 @@ hiv_summ |>
   opt_footnote_marks(marks = "extended")
 ```
 
-
-
-
 ```{r}
 #| label: tbl-tx-intent-vs-hiv-status
 #| tbl-cap: "Treatment intent vs HIV status"
@@ -643,6 +632,7 @@ table_severe_early |>
   add_header_above(c("Severe Early AE" = 1, "HIV Status" = 2))
 ```
 
+## Treatment Completion
 
 ```{r}
 #| label: plt-density-cycles-rx
@@ -709,9 +699,8 @@ p_main / p_table + plot_layout(heights = c(4, 1))
 
 
 # Model Building
-## Any (Severe) Adverse Events as Outcomes
-### Simple Logistic: Full treatment period
-#### Simple logistic model of any adverse events by HIV status
+## Severe Adverse Events as Outcome
+### Unadjusted model
 ```{r}
 #| label: model-any-simple
 
@@ -722,7 +711,7 @@ model_any_simple <- glm(ae_any_pt ~ hiv_status,
 ```
 Invalid model due to having a 100% adverse event rate in the HIV-positive group.
 
-#### Simple logistic model of any severe adverse events by HIV status
+### Adjusted model
 ```{r}
 #| label: model-severe-simple
 
@@ -839,8 +828,8 @@ table_any_early |>
 <!-- print(chisq.test(table_severe_early)) -->
 <!-- ``` -->
 
-## HIV as Outcome
-### Simple Logistic:
+## HIV Status as Outcome
+### Unadjusted model
 ```{r}
 #|label: model-hiv-simple
 
@@ -890,7 +879,7 @@ model_hiv_simple |>
 
 
 
-### Basic Logistic
+### Adjusted model
 ```{r}
 #| label: model-hiv-basic
 
@@ -926,6 +915,8 @@ summary(model_hiv_basic)
 <!--   kbl(booktabs = TRUE) |> -->
 <!--   kable_styling(full_width = FALSE, position = "left") -->
 <!-- ``` -->
+
+### Model comparison
 ```{r}
 #| label: tbl-hiv-or-comparison
 #| tbl-cap: "Logistic regression: HIV status — unadjusted vs adjusted odds ratios"
@@ -1093,7 +1084,7 @@ tbl_merge(
 ```
 
 
-# Exploring Hospital Stays Due to Toxicity by HIV Status
+# Toxicity-Related Hospitalizations
 ```{r}
 #| label: prep-hosp-days
 
@@ -1125,7 +1116,7 @@ hosp_pt <- hosp_long |>
 
 ```
 
-## Table of Toxicity-Related Hospitalization by HIV status
+## Summary by HIV Status
 ```{r}
 #| label: tbl-hosp-by-pt
 #| tbl-cap: "Hospital days attributable to toxicity by HIV status"
@@ -1187,7 +1178,7 @@ hosp_maxgrade_cycle <- hosp_long |>
   mutate(ae_measured = ae_n_markers_measured > 0)
 ```
 
-## Toxicity-Related Hospitalization Based on Number of Severe Adverse Events
+## Hospitalizations by AE Severity
 ```{r}
 #| label: tbl-hosp-vs-severe
 
@@ -1233,7 +1224,6 @@ ggplot(hosp_severe_summ, aes(x = ae_n_severe, y = mean_hosp_days, color = hiv_st
   theme_minimal()
 ```
 
-## Toxicity-Related Hospitalization Based on Max Adverse Event Grade
 ```{r}
 #| label: tbl-hosp-vs-max-grade
 #| tbl-cap: "Hospital days vs max AE grade in cycle, by HIV status (among cycles with any AE grading recorded)"
@@ -1256,9 +1246,6 @@ hosp_maxgrade_cycle |>
   kbl(booktabs = TRUE, align = "lccc") |>
   kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
 ```
-
-
-
 
 ```{r}
 #| label: plt-hosp-vs-max-grade
@@ -1284,7 +1271,7 @@ ggplot(hosp_maxgrade_summ, aes(x = ae_max_grade, y = mean_hosp_days, color = hiv
   theme_minimal()
 ```
 
-## Hospitalization regression
+## Regression Models
 
 
 ```{r}
@@ -1334,6 +1321,645 @@ summary(model_hosp_days)
 AE severity has minimal impact on length of stay for either group once someone is already hospitalized, although HIV positive patients are expected to spend slightly longer in the hospital than HIV negative patients for each unit increase in max adverse event experienced.
 
 
+# Early Treatment Dropout
+
+```{r}
+#| label: prep-early-dropout
+
+early_dropout_cycles <- 4  # patients who stopped at or before this cycle count as early dropouts
+
+# Add early dropout flag to gic_models
+gic_models <- gic_models |>
+  mutate(
+    early_dropout = as.integer(
+      cycles_given <= early_dropout_cycles & cycles_prescribed > early_dropout_cycles
+    )
+  )
+```
+
+## Descriptive Overview
+
+This section looks at whether the types of adverse events patients experience in their first few cycles are associated with stopping treatment early, and whether that relationship looks different for HIV-positive vs HIV-negative patients.
+
+```{r}
+#| label: tbl-early-dropout-by-hiv
+#| tbl-cap: "Early treatment discontinuation by HIV status at two cycle cutoffs"
+
+map_df(c(2, 4), function(cutoff) {
+  gic_models |>
+    mutate(dropout = as.integer(cycles_given <= cutoff & cycles_prescribed > cutoff)) |>
+    group_by(hiv_status) |>
+    summarize(
+      n_total     = n(),
+      n_dropout   = sum(dropout == 1, na.rm = TRUE),
+      pct_dropout = round(100 * n_dropout / n_total, 1),
+      .groups     = "drop"
+    ) |>
+    mutate(
+      cutoff            = cutoff,
+      `Early dropout, n (%)` = paste0(n_dropout, " (", pct_dropout, "%)")
+    )
+}) |>
+  select(hiv_status, cutoff, `Total patients` = n_total, `Early dropout, n (%)`) |>
+  pivot_wider(
+    names_from  = cutoff,
+    values_from = `Early dropout, n (%)`,
+    names_glue  = "Cutoff ≤{cutoff} cycles"
+  ) |>
+  rename(`HIV Status` = hiv_status, `Total patients` = `Total patients`) |>
+  gt() |>
+  tab_spanner(
+    label   = "Early dropout, n (%)",
+    columns = starts_with("Cutoff")
+  ) |>
+  tab_footnote(
+    footnote = "Early dropout defined as cycles given ≤ cutoff among patients prescribed more than the cutoff number of cycles.",
+    location = cells_column_spanners()
+  ) |>
+  opt_footnote_marks(marks = "extended") |>
+  cols_align(align = "center", columns = -`HIV Status`) |>
+  cols_align(align = "left",   columns = `HIV Status`)
+```
+
+For each AE type, the predictor used is the max grade recorded across cycles 1 to 4. Where no grade was recorded for a given AE type in that window, it's been set to 0, on the assumption that if nothing was flagged there was probably nothing to flag. That's a more reasonable assumption for the liver panel markers, which Dr. Mazhindu said are usually only ordered when there's a clinical reason to, than it is for something like hemoglobin or platelets where a missing value might just mean the data wasn't entered. It was done this way mainly because doing a complete case analysis instead would have left only 97 patients and 26 early dropout events, which isn't really enough to work with. This is worth coming back to before the analysis is finalized.
+
+Sodium and potassium grades also don't distinguish between high and low abnormalities, so hypokalemia and hyperkalemia end up collapsed into the same grade variable. This can be revisited later, but I'm leaving it as is for the moment because the models below already have more regressors than ideal. See MET-005 and DAT-024.
+
+```{r}
+#| label: prep-ae-early-dropout
+
+ae_labels <- c(
+  hb        = "Anemia",
+  plt       = "Thrombocytopenia",
+  wbc       = "Leukopenia",
+  anc       = "Neutropenia",
+  lcc       = "Lymphopenia",
+  sodium    = "Sodium abnormality",
+  potassium = "Potassium abnormality",
+  alb       = "Hypoalbuminemia",
+  tbil      = "Hyperbilirubinemia",
+  alp       = "Elevated ALP",
+  alt       = "Elevated ALT",
+  ast       = "Elevated AST"
+)
+
+# Max grade per AE type across cycles 1-early_dropout_cycles
+# Patients with no recorded grade for a given AE type in this window
+# are excluded from that AE type's predictor (not treated as grade 0)
+ae_early <- ae_long |>
+  filter(cycle <= early_dropout_cycles, !is.na(grade)) |>
+  group_by(record_id, ae_type) |>
+  summarize(max_grade_early = max(grade, na.rm = TRUE), .groups = "drop") |>
+  left_join(
+    gic_models |> select(record_id, hiv_status, early_dropout),
+    by = "record_id"
+  ) |>
+  filter(!is.na(early_dropout))
+
+# Wide format for modeling — one row per patient, one col per AE type
+ae_types <- unique(ae_early$ae_type)
+
+ae_early_wide <- ae_early |>
+  pivot_wider(
+    names_from  = ae_type,
+    values_from = max_grade_early
+  ) |>
+  mutate(
+    # All missing AE grades imputed to 0 — absence of a recorded grade treated
+    # as no adverse event. Less defensible for some markers (e.g. plt, hb) than
+    # for liver panels, but necessary to retain full sample for LASSO.
+    # Revisit imputation strategy when time permits.
+    across(all_of(ae_types), ~ replace_na(.x, 0))
+  ) |>
+  left_join(
+    gic_models |> select(record_id, hiv_status, early_dropout),
+    by = c("record_id", "hiv_status", "early_dropout")
+  )
+```
+
+```{r}
+#| label: tbl-ae-early-dropout
+#| tbl-cap: "Adverse event grades in cycles 1–4 by early dropout status and HIV status"
+
+ae_early |>
+  mutate(ae_label = ae_labels[ae_type]) |>
+  group_by(hiv_status, early_dropout, ae_label) |>
+  summarize(
+    n_any    = sum(max_grade_early > 0, na.rm = TRUE),
+    med      = median(max_grade_early, na.rm = TRUE),
+    n_severe = sum(max_grade_early >= 3, na.rm = TRUE),
+    .groups  = "drop"
+  ) |>
+  mutate(
+    dropout_label = if_else(early_dropout == 1, "Early dropout", "Completed >4 cycles"),
+    cell          = paste0(n_any, " / ", round(med, 1), " / ", n_severe)
+  ) |>
+  select(hiv_status, ae_label, dropout_label, cell) |>
+  pivot_wider(
+    names_from  = c(hiv_status, dropout_label),
+    values_from = cell,
+    names_glue  = "{hiv_status}: {dropout_label}"
+  ) |>
+  select(
+    ae_label,
+    `Negative: Completed >4 cycles`,
+    `Negative: Early dropout`,
+    `Positive: Completed >4 cycles`,
+    `Positive: Early dropout`
+  ) |>
+  rename(`Adverse event` = ae_label) |>
+  gt() |>
+  tab_spanner(
+    label   = "HIV Negative",
+    columns = starts_with("Negative")
+  ) |>
+  tab_spanner(
+    label   = "HIV Positive",
+    columns = starts_with("Positive")
+  ) |>
+  cols_label(
+    `Negative: Completed >4 cycles` = "Completed >4",
+    `Negative: Early dropout`        = "Early dropout",
+    `Positive: Completed >4 cycles`  = "Completed >4",
+    `Positive: Early dropout`         = "Early dropout"
+  ) |>
+  cols_align(align = "center", columns = -`Adverse event`) |>
+  cols_align(align = "left",   columns = `Adverse event`) |>
+  tab_footnote(
+    footnote = "Cells show: n with any AE / median max grade / n with severe AE (grade ≥ 3)",
+    location = cells_column_spanners()
+  ) |>
+  opt_footnote_marks(marks = "extended")
+```
+
+The heatmap below gives a quick visual overview of where the grade differences between early dropout and completed patients are largest, and whether those patterns look similar across HIV groups.
+
+```{r}
+#| label: plt-ae-early-dropout-heatmap
+#| fig-cap: "Median max AE grade in cycles 1–4 by AE type, early dropout status, and HIV status"
+
+ae_early |>
+  group_by(hiv_status, early_dropout, ae_type) |>
+  summarize(
+    median_grade = median(max_grade_early, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    dropout_label = if_else(early_dropout == 1, "Early dropout", "Completed ≥5 cycles"),
+    facet_label   = paste0("HIV ", hiv_status)
+  ) |>
+  ggplot(aes(x = dropout_label, y = ae_type, fill = median_grade)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = round(median_grade, 1)), size = 3) +
+  scale_fill_viridis_c(option = "magma", direction = -1, 
+                       limits = c(0, 4), name = "Median\nmax grade") +
+  facet_wrap(~ facet_label) +
+  labs(
+    x = NULL,
+    y = "Adverse event type"
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 20, hjust = 1),
+    strip.text  = element_text(face = "bold")
+  )
+```
+
+Before moving to the models, it's worth checking how many patients in each HIV group actually experienced each type of adverse event. AE types with very few patients in either group are excluded from both the LASSO and the univariate models since there isn't enough data to estimate anything reliable for them.
+
+```{r}
+#| label: tbl-ae-coverage
+#| tbl-cap: "AE grade coverage in cycles 1–4: patients with any recorded adverse event by HIV status"
+
+ae_early_wide |>
+  select(hiv_status, early_dropout, all_of(ae_types)) |>
+  pivot_longer(
+    cols      = all_of(ae_types),
+    names_to  = "ae_type",
+    values_to = "grade"
+  ) |>
+  group_by(ae_type, hiv_status) |>
+  summarize(
+    n_total    = n(),
+    n_any_ae   = sum(grade > 0, na.rm = TRUE),
+    pct_any_ae = round(100 * n_any_ae / n_total, 1),
+    .groups    = "drop"
+  ) |>
+  mutate(
+    ae_label = ae_labels[ae_type],
+    `n (%)` = paste0(n_any_ae, " (", pct_any_ae, "%)")
+  ) |>
+  select(ae_label, hiv_status, `n (%)`) |>
+  pivot_wider(
+    names_from  = hiv_status,
+    values_from = `n (%)`,
+    names_prefix = "HIV "
+  ) |>
+  rename(`Adverse event` = ae_label) |>
+  gt() |>
+  tab_spanner(
+    label   = "Patients with any AE (grade > 0)",
+    columns = starts_with("HIV")
+  ) |>
+  cols_align(align = "left",   columns = `Adverse event`) |>
+  cols_align(align = "center", columns = -`Adverse event`) |>
+  tab_footnote(
+    footnote = paste0(
+      "Among patients with cycles given ≤ ", early_dropout_cycles,
+      " or prescribed > ", early_dropout_cycles, " cycles. ",
+      "AE types with 0 patients in either group cannot be evaluated in LASSO or univariate models."
+    ),
+    location = cells_column_spanners()
+  ) |>
+  opt_footnote_marks(marks = "extended")
+```
+
+## LASSO Regression
+
+With 25 candidate predictors and only 72 early dropout events, a standard logistic regression would be badly overfit. LASSO handles this by penalizing the model complexity, shrinking small coefficients to zero, which effectively does variable selection at the same time as model fitting. The penalty strength is chosen by 10-fold cross-validation using the more conservative `lambda.1se` rule, which tends to select fewer predictors than the minimum error option. Any AE types where everyone ends up with a grade of 0 after imputation are also dropped before fitting since they have no useful information and cause numerical problems during standardization.
 
 
+```{r}
+#| label: prep-lasso-matrix
+
+library(glmnet)
+
+# Build predictor matrix — one row per patient, AE type max grades + HIV status + interactions
+# Patients excluded listwise per AE type due to NA handling above, so complete cases only
+
+lasso_data <- ae_early_wide |>
+  filter(!is.na(early_dropout)) |>
+  mutate(hiv_pos = as.integer(hiv_status == "Positive"))
+
+# AE grade columns only
+ae_cols <- intersect(ae_types, names(lasso_data))
+
+# Build matrix with interactions manually — glmnet doesn't take formula syntax
+x_base <- lasso_data |>
+  select(all_of(ae_cols), hiv_pos) |>
+  as.matrix()
+
+# Interaction terms: each AE grade × HIV status
+x_interact <- sweep(
+  lasso_data |> select(all_of(ae_cols)) |> as.matrix(),
+  1,
+  lasso_data$hiv_pos,
+  "*"
+)
+colnames(x_interact) <- paste0(ae_cols, ":hiv_pos")
+
+x_mat <- cbind(x_base, x_interact)
+
+# Keep only complete cases before scaling
+complete_idx <- complete.cases(x_mat)
+x_mat <- x_mat[complete_idx, ]
+y_vec <- lasso_data$early_dropout[complete_idx]
+
+cat("Patients with complete AE data for LASSO:", sum(complete_idx), "\n")
+cat("Early dropouts in complete case sample:", sum(y_vec), "\n")
+
+# Drop predictors with fewer than 5 patients with any non-zero grade
+# in either HIV status group — too sparse for reliable estimation
+sparse_ae <- ae_early_wide |>
+  select(hiv_status, all_of(ae_cols)) |>
+  pivot_longer(cols = all_of(ae_cols), names_to = "ae_type", values_to = "grade") |>
+  group_by(ae_type, hiv_status) |>
+  summarize(n_any = sum(grade > 0, na.rm = TRUE), .groups = "drop") |>
+  group_by(ae_type) |>
+  filter(any(n_any < 5)) |>
+  pull(ae_type) |>
+  unique()
+
+if (length(sparse_ae) > 0) {
+  cat("Dropping sparse AE predictors (< 5 patients with any grade in at least one HIV group):\n")
+  cat(paste(ae_labels[sparse_ae], collapse = ", "), "\n\n")
+  
+  # Remove main effects and interaction terms for sparse AE types
+  sparse_cols <- c(sparse_ae, paste0(sparse_ae, ":hiv_pos"))
+  sparse_cols <- intersect(sparse_cols, colnames(x_mat))
+  x_mat <- x_mat[, !colnames(x_mat) %in% sparse_cols]
+}
+
+# Drop zero-variance columns before scaling — these are uninformative and
+# produce NaN when standardized (sd = 0), which glmnet treats as NA
+zero_var <- apply(x_mat, 2, var, na.rm = TRUE) == 0
+if (any(zero_var)) {
+  cat("Dropping zero-variance columns:", 
+      paste(colnames(x_mat)[zero_var], collapse = ", "), "\n")
+  x_mat <- x_mat[, !zero_var]
+}
+
+# Standardize after filtering
+x_mat <- scale(x_mat)
+```
+
+```{r}
+#| label: fit-lasso-cv
+
+set.seed(4534174)
+
+# Cross-validated LASSO to select lambda
+# Using lambda.1se for parsimony — selects fewer variables
+cv_lasso <- cv.glmnet(
+  x        = x_mat,
+  y        = y_vec,
+  family   = "binomial",
+  alpha    = 1,          # LASSO (alpha = 1), not ridge
+  nfolds   = 10,
+  type.measure = "deviance"
+)
+
+lambda_use <- cv_lasso$lambda.1se
+
+cat("Selected lambda (1se):", round(lambda_use, 4), "\n")
+cat("Selected lambda (min):", round(cv_lasso$lambda.min, 4), "\n")
+
+plot(cv_lasso)
+```
+
+LASSO doesn't produce standard confidence intervals, so bootstrap stability selection is used to get a sense of which predictors are reliably selected rather than just selected by chance. The full cross-validated LASSO is re-run on each of 10,000 bootstrap resamples, and for each predictor we track how often it ends up with a non-zero coefficient. Predictors that show up consistently across resamples are more trustworthy than ones that only occasionally get selected. The coefficients and CIs reported in the table below are also computed from the bootstrap distribution, but only from the resamples where the predictor was actually selected, so they give a cleaner picture of effect size than if the zero-coefficient resamples were included.
+
+```{r}
+#| label: fit-lasso-bootstrap
+#| cache: true
+
+library(parallel)
+library(doParallel)
+
+set.seed(4534174)
+n_boot  <- 10000
+n_cores <- detectCores() - 2
+
+cl <- makeCluster(n_cores)
+registerDoParallel(cl)
+
+boot_results_raw <- foreach(
+  i         = seq_len(n_boot),
+  .combine  = rbind,
+  .packages = "glmnet"
+) %dopar% {
+  idx    <- sample(nrow(x_mat), replace = TRUE)
+  x_boot <- x_mat[idx, ]
+  y_boot <- y_vec[idx]
+
+  if (length(unique(y_boot)) < 2) return(rep(NA_real_, ncol(x_mat)))
+
+  cv_boot <- suppressWarnings(
+    cv.glmnet(
+      x            = x_boot,
+      y            = y_boot,
+      family       = "binomial",
+      alpha        = 1,
+      nfolds       = 10,
+      type.measure = "deviance"
+    )
+  )
+
+  as.numeric(coef(cv_boot, s = "lambda.1se")[-1])
+}
+
+stopCluster(cl)
+
+# Reconstruct coefficient and selection matrices
+boot_coefs               <- boot_results_raw
+colnames(boot_coefs)     <- colnames(x_mat)
+boot_selected            <- boot_coefs != 0
+boot_selected[is.na(boot_coefs)] <- FALSE
+
+boot_results <- tibble(
+  predictor      = colnames(x_mat),
+  selection_freq = colMeans(boot_selected, na.rm = TRUE),
+  coef_median    = apply(boot_coefs, 2, median,   na.rm = TRUE),
+  coef_q25       = apply(boot_coefs, 2, quantile, 0.25, na.rm = TRUE),
+  coef_q75       = apply(boot_coefs, 2, quantile, 0.75, na.rm = TRUE),
+  coef_q025      = apply(boot_coefs, 2, quantile, 0.025, na.rm = TRUE),
+  coef_q975      = apply(boot_coefs, 2, quantile, 0.975, na.rm = TRUE)
+) |>
+  arrange(desc(selection_freq))
+```
+
+```{r}
+#| label: tbl-lasso-results
+#| tbl-cap: "LASSO bootstrap results: predictor selection frequency and coefficient estimates"
+
+# Compute CIs conditional on selection only — excludes resamples where
+# coefficient was shrunk to zero, giving a cleaner picture of effect size
+selected_ci <- map_df(colnames(boot_coefs), function(col) {
+  x_nonzero <- boot_coefs[, col]
+  x_nonzero <- x_nonzero[x_nonzero != 0 & !is.na(x_nonzero)]
+  tibble(
+    predictor     = col,
+    coef_q025_sel = if (length(x_nonzero) >= 10) quantile(x_nonzero, 0.025) else NA_real_,
+    coef_q975_sel = if (length(x_nonzero) >= 10) quantile(x_nonzero, 0.975) else NA_real_
+  )
+})
+
+boot_results <- boot_results |>
+  left_join(selected_ci, by = "predictor")
+
+# Flag interaction terms and clean labels for display
+boot_results |>
+  mutate(
+    type = if_else(str_detect(predictor, ":hiv_pos"), "Interaction", "Main effect"),
+    clean_name = str_remove(predictor, ":hiv_pos"),
+    clean_name = case_when(
+      clean_name == "hiv_pos"          ~ "HIV Positive",
+      clean_name %in% names(ae_labels) ~ ae_labels[clean_name],
+      TRUE                             ~ clean_name
+    ),
+    predictor = if_else(
+      type == "Interaction",
+      paste0(clean_name, " \u00d7 HIV"),
+      clean_name
+    )
+  ) |>
+  select(-clean_name) |>
+  filter(selection_freq > 0) |>
+  select(
+    Predictor        = predictor,
+    Type             = type,
+    `Selection freq` = selection_freq,
+    `Median coef`    = coef_median,
+    `95% CI (lower)` = coef_q025_sel,
+    `95% CI (upper)` = coef_q975_sel
+  ) |>
+  mutate(
+    `Selection freq` = scales::percent(`Selection freq`, accuracy = 0.1),
+    across(c(`Median coef`, `95% CI (lower)`, `95% CI (upper)`), ~ round(.x, 3))
+  ) |>
+  gt() |>
+  tab_row_group(label = "Interaction terms", rows = Type == "Interaction") |>
+  tab_row_group(label = "Main effects",      rows = Type == "Main effect") |>
+  cols_hide(Type) |>
+  cols_align(align = "left",   columns = Predictor) |>
+  cols_align(align = "center", columns = -Predictor) |>
+  tab_footnote(
+    footnote = "Selection frequency = proportion of 1000 bootstrap resamples in which predictor was selected at lambda.1se. 95% CI is conditional on selection (excludes resamples where coefficient was zero); NA indicates fewer than 10 non-zero resamples.",
+    location = cells_column_labels(columns = `Selection freq`)
+  ) |>
+  opt_footnote_marks(marks = "extended")
+```
+
+
+The LASSO coefficients are penalized so they can't be read directly as odds ratios. The univariate models below complement the LASSO by fitting a standard logistic regression per AE type, with a grade × HIV status interaction term, giving proper ORs and p-values that are easier to interpret clinically. The interaction term is the main thing of interest here, since it tells us whether the relationship between AE severity and early dropout looks different depending on HIV status. P-values are BH-adjusted across all tests, and the same sparse AE types excluded from the LASSO are excluded here too.
+
+## Univariate Logistic Models
+
+```{r}
+#| label: fit-univariate-ae-models
+
+# One logistic model per AE type — early dropout ~ max grade in cycles 1-4 + HIV status
+# Patients with no recorded grade for a given AE type are excluded from that model
+univariate_results <- map_df(ae_types, function(at) {
+  dat <- ae_early_wide |>
+    filter(!is.na(.data[[at]]), !is.na(early_dropout), !is.na(hiv_status))
+
+  if (sum(dat$early_dropout) < 10) {
+    return(tibble(ae_type = at, note = "Insufficient early dropout cases", .rows = 1))
+  }
+
+  if (at %in% sparse_ae) {
+    return(tibble(ae_type = at, note = "Sparse — excluded per coverage check", .rows = 1))
+  }
+
+  mod <- glm(
+    as.formula(paste0("early_dropout ~ `", at, "` * hiv_status")),
+    data   = dat,
+    family = binomial
+  )
+
+  tidy(mod, conf.int = TRUE, exponentiate = TRUE) |>
+    filter(str_detect(term, at)) |>
+    mutate(
+      ae_type    = at,
+      term_label = if_else(
+        str_detect(term, "hiv_status"),
+        "AE grade × HIV Positive",
+        "AE grade (main effect)"
+      )
+    )
+}) |>
+  filter(!is.na(estimate)) |>
+  mutate(p_adj = p.adjust(p.value, method = "BH"))
+```
+
+```{r}
+#| label: tbl-univariate-ae-results
+#| tbl-cap: "Univariate logistic regression: association between AE type max grade and early dropout (adjusted for HIV status)"
+
+# Sample sizes per AE type for context
+ae_sample_sizes <- map_df(ae_types, function(at) {
+  dat <- ae_early_wide |>
+    filter(!is.na(early_dropout), !is.na(hiv_status))
+  
+  dat |>
+    group_by(hiv_status) |>
+    summarize(
+      n_nonzero        = sum(.data[[at]] > 0),
+      n_events_nonzero = sum(.data[[at]] > 0 & early_dropout == 1),
+      .groups          = "drop"
+    ) |>
+    mutate(
+      ae_type  = at,
+      cell     = paste0(n_nonzero, " (", n_events_nonzero, ")")
+    ) |>
+    select(ae_type, hiv_status, cell) |>
+    pivot_wider(names_from = hiv_status, values_from = cell,
+                names_glue = "n_{hiv_status}")
+})
+
+# Order AE types by LASSO selection frequency of main effect terms
+ae_order <- boot_results |>
+  filter(!str_detect(predictor, ":hiv_pos")) |>  # main effects only
+  filter(predictor %in% ae_types) |>
+  arrange(desc(selection_freq)) |>
+  mutate(ae_label = ae_labels[predictor]) |>
+  pull(ae_label)
+
+# Any AE types not in boot_results (dropped as sparse/zero-variance) go at the end
+ae_order <- c(ae_order, setdiff(ae_labels, ae_order))
+
+univariate_results |>
+  left_join(ae_sample_sizes, by = "ae_type") |>
+  mutate(
+    ae_label      = ae_labels[ae_type],
+    ae_label      = factor(ae_label, levels = ae_order),
+    `OR (95% CI)` = paste0(round(estimate, 2), " (", round(conf.low, 2), "–", round(conf.high, 2), ")"),
+    `p (adj)`     = map_chr(p_adj, format_p),
+    `p (raw)`     = map_chr(p.value, format_p)
+  ) |>
+  arrange(ae_label, term_label) |>
+  select(
+    `Adverse event`  = ae_label,
+    `Term`           = term_label,
+    `HIV-: n (drop)` = n_Negative,
+    `HIV+: n (drop)` = n_Positive,
+    `OR (95% CI)`,
+    `p (raw)`,
+    `p (adj)`
+  ) |>
+  gt() |>
+  tab_row_group(
+    label = "AE grade × HIV interaction",
+    rows  = Term == "AE grade × HIV Positive"
+  ) |>
+  tab_row_group(
+    label = "AE grade main effect (HIV adjusted)",
+    rows  = Term == "AE grade (main effect)"
+  ) |>
+  cols_hide(Term) |>
+  cols_align(align = "left",   columns = `Adverse event`) |>
+  cols_align(align = "center", columns = -`Adverse event`) |>
+  tab_footnote(
+    footnote = "Main effect OR: change in odds of early dropout per one-unit increase in max AE grade, holding HIV status constant. Interaction OR: difference in that association for HIV-positive vs HIV-negative patients. N (events) = patients with any grade > 0 for this AE type / early dropouts among those patients. p-values BH-adjusted across all tests.",
+    location = cells_column_labels(columns = `p (adj)`)
+  ) |>
+  opt_footnote_marks(marks = "extended")
+```
+
+To make the HIV comparison more concrete, the table below shows estimated ORs separately for HIV-negative and HIV-positive patients. The HIV-positive OR is derived by multiplying the main effect OR by the interaction OR, since those add on the log-odds scale. There's no direct standard error for the HIV-positive OR from the model, so treat those as directional estimates rather than something to draw firm conclusions from.
+
+```{r}
+#| label: tbl-univariate-hiv-pos-or
+#| tbl-cap: "Estimated odds ratios for early dropout per unit increase in max AE grade among HIV-positive patients"
+
+univariate_results |>
+  select(ae_type, term_label, estimate, p_adj) |>
+  pivot_wider(names_from = term_label, 
+              values_from = c(estimate, p_adj)) |>
+  mutate(
+    ae_label   = factor(ae_labels[ae_type], levels = ae_order),
+    or_hiv_pos = `estimate_AE grade (main effect)` * `estimate_AE grade × HIV Positive`
+  ) |>
+  arrange(ae_label) |>
+  mutate(
+    `OR (HIV-)` = round(`estimate_AE grade (main effect)`, 3),
+    `p (HIV-)`  = map_chr(`p_adj_AE grade (main effect)`, format_p),
+    `OR (HIV+)` = round(or_hiv_pos, 3),
+    `p (interaction)` = map_chr(`p_adj_AE grade × HIV Positive`, format_p)
+  ) |>
+  select(
+    `Adverse event`   = ae_label,
+    `OR (HIV-)`,
+    `p (HIV-)`,
+    `OR (HIV+)`,
+    `p (interaction)`
+  ) |>
+  gt() |>
+  tab_spanner(
+    label   = "HIV Negative",
+    columns = c(`OR (HIV-)`, `p (HIV-)`)
+  ) |>
+  tab_spanner(
+    label   = "HIV Positive",
+    columns = c(`OR (HIV+)`, `p (interaction)`)
+  ) |>
+  cols_align(align = "left",   columns = `Adverse event`) |>
+  cols_align(align = "center", columns = -`Adverse event`) |>
+  tab_footnote(
+    footnote = "ORs reflect change in odds of early dropout per unit increase in max AE grade. OR (HIV+) = main effect OR × interaction OR. p-values are BH-adjusted; p (interaction) tests whether the association differs between HIV groups.",
+    location = cells_column_spanners(spanners = "HIV Positive")
+  ) |>
+  opt_footnote_marks(marks = "extended")
+```
 

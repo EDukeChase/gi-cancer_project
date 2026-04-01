@@ -143,7 +143,20 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- **Current location:** 
     - *Summary:* `ggplot` warning: "Removed 21 rows containing non-finite values".
     - *Task:* Verify if these correspond exactly to the known `NA`s in Height, Weight, and BMI, or if valid data is being excluded.
-
+- [ ] **DAT-024 [P2]: Missing hypernatremia grading rules**
+	- **Status:** Open
+	- **Created:** 2026-03-31
+	- **Last updated:** 2026-03-31
+	- **Location:** `data/grading_rules.csv`; `02_data-validation.qmd` (chunk: `derive-adverse-events`)
+	- **Summary:** `grading_rules.csv` contains grading rules for hyponatremia but is missing rules for hypernatremia.
+	- **Scope:** `sodium_#` variables across all cycles; all patients with sodium > 145.
+	- **Impact:** Hypernatremia cases are silently excluded from all adverse event analyses, potentially underestimating sodium-related AE burden.
+	- **Actions:**
+		- [ ] Add hypernatremia grading rows to `grading_rules.csv` per NCI-CTCAE v5: Grade 1 (>145–150), Grade 2 (>150–155), Grade 3 (>155–160), Grade 4 (>160).
+		- [ ] Re-run `derive-adverse-events` after updating rules and re-save `gic_validated.rds`.
+		- [ ] Re-run downstream analyses after regenerating graded data.
+	- **Timeline:**
+		- 2026-03-31: Identified while investigating sodium and potassium grading structure ahead of early dropout analysis. Confirmed 48 observations above normal range currently ungraded.
 
 ## Methodology (MET)
 *Methodological and analytical decisions affecting the statistical plan.*
@@ -155,10 +168,11 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Last updated:** 2025-12-02
 	- **Location:** `02_data-validation.qmd` (chunk: `derive-adverse-events`); `data/grading_rules.csv`
 	- **Summary:** Edge case ambiguity in adverse event grading criteria require a definitive reference standard.
-	- **Decision:** NCI-CTCAE v5 confirmed as the reference standard by Dr. Mazhindu (2025-12-02).
+	- **Decision:** NCI-CTCAE v5 will be used as the primary reference standard per Dr. Mazhindu (2025-12-02). For lower limit of normal (LLN) values, and in cases where the CTCAE specifies clinical consequences for a grade rather than numeric threshold, `NOrmal ranges and Adverse Events grading system.xlsx` will be referenced.
 	- **Actions:**
 		- [x] Consult with Dr. Mazhindu regarding definitive reference standard to use.
 		- [ ] Update `data/grading_rules.csv` to match NCI-CTCAE v5 criteria.
+		- [ ] Note any grades uniquely defined in `NOrmal ranges and Adverse Events grading system.xlsx`.
 	- **Timeline:**
 		- 2025-12-02: Dr. Mazhindu confirmed NCI-CTCAE v5 as the definitive reference standard during Zoom meeting. Document logged in Zotero.
 		- 2025-11-29: Observed grading ambiguity in `NOrmal ranges and Adverse Events grading system.xlsx`, particularly with regards to edge cases and units.
@@ -174,6 +188,25 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Rationale:** CapeOX, FOLFOX4, and Capecitabine can be considered clinically equivalent for this analysis (confirmed by Dr. Mazhindu in a Zoom meeting on 2026-03-04). Each also had fewer than 5 HIV-positive patients, which is below our minimum threshold used throughout this preject. Empty levels were dropped to avoid downsteam issues.
 	- **Actions:**
 		- [ ] Verify with Dr. Mazhindu that this was the correct way to combine the chemo types.
+- **MET-005 [P3]: Early Treatment Discontinuation Analysis**
+	- **Status:** In Progress
+	- **Type:** Decision
+	- **Created:** 2026-03-31
+	- **Last updated:** 2026-04-01
+	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `prep-early-dropout`, `prep-ae-early-dropout`, `prep-lasso-matrix`, `fit-lasso-cv`, `fit-lasso-bootstrap`, `fit-univariate-ae-models`)
+	- **Summary:** Several analytical decisions were made regarding the definition of early dropout, predictor construction, handling of missing AE grades, and choice of statistical methods for identifying AE types associated with early treatment discontinuation.
+	- **Question:** Which patients constitute early dropouts, how should AE predictors be constructed, and what statistical approach best identifies which AE types are associated with early discontinuation and whether that association differs by HIV status?
+	- **Decision:**
+		- **Early dropout definition:** Patients who completed ≤4 cycles among those prescribed >4 cycles (`cycles_given ≤ 4 & cycles_prescribed > 4`). Cutoff of 4 was chosen over 2 to increase outcome events (72 vs 53), improving model stability — particularly important given the small HIV-positive subgroup (15 vs 12 early dropouts).
+		- **Predictor construction:** Max CTCAE grade across cycles 1–4 per AE type, consistent with MET-003. Patients with no recorded grade for a given AE type were imputed to 0 rather than excluded, to retain the full sample for LASSO. This decision was driven by sample size constraints — complete case analysis yielded only 97 patients and 26 early dropouts. Imputation is least defensible for CBC markers (e.g., hemoglobin, platelets) where missingness may not reflect absence of abnormality; revisit when time permits.
+		- **Sparse predictor exclusion:** AE types with fewer than 5 patients with any non-zero grade in either HIV status group were excluded from LASSO and univariate models. Elevated ALT, Elevated AST, Thrombocytopenia, and Hyperbilirubinemia were dropped on this basis.
+		- **Zero-variance exclusion:** Columns with no variation after imputation (sd = 0) were dropped before scaling, as these produce NaN during standardization and are uninformative for LASSO.
+		- **Statistical approach:** Two complementary methods were used. (1) LASSO logistic regression with bootstrap stability selection (1000 resamples, lambda.1se) — includes all retained AE type main effects, HIV status, and AE × HIV interaction terms; addresses "which AE types jointly predict early dropout." (2) Univariate logistic regression with AE grade × HIV status interaction per AE type, BH-adjusted across all tests — addresses "does each AE type's association with early dropout differ by HIV status" with interpretable ORs.
+		- **Hyper/hypo electrolyte collapse:** Sodium and potassium each capture both high and low abnormalities in a single grade variable (direction lost during grade parsing in `ae_long`). This is a known limitation — hyperkalemia and hypokalemia, for example, have different clinical presentations and may have different relationships with early dropout. Flagged for future work; see also DAT-024.
+	- **Rationale:** Cutoff of 4 cycles aligns with Tinashe's framing of "early" treatment cycles as a clinically meaningful window. LASSO was chosen over standard logistic regression due to the high predictor-to-outcome-event ratio. Bootstrap stability selection was used in place of standard inference since LASSO coefficients are penalized and classical confidence intervals do not apply. Univariate models complement the LASSO by providing interpretable effect sizes and formal tests for the HIV interaction. Discussed with Dr. Hendricks and Dr. Mazhindu, 2026-03-04.
+	- **Timeline:**
+		- 2026-04-01: Preliminary analysis completed and decisions documented.
+		- 2026-03-31: Preliminary analysis started
 
 ## Technical Tasks (TEC)
 *Action items for coding, refactoring, data cleaning, and validation scripts.*
