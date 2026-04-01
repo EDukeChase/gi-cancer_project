@@ -63,7 +63,7 @@
 | potassium\_# | Potassium | Numeric | **Ref:** 3.5 - 5.2 |
 | **Longitudinal - Liver Function** |  |  |  |
 | tp\_# | Total Protein | Numeric | **Ref:** |
-| alb\_# | Srum Albumin (g/L) | Numeric | **Ref:** 35 - 55 |
+| alb\_# | Serum Albumin (g/L) | Numeric | **Ref:** 35 - 55 |
 | tbil\_# | Total Bilirubin | Numeric | **Ref:** 3.0 - 20.0 |
 | dbil\_# | Direct bilirubin | Numeric | **Ref:** |
 | alp\_# | Alkaline phosphatase | Numeric | **Ref:** 20.0 - 130.0 |

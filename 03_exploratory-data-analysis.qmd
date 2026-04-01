@@ -424,15 +424,160 @@ table(Stage = gic_models$cancer_stage, HIV = gic_models$hiv_status) |>
 ```
 
 ```{r}
-#| label: tbl-chemo-type-vs-hiv-status
-#| tbl-cap: "Chemotherapy type vs HIV status"
+#| label: tbl-chemo-type-by-hiv
+#| tbl-cap: "Chemotherapy type by HIV status: patient counts, within-group proportions, and cycles prescribed"
 
-table(Chemo = gic_models$chemo_type, HIV = gic_models$hiv_status) |>
-  as.data.frame.matrix() |>
-  kbl(booktabs = TRUE) |>
-  kable_styling(full_width = FALSE, position = "left") |>
-  add_header_above(c("Chemo Type" = 1, "HIV Status" = 2))
+chemo_hiv_summ <- gic_models |>
+  group_by(hiv_status, chemo_type) |>
+  summarize(
+    n = n(),
+    cycles_med_iqr = summ_median_iqr(cycles_prescribed),
+    .groups = "drop"
+  ) |>
+  group_by(hiv_status) |>
+  mutate(pct = round(100 * n / sum(n), 1),
+         `n (%)` = paste0(n, " (", pct, "%)")) |>
+  ungroup() |>
+  select(hiv_status, chemo_type, `n (%)`, cycles_med_iqr)
+
+neg <- chemo_hiv_summ |> filter(hiv_status == "Negative") |>
+  select(chemo_type, `Neg: n (%)` = `n (%)`, `Neg: med (IQR)` = cycles_med_iqr)
+
+pos <- chemo_hiv_summ |> filter(hiv_status == "Positive") |>
+  select(chemo_type, `Pos: n (%)` = `n (%)`, `Pos: med (IQR)` = cycles_med_iqr)
+
+# Fisher's exact test per chemo type for assignment proportions
+chemo_levels <- levels(gic_models$chemo_type)
+
+fisher_pvals <- map_dbl(chemo_levels, function(ct) {
+  tab <- table(
+    assigned = gic_models$chemo_type == ct,
+    hiv      = gic_models$hiv_status
+  )
+  fisher.test(tab)$p.value
+})
+
+# Wilcoxon rank-sum test per chemo type for cycles prescribed
+wilcox_pvals <- map_dbl(chemo_levels, function(ct) {
+  dat <- gic_models |> filter(chemo_type == ct)
+  if (n_distinct(dat$hiv_status) < 2) return(NA_real_)
+  wilcox.test(cycles_prescribed ~ hiv_status, data = dat, exact = FALSE)$p.value
+})
+
+# Apply BH correction
+fisher_padj <- p.adjust(fisher_pvals, method = "BH")
+wilcox_padj <- p.adjust(wilcox_pvals, method = "BH")
+
+format_p <- function(p) {
+  if (is.na(p)) return("—")
+  if (p < 0.001) return("<0.001")
+  as.character(round(p, 3))
+}
+
+pval_df <- tibble(
+  chemo_type         = chemo_levels,
+  `p (asgmt)`   = map_chr(fisher_padj, format_p),
+  `p (cycles)`       = map_chr(wilcox_padj, format_p)
+)
+
+
+neg |>
+  left_join(pos,     by = "chemo_type") |>
+  left_join(pval_df, by = "chemo_type") |>
+  rename(`Chemotherapy type` = chemo_type) |>
+  select(
+    `Chemotherapy type`,
+    `Neg: n (%)`, `Pos: n (%)`, `p (asgmt)`,
+    `Neg: med (IQR)`, `Pos: med (IQR)`, `p (cycles)`
+  ) |>
+  gt() |>
+  tab_spanner(
+    label = "Chemo assignment",
+    columns = c(`Neg: n (%)`, `Pos: n (%)`, `p (asgmt)`)
+  ) |>
+  tab_spanner(
+    label = "Cycles prescribed",
+    columns = c(`Neg: med (IQR)`, `Pos: med (IQR)`, `p (cycles)`)
+  ) |>
+  cols_align(align = "center", columns = -`Chemotherapy type`) |>
+  cols_align(align = "left",   columns = `Chemotherapy type`) |> 
+  tab_footnote(
+    footnote = "Fisher's exact tests; Wilcoxon rank-sum tests",
+    location = cells_column_labels(columns = c(`p (asgmt)`, `p (cycles)`))
+    ) |> 
+  opt_footnote_marks(marks = "extended")
 ```
+
+```{r}
+#| label: tbl-cancer-site-summary
+#| tbl-cap: "Cancer site by HIV status and chemotherapy assignment"
+
+cancer_levels <- levels(gic_models$cancer_site)
+chemo_levels  <- levels(gic_models$chemo_type)
+
+# HIV status distribution by cancer site
+hiv_summ <- gic_models |>
+  group_by(cancer_site, hiv_status) |>
+  summarize(n = n(), .groups = "drop") |>
+  group_by(cancer_site) |>
+  mutate(pct = round(100 * n / sum(n), 1),
+         `n (%)` = paste0(n, " (", pct, "%)")) |>
+  ungroup() |>
+  select(cancer_site, hiv_status, `n (%)`) |>
+  pivot_wider(names_from = hiv_status, values_from = `n (%)`,
+              names_prefix = "HIV ") |>
+  rename(`Cancer site` = cancer_site)
+
+# Fisher's exact test per cancer site for HIV status distribution
+fisher_site_pvals <- map_dbl(cancer_levels, function(cs) {
+  tab <- table(
+    hiv  = gic_models$hiv_status,
+    site = gic_models$cancer_site == cs
+  )
+  if (any(tab < 5)) return(NA_real_)
+  fisher.test(tab)$p.value
+})
+fisher_site_padj <- p.adjust(fisher_site_pvals, method = "BH")
+
+hiv_summ <- hiv_summ |>
+  mutate(`p (HIV)` = map_chr(fisher_site_padj, format_p))
+
+# Chemo assignment by cancer site
+chemo_summ <- gic_models |>
+  group_by(cancer_site, chemo_type) |>
+  summarize(n = n(), .groups = "drop") |>
+  group_by(cancer_site) |>
+  mutate(pct = round(100 * n / sum(n), 1),
+         `n (%)` = paste0(n, " (", pct, "%)")) |>
+  ungroup() |>
+  select(cancer_site, chemo_type, `n (%)`) |>
+  pivot_wider(names_from = chemo_type, values_from = `n (%)`,
+              values_fill = "0 (0%)") |>
+  rename(`Cancer site` = cancer_site)
+
+# Join
+hiv_summ |>
+  left_join(chemo_summ, by = "Cancer site") |>
+  gt() |>
+  tab_spanner(
+    label = "HIV status",
+    columns = c(`HIV Negative`, `HIV Positive`, `p (HIV)`)
+  ) |>
+  tab_spanner(
+    label = "Chemotherapy assignment",
+    columns = all_of(chemo_levels)
+  ) |>
+  cols_align(align = "center", columns = -`Cancer site`) |>
+  cols_align(align = "left",   columns = `Cancer site`) |>
+  tab_footnote(
+  footnote = "BH adjusted Fisher's exact test, only applied where all cells n ≥ 5.",
+  location = cells_column_labels(columns = `p (HIV)`)
+) |>
+  opt_footnote_marks(marks = "extended")
+```
+
+
+
 
 ```{r}
 #| label: tbl-tx-intent-vs-hiv-status
@@ -642,41 +787,26 @@ summary(model_severe_basic)
 #| label: tbl-severe-multivariate-or
 #| tbl-cap: "Adjusted Odds Ratios for Severe Adverse Events (Grades 3-4)"
 
-tidy(model_severe_basic, conf.int = TRUE, exponentiate = TRUE) |>
-  filter(term != "(Intercept)") |>
-  mutate(
-    Term = case_when(
-      term == "hiv_statusPositive" ~ "HIV Positive",
-      term == "cancer_stageStage III" ~ "Stage III",
-      term == "cancer_stageStage IV" ~ "Stage IV",
-      term == "chemo_typePlatinum/5-FU" ~ "Platinum/5-FU",
-      term == "chemo_typeLCV/5-FU" ~ "LCV/5-FU",
-      term == "chemo_typeCapeOX" ~ "CapeOX",
-      term == "chemo_typeFOLFOX4" ~ "FOLFOX4",
-      term == "chemo_typeCapecitabine" ~ "Capecitabine",
-      term == "tx_intentPalliative" ~ "Palliative Intent",
-      TRUE ~ term
+model_severe_basic |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      hiv_status   ~ "HIV Status",
+      cancer_stage ~ "Cancer Stage",
+      chemo_type   ~ "Chemotherapy Regimen",
+      tx_intent    ~ "Treatment Intent"
     ),
-    `OR (95% CI)` = paste0(round(estimate, 2), " (",
-                           round(conf.low, 2), " - ",
-                           round(conf.high, 2), ")"),
-    p.value = if_else(p.value < 0.001, "<0.001", as.character(round(p.value, 3))),
-    std.error = round(std.error, 3)
+    pvalue_fun = label_style_pvalue(
+      digits = 3
+    ),
+    add_estimate_to_reference_rows = TRUE
   ) |>
-  select(Term, `OR (95% CI)`, `Std. Error` = std.error, `P-value` = p.value) |>
-  # Reference rows for clarity
-  add_row(Term = "HIV Negative (Ref)", `OR (95% CI)` = "1.00", .before = 1) |>
-  add_row(Term = "Stage II (Ref)", `OR (95% CI)` = "1.00", .before = 3) |>
-  add_row(Term = "Platinum/Paclitaxel (Ref)", `OR (95% CI)` = "1.00", .before = 6) |>
-  add_row(Term = "Curative Intent (Ref)", `OR (95% CI)` = "1.00", .before = 12) |>
-  kbl(booktabs = TRUE) |>
-  kable_styling(full_width = FALSE, position = "left") |>
-  pack_rows("HIV Status", 1, 2) |>
-  pack_rows("Cancer Stage", 3, 5) |>
-  pack_rows("Chemotherapy Regimen", 6, 11) |>
-  pack_rows("Treatment Intent", 12, 13)
+  bold_labels() |> 
+  italicize_levels() |> 
+  bold_p() |> 
+  add_global_p(keep = TRUE) |> 
+  add_glance_source_note(include = c(nobs, AIC))
 ```
-
 
 
 ### $\chi^2$ Tests (HIV vs Early Events)
@@ -717,6 +847,19 @@ table_any_early |>
 model_hiv_simple <- glm(hiv_status ~ ae_max_grade_pt, data = gic_models, family = binomial)
 
 summary(model_hiv_simple)
+
+model_hiv_simple |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      ae_max_grade_pt ~ "Max CTCAE grade"
+    ),
+    pvalue_fun = label_style_pvalue(
+      digits = 3
+    ),
+    add_estimate_to_reference_rows = TRUE
+  ) |>
+  bold_labels()
 ```
 
 
@@ -807,9 +950,7 @@ tbl_basic <- model_hiv_basic |>
 tbl_merge(
   list(tbl_simple, tbl_basic),
   tab_spanner = c("Unadjusted", "Adjusted")
-) |>
-  as_kable_extra(booktabs = TRUE) |>
-  kable_styling(full_width = FALSE, position = "left")
+)
 ```
 
 **Summary:** Both the unadjusted and adjusted models with HIV status as outcome indicate that each one unit increase in max AE grade across all treatment cycles is associated with between 28-34% higher odds of the patient being HIV positive. In the adjusted model, higher cancer stages were not reliably associated with being HIV positive. For chemo type there does seem to be a pretty clear difference in treatment options associated with HIV positive status. There does not appear to be any association between treatment intent and HIV status.
@@ -864,6 +1005,92 @@ gic_models |>
 ```
 
 All pts with a large Cook's D are HIV positive, but I haven't immediately spotted any other commonality amongst them to explain the group collectively being so influential, will have to do more investigation.
+
+
+
+## Cycles Prescribed as Outcome
+```{r}
+#| label: model-cycles-full
+
+# Full cycles prescribed model
+model_cycles_full <- glm(
+  cycles_prescribed ~ hiv_status + cancer_site + cancer_stage + chemo_type + tx_intent,
+  data   = gic_models,
+  family = poisson
+)
+```
+```{r}
+#| label: model-cycles-no-site
+
+# Cycles prescribed model without cancer site
+model_cycles_no_site <- glm(
+  cycles_prescribed ~ hiv_status + cancer_stage + chemo_type + tx_intent,
+  data   = gic_models,
+  family = poisson
+)
+```
+```{r}
+#| label: tbl-cycles-models
+#| tbl-cap: "Poisson regression: cycles prescribed (exponentiated coefficients = rate ratios)"
+
+tbl_full <- model_cycles_full |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      hiv_status   ~ "HIV Status",
+      cancer_site  ~ "Cancer Site",
+      cancer_stage ~ "Cancer Stage",
+      chemo_type   ~ "Chemotherapy Type",
+      tx_intent    ~ "Treatment Intent"
+    )
+  ) |>
+  bold_labels() |> 
+  italicize_levels() |> 
+  bold_p() |> 
+  add_global_p(keep = TRUE) |> 
+  add_vif(statistic = "aGVIF")
+
+tbl_no_site <- model_cycles_no_site |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      hiv_status   ~ "HIV Status",
+      cancer_stage ~ "Cancer Stage",
+      chemo_type   ~ "Chemotherapy Type",
+      tx_intent    ~ "Treatment Intent"
+    )
+  ) |>
+  bold_labels() |> 
+  italicize_levels() |> 
+  bold_p() |> 
+  add_global_p(keep = TRUE) |> 
+  add_vif(statistic = "aGVIF")
+
+lrt_p <- anova(model_cycles_no_site, model_cycles_full, test = "LRT")$`Pr(>Chi)`[2]
+
+
+tbl_merge(
+  list(tbl_no_site, tbl_full),
+  tab_spanner = c("Without cancer site", "With cancer site")
+) |>
+  as_gt() |>
+  tab_source_note(
+    source_note = paste0(
+      "Model without cancer site: AIC = ", round(AIC(model_cycles_no_site), 1),
+      ", N = ", nobs(model_cycles_no_site),
+      " | Model with cancer site: AIC = ", round(AIC(model_cycles_full), 1),
+      ", N = ", nobs(model_cycles_full)
+    )
+  ) |>
+  tab_source_note(
+    source_note = paste0(
+      "LRT (with vs without cancer site): p = ",
+      round(anova(model_cycles_no_site, model_cycles_full, 
+                  test = "LRT")$`Pr(>Chi)`[2], 3)
+    )
+  )
+  
+```
 
 
 # Exploring Hospital Stays Due to Toxicity by HIV Status

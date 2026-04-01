@@ -2,6 +2,7 @@
 library(broom)              # 
 library(broom.helpers)      # 
 library(car)                # VIF
+library(gt)                 # HTML optimized tables
 library(gtsummary)          # 
 library(here)               # Robust file paths
 library(kableExtra)         # Table formatting

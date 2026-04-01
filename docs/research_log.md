@@ -144,6 +144,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - *Summary:* `ggplot` warning: "Removed 21 rows containing non-finite values".
     - *Task:* Verify if these correspond exactly to the known `NA`s in Height, Weight, and BMI, or if valid data is being excluded.
 
+
 ## Methodology (MET)
 *Methodological and analytical decisions affecting the statistical plan.*
 
@@ -235,6 +236,17 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- 2025-12-12 — Observed inconsistent/noncompliant chunk naming in `01_data-cleaning.qmd`, `02_data-validation.qmd`.
 - [ ] **TEC-009 [P3] Fine-grained lab missingness audit**
 	- *Task:* Develop secondary audit to check for internal lab panel completeness (e.g., cases where LFT is present but CBC is missing within a cycle)
+- [ ] **TEC-010 [P4]: Switch table rendering from kableExtra to gt**
+	- **Status:** In Progress
+	- **Created:** 2026-03-31
+	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `03_exploratory-data-analysis.qmd`
+	- **Summary:** Tables are currently rendered using `kableExtra` and `kbl()`. Switching to `gt` (and `gtsummary` where already in use) for cleaner HTML output and more maintainable syntax, particularly for complex tables with multi-level headers and grouped rows.
+	- **Actions:**
+		- [ ] Rewrite remaining `kbl()`-based tables in `03_exploratory-data-analysis.qmd` using `gt`.
+		- [ ] Rewrite `kbl()`-based tables in `02_data-validation.qmd` using `gt`.
+		- [ ] Rewrite `kbl()`-based tables in `01_data-cleaning.qmd` using `gt`.
+	- **Timeline:**
+		- 2026-03-31: Converted `tbl-chemo-type-by-hiv`, `tbl-hiv-or-comparison`, and `tbl-severe-multivariate-or` as part of descriptive statistics update work.
 
 ## Project Management & Admin (ADM)
 *Communication, documentation updates, and external coordination.*
