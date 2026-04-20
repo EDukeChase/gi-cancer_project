@@ -1,2 +1,10 @@
 /* style.css */
 
+.table {
+  width: auto !important;
+}
+
+.cell-output-display:has(table) {
+  display: flex;
+  justify-content: center;
+}

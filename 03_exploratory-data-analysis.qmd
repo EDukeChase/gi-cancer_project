@@ -14,6 +14,7 @@ source("R/setup.R")
 gic_validated <- readRDS(here("data", "processed", "gic_validated.rds"))
 
 # Load Libraries
+library(ggcorrplot)
 ```
 
 # Variable Engineering
@@ -183,7 +184,7 @@ pt_wide <- pt_summ |>
 
 pt_wide |>
   kbl(booktabs = TRUE, align = "lcc") |>
-  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE, position = "center")
 ```
 
 ## Cycle-Level AE Summaries
@@ -434,19 +435,23 @@ chemo_hiv_summ <- gic_models |>
 
 neg <- chemo_hiv_summ |> filter(hiv_status == "Negative") |>
   select(chemo_type, `Neg: n (%)` = `n (%)`, `Neg: med (IQR)` = cycles_med_iqr)
-
 pos <- chemo_hiv_summ |> filter(hiv_status == "Positive") |>
   select(chemo_type, `Pos: n (%)` = `n (%)`, `Pos: med (IQR)` = cycles_med_iqr)
 
-# Fisher's exact test per chemo type for assignment proportions
 chemo_levels <- levels(gic_models$chemo_type)
 
-fisher_pvals <- map_dbl(chemo_levels, function(ct) {
+# Chi-squared test per chemo type for assignment proportions
+chisq_pvals <- map_dbl(chemo_levels, function(ct) {
   tab <- table(
     assigned = gic_models$chemo_type == ct,
     hiv      = gic_models$hiv_status
   )
-  fisher.test(tab)$p.value
+  expected <- chisq.test(tab)$expected
+  if (any(expected < 5)) {
+    fisher.test(tab)$p.value
+  } else {
+    chisq.test(tab)$p.value
+  }
 })
 
 # Wilcoxon rank-sum test per chemo type for cycles prescribed
@@ -456,22 +461,17 @@ wilcox_pvals <- map_dbl(chemo_levels, function(ct) {
   wilcox.test(cycles_prescribed ~ hiv_status, data = dat, exact = FALSE)$p.value
 })
 
-# Apply BH correction
-fisher_padj <- p.adjust(fisher_pvals, method = "BH")
-wilcox_padj <- p.adjust(wilcox_pvals, method = "BH")
-
 format_p <- function(p) {
   if (is.na(p)) return("—")
-  if (p < 0.001) return("<0.001")
+  if (p < 0.001) return(formatC(p, format = "e", digits = 3))
   as.character(round(p, 3))
 }
 
 pval_df <- tibble(
-  chemo_type         = chemo_levels,
-  `p (asgmt)`   = map_chr(fisher_padj, format_p),
-  `p (cycles)`       = map_chr(wilcox_padj, format_p)
+  chemo_type    = chemo_levels,
+  `p (asgmt)`   = map_chr(chisq_pvals, format_p),
+  `p (cycles)`  = map_chr(wilcox_pvals, format_p)
 )
-
 
 neg |>
   left_join(pos,     by = "chemo_type") |>
@@ -492,81 +492,172 @@ neg |>
     columns = c(`Neg: med (IQR)`, `Pos: med (IQR)`, `p (cycles)`)
   ) |>
   cols_align(align = "center", columns = -`Chemotherapy type`) |>
-  cols_align(align = "left",   columns = `Chemotherapy type`) |> 
+  cols_align(align = "left",   columns = `Chemotherapy type`) |>
   tab_footnote(
-    footnote = "Fisher's exact tests; Wilcoxon rank-sum tests",
+    footnote = "Chi-squared test (Fisher's exact where any expected cell count < 5); Wilcoxon rank-sum test.",
     location = cells_column_labels(columns = c(`p (asgmt)`, `p (cycles)`))
-    ) |> 
+  ) |>
   opt_footnote_marks(marks = "extended")
 ```
 
+## Cancer Site by HIV Status
+
 ```{r}
-#| label: tbl-cancer-site-summary
-#| tbl-cap: "Cancer site by HIV status and chemotherapy assignment"
+#| label: tbl-cancer-site-hiv
+#| tbl-cap: "Cancer site by HIV status"
 
 cancer_levels <- levels(gic_models$cancer_site)
-chemo_levels  <- levels(gic_models$chemo_type)
+site_hiv_table <- table(gic_models$cancer_site, gic_models$hiv_status)
 
-# HIV status distribution by cancer site
 hiv_summ <- gic_models |>
   group_by(cancer_site, hiv_status) |>
   summarize(n = n(), .groups = "drop") |>
   group_by(cancer_site) |>
-  mutate(pct = round(100 * n / sum(n), 1),
-         `n (%)` = paste0(n, " (", pct, "%)")) |>
+  mutate(
+    pct = round(100 * n / sum(n), 1),
+    `n (%)` = paste0(n, " (", pct, "%)")
+  ) |>
   ungroup() |>
   select(cancer_site, hiv_status, `n (%)`) |>
   pivot_wider(names_from = hiv_status, values_from = `n (%)`,
               names_prefix = "HIV ") |>
   rename(`Cancer site` = cancer_site)
 
-# Fisher's exact test per cancer site for HIV status distribution
-fisher_site_pvals <- map_dbl(cancer_levels, function(cs) {
-  tab <- table(
-    hiv  = gic_models$hiv_status,
-    site = gic_models$cancer_site == cs
+hiv_summ |>
+  kbl(booktabs = TRUE, align = "lcc") |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
   )
-  if (any(tab < 5)) return(NA_real_)
-  fisher.test(tab)$p.value
+```
+
+```{r}
+#| label: tbl-cancer-site-hiv-expected
+#| tbl-cap: "Expected cell counts under the null hypothesis of no association"
+
+chisq.test(site_hiv_table)$expected |>
+  round(1) |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE, align = "lcc") |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+  ) |>
+  footnote(general = "Four cells have expected counts below 5.")
+```
+
+```{r}
+#| label: tst-cancer-site-hiv-global
+
+# Global test: is there any association between cancer site and HIV status?
+fisher_global <- fisher.test(site_hiv_table)
+fisher_global
+```
+
+The global Fisher's exact test indicates that HIV status is not independent of cancer site. To identify which sites are potentially causing this, each site is compared against all remaining sites using contingency tables.
+
+
+```{r}
+#| label: tbl-cancer-site-hiv-expected-ovr
+#| tbl-cap: "Expected cell counts for one-vs-rest 2×2 tables by cancer site"
+
+map_dfr(cancer_levels, function(cs) {
+  tab <- table(
+    site = gic_models$cancer_site == cs,
+    hiv  = gic_models$hiv_status
+  )
+  expected <- suppressWarnings(chisq.test(tab)$expected)
+  
+  tibble(
+    `Cancer site` = cs,
+    `Site: HIV−` = round(expected["TRUE", "Negative"], 1),
+    `Site: HIV+` = round(expected["TRUE", "Positive"], 1),
+    `Rest: HIV−` = round(expected["FALSE", "Negative"], 1),
+    `Rest: HIV+` = round(expected["FALSE", "Positive"], 1)
+  )
+}) |>
+  kbl(booktabs = TRUE, align = "lcccc") |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+  ) |>
+  footnote(
+    general = "Expected counts under H0 for each site vs all other sites."
+  )
+```
+
+
+```{r}
+#| label: tbl-cancer-site-hiv-posthoc
+#| tbl-cap: "Post-hoc: HIV prevalence by cancer site vs all other sites"
+
+site_posthoc <- map_dfr(cancer_levels, function(cs) {
+  tab <- table(
+    site = gic_models$cancer_site == cs,
+    hiv  = gic_models$hiv_status
+  )
+  expected <- suppressWarnings(chisq.test(tab)$expected)
+  use_fisher <- any(expected < 5)
+  
+  if (cs == "Anal") {
+    p <- fisher.test(tab, alternative = "greater")$p.value
+    test_used <- "Fisher's (one-sided)"
+  } else if (use_fisher) {
+    p <- fisher.test(tab)$p.value
+    test_used <- "Fisher's Exact"
+  } else {
+    p <- chisq.test(tab, correct = FALSE)$p.value
+    test_used <- "Chi-squared"
+  }
+  
+  tibble(`Cancer site` = cs, p = format_p(p), Test = test_used)
 })
-fisher_site_padj <- p.adjust(fisher_site_pvals, method = "BH")
 
-hiv_summ <- hiv_summ |>
-  mutate(`p (HIV)` = map_chr(fisher_site_padj, format_p))
+hiv_summ |>
+  left_join(site_posthoc, by = "Cancer site") |>
+  kbl(booktabs = TRUE, align = "lcccc") |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+  ) |>
+  footnote(
+    general = paste0(
+      "Each site tested against all other sites combined. ",
+      "Chi-squared used where all expected counts ≥ 5, Fisher's exact otherwise. ",
+      "Anal cancer tested one-sided (greater) based on established HIV-anal cancer association."
+    )
+  )
+```
 
-# Chemo assignment by cancer site
-chemo_summ <- gic_models |>
+Post-hoc tests compare HIV prevalence at each cancer site against all other cancer sites combined using contingency tables. Anal cancer is tested one-sided based on the association between anal cancer rate and HIV status.  All other comparisons are two-sided. The choice of test for each site is determined based on expected cell counts.
+
+## Chemotherapy Assignment by Cancer Site
+```{r}
+#| label: tbl-cancer-site-chemo
+#| tbl-cap: "Chemotherapy assignment by cancer site"
+
+chemo_levels <- levels(gic_models$chemo_type)
+
+gic_models |>
   group_by(cancer_site, chemo_type) |>
   summarize(n = n(), .groups = "drop") |>
   group_by(cancer_site) |>
-  mutate(pct = round(100 * n / sum(n), 1),
-         `n (%)` = paste0(n, " (", pct, "%)")) |>
+  mutate(
+    pct = round(100 * n / sum(n), 1),
+    `n (%)` = paste0(n, " (", pct, "%)")
+  ) |>
   ungroup() |>
   select(cancer_site, chemo_type, `n (%)`) |>
   pivot_wider(names_from = chemo_type, values_from = `n (%)`,
               values_fill = "0 (0%)") |>
-  rename(`Cancer site` = cancer_site)
-
-# Join
-hiv_summ |>
-  left_join(chemo_summ, by = "Cancer site") |>
-  gt() |>
-  tab_spanner(
-    label = "HIV status",
-    columns = c(`HIV Negative`, `HIV Positive`, `p (HIV)`)
-  ) |>
-  tab_spanner(
-    label = "Chemotherapy assignment",
-    columns = all_of(chemo_levels)
-  ) |>
-  cols_align(align = "center", columns = -`Cancer site`) |>
-  cols_align(align = "left",   columns = `Cancer site`) |>
-  tab_footnote(
-  footnote = "BH adjusted Fisher's exact test, only applied where all cells n ≥ 5.",
-  location = cells_column_labels(columns = `p (HIV)`)
-) |>
-  opt_footnote_marks(marks = "extended")
+  rename(`Cancer site` = cancer_site) |>
+  kbl(booktabs = TRUE, align = c("l", rep("c", length(chemo_levels)))) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+  )
 ```
+
 
 ```{r}
 #| label: tbl-tx-intent-vs-hiv-status
@@ -1574,52 +1665,13 @@ ae_early_wide |>
   opt_footnote_marks(marks = "extended")
 ```
 
-## LASSO Regression
-
-With 25 candidate predictors and only 72 early dropout events, a standard logistic regression would be badly overfit. LASSO handles this by penalizing the model complexity, shrinking small coefficients to zero, which effectively does variable selection at the same time as model fitting. The penalty strength is chosen by 10-fold cross-validation using the more conservative `lambda.1se` rule, which tends to select fewer predictors than the minimum error option. Any AE types where everyone ends up with a grade of 0 after imputation are also dropped before fitting since they have no useful information and cause numerical problems during standardization.
-
-
 ```{r}
-#| label: prep-lasso-matrix
+#| label: prep-sparse-ae
 
-library(glmnet)
+# AE types with fewer than 5 patients with any non-zero grade in either
+# HIV group — too sparse for reliable estimation
+ae_cols <- intersect(ae_types, names(ae_early_wide))
 
-# Build predictor matrix — one row per patient, AE type max grades + HIV status + interactions
-# Patients excluded listwise per AE type due to NA handling above, so complete cases only
-
-lasso_data <- ae_early_wide |>
-  filter(!is.na(early_dropout)) |>
-  mutate(hiv_pos = as.integer(hiv_status == "Positive"))
-
-# AE grade columns only
-ae_cols <- intersect(ae_types, names(lasso_data))
-
-# Build matrix with interactions manually — glmnet doesn't take formula syntax
-x_base <- lasso_data |>
-  select(all_of(ae_cols), hiv_pos) |>
-  as.matrix()
-
-# Interaction terms: each AE grade × HIV status
-x_interact <- sweep(
-  lasso_data |> select(all_of(ae_cols)) |> as.matrix(),
-  1,
-  lasso_data$hiv_pos,
-  "*"
-)
-colnames(x_interact) <- paste0(ae_cols, ":hiv_pos")
-
-x_mat <- cbind(x_base, x_interact)
-
-# Keep only complete cases before scaling
-complete_idx <- complete.cases(x_mat)
-x_mat <- x_mat[complete_idx, ]
-y_vec <- lasso_data$early_dropout[complete_idx]
-
-cat("Patients with complete AE data for LASSO:", sum(complete_idx), "\n")
-cat("Early dropouts in complete case sample:", sum(y_vec), "\n")
-
-# Drop predictors with fewer than 5 patients with any non-zero grade
-# in either HIV status group — too sparse for reliable estimation
 sparse_ae <- ae_early_wide |>
   select(hiv_status, all_of(ae_cols)) |>
   pivot_longer(cols = all_of(ae_cols), names_to = "ae_type", values_to = "grade") |>
@@ -1629,179 +1681,8 @@ sparse_ae <- ae_early_wide |>
   filter(any(n_any < 5)) |>
   pull(ae_type) |>
   unique()
-
-if (length(sparse_ae) > 0) {
-  cat("Dropping sparse AE predictors (< 5 patients with any grade in at least one HIV group):\n")
-  cat(paste(ae_labels[sparse_ae], collapse = ", "), "\n\n")
-  
-  # Remove main effects and interaction terms for sparse AE types
-  sparse_cols <- c(sparse_ae, paste0(sparse_ae, ":hiv_pos"))
-  sparse_cols <- intersect(sparse_cols, colnames(x_mat))
-  x_mat <- x_mat[, !colnames(x_mat) %in% sparse_cols]
-}
-
-# Drop zero-variance columns before scaling — these are uninformative and
-# produce NaN when standardized (sd = 0), which glmnet treats as NA
-zero_var <- apply(x_mat, 2, var, na.rm = TRUE) == 0
-if (any(zero_var)) {
-  cat("Dropping zero-variance columns:", 
-      paste(colnames(x_mat)[zero_var], collapse = ", "), "\n")
-  x_mat <- x_mat[, !zero_var]
-}
-
-# Standardize after filtering
-x_mat <- scale(x_mat)
 ```
 
-```{r}
-#| label: fit-lasso-cv
-
-set.seed(4534174)
-
-# Cross-validated LASSO to select lambda
-# Using lambda.1se for parsimony — selects fewer variables
-cv_lasso <- cv.glmnet(
-  x        = x_mat,
-  y        = y_vec,
-  family   = "binomial",
-  alpha    = 1,          # LASSO (alpha = 1), not ridge
-  nfolds   = 10,
-  type.measure = "deviance"
-)
-
-lambda_use <- cv_lasso$lambda.1se
-
-cat("Selected lambda (1se):", round(lambda_use, 4), "\n")
-cat("Selected lambda (min):", round(cv_lasso$lambda.min, 4), "\n")
-
-plot(cv_lasso)
-```
-
-LASSO doesn't produce standard confidence intervals, so bootstrap stability selection is used to get a sense of which predictors are reliably selected rather than just selected by chance. The full cross-validated LASSO is re-run on each of 10,000 bootstrap resamples, and for each predictor we track how often it ends up with a non-zero coefficient. Predictors that show up consistently across resamples are more trustworthy than ones that only occasionally get selected. The coefficients and CIs reported in the table below are also computed from the bootstrap distribution, but only from the resamples where the predictor was actually selected, so they give a cleaner picture of effect size than if the zero-coefficient resamples were included.
-
-```{r}
-#| label: fit-lasso-bootstrap
-#| cache: true
-
-library(parallel)
-library(doParallel)
-
-set.seed(4534174)
-n_boot  <- 10000
-n_cores <- detectCores() - 2
-
-cl <- makeCluster(n_cores)
-registerDoParallel(cl)
-
-boot_results_raw <- foreach(
-  i         = seq_len(n_boot),
-  .combine  = rbind,
-  .packages = "glmnet"
-) %dopar% {
-  idx    <- sample(nrow(x_mat), replace = TRUE)
-  x_boot <- x_mat[idx, ]
-  y_boot <- y_vec[idx]
-
-  if (length(unique(y_boot)) < 2) return(rep(NA_real_, ncol(x_mat)))
-
-  cv_boot <- suppressWarnings(
-    cv.glmnet(
-      x            = x_boot,
-      y            = y_boot,
-      family       = "binomial",
-      alpha        = 1,
-      nfolds       = 10,
-      type.measure = "deviance"
-    )
-  )
-
-  as.numeric(coef(cv_boot, s = "lambda.1se")[-1])
-}
-
-stopCluster(cl)
-
-# Reconstruct coefficient and selection matrices
-boot_coefs               <- boot_results_raw
-colnames(boot_coefs)     <- colnames(x_mat)
-boot_selected            <- boot_coefs != 0
-boot_selected[is.na(boot_coefs)] <- FALSE
-
-boot_results <- tibble(
-  predictor      = colnames(x_mat),
-  selection_freq = colMeans(boot_selected, na.rm = TRUE),
-  coef_median    = apply(boot_coefs, 2, median,   na.rm = TRUE),
-  coef_q25       = apply(boot_coefs, 2, quantile, 0.25, na.rm = TRUE),
-  coef_q75       = apply(boot_coefs, 2, quantile, 0.75, na.rm = TRUE),
-  coef_q025      = apply(boot_coefs, 2, quantile, 0.025, na.rm = TRUE),
-  coef_q975      = apply(boot_coefs, 2, quantile, 0.975, na.rm = TRUE)
-) |>
-  arrange(desc(selection_freq))
-```
-
-```{r}
-#| label: tbl-lasso-results
-#| tbl-cap: "LASSO bootstrap results: predictor selection frequency and coefficient estimates"
-
-# Compute CIs conditional on selection only — excludes resamples where
-# coefficient was shrunk to zero, giving a cleaner picture of effect size
-selected_ci <- map_df(colnames(boot_coefs), function(col) {
-  x_nonzero <- boot_coefs[, col]
-  x_nonzero <- x_nonzero[x_nonzero != 0 & !is.na(x_nonzero)]
-  tibble(
-    predictor     = col,
-    coef_q025_sel = if (length(x_nonzero) >= 10) quantile(x_nonzero, 0.025) else NA_real_,
-    coef_q975_sel = if (length(x_nonzero) >= 10) quantile(x_nonzero, 0.975) else NA_real_
-  )
-})
-
-boot_results <- boot_results |>
-  left_join(selected_ci, by = "predictor")
-
-# Flag interaction terms and clean labels for display
-boot_results |>
-  mutate(
-    type = if_else(str_detect(predictor, ":hiv_pos"), "Interaction", "Main effect"),
-    clean_name = str_remove(predictor, ":hiv_pos"),
-    clean_name = case_when(
-      clean_name == "hiv_pos"          ~ "HIV Positive",
-      clean_name %in% names(ae_labels) ~ ae_labels[clean_name],
-      TRUE                             ~ clean_name
-    ),
-    predictor = if_else(
-      type == "Interaction",
-      paste0(clean_name, " \u00d7 HIV"),
-      clean_name
-    )
-  ) |>
-  select(-clean_name) |>
-  filter(selection_freq > 0) |>
-  select(
-    Predictor        = predictor,
-    Type             = type,
-    `Selection freq` = selection_freq,
-    `Median coef`    = coef_median,
-    `95% CI (lower)` = coef_q025_sel,
-    `95% CI (upper)` = coef_q975_sel
-  ) |>
-  mutate(
-    `Selection freq` = scales::percent(`Selection freq`, accuracy = 0.1),
-    across(c(`Median coef`, `95% CI (lower)`, `95% CI (upper)`), ~ round(.x, 3))
-  ) |>
-  gt() |>
-  tab_row_group(label = "Interaction terms", rows = Type == "Interaction") |>
-  tab_row_group(label = "Main effects",      rows = Type == "Main effect") |>
-  cols_hide(Type) |>
-  cols_align(align = "left",   columns = Predictor) |>
-  cols_align(align = "center", columns = -Predictor) |>
-  tab_footnote(
-    footnote = "Selection frequency = proportion of 1000 bootstrap resamples in which predictor was selected at lambda.1se. 95% CI is conditional on selection (excludes resamples where coefficient was zero); NA indicates fewer than 10 non-zero resamples.",
-    location = cells_column_labels(columns = `Selection freq`)
-  ) |>
-  opt_footnote_marks(marks = "extended")
-```
-
-
-The LASSO coefficients are penalized so they can't be read directly as odds ratios. The univariate models below complement the LASSO by fitting a standard logistic regression per AE type, with a grade × HIV status interaction term, giving proper ORs and p-values that are easier to interpret clinically. The interaction term is the main thing of interest here, since it tells us whether the relationship between AE severity and early dropout looks different depending on HIV status. P-values are BH-adjusted across all tests, and the same sparse AE types excluded from the LASSO are excluded here too.
 
 ## Univariate Logistic Models
 
@@ -1868,13 +1749,8 @@ ae_sample_sizes <- map_df(ae_types, function(at) {
                 names_glue = "n_{hiv_status}")
 })
 
-# Order AE types by LASSO selection frequency of main effect terms
-ae_order <- boot_results |>
-  filter(!str_detect(predictor, ":hiv_pos")) |>  # main effects only
-  filter(predictor %in% ae_types) |>
-  arrange(desc(selection_freq)) |>
-  mutate(ae_label = ae_labels[predictor]) |>
-  pull(ae_label)
+# Sort labels
+ae_order <- sort(ae_labels)
 
 # Any AE types not in boot_results (dropped as sparse/zero-variance) go at the end
 ae_order <- c(ae_order, setdiff(ae_labels, ae_order))
@@ -1883,7 +1759,7 @@ univariate_results |>
   left_join(ae_sample_sizes, by = "ae_type") |>
   mutate(
     ae_label      = ae_labels[ae_type],
-    ae_label      = factor(ae_label, levels = ae_order),
+    ae_label      = factor(ae_label, levels = sort(ae_labels)),
     `OR (95% CI)` = paste0(round(estimate, 2), " (", round(conf.low, 2), "–", round(conf.high, 2), ")"),
     `p (adj)`     = map_chr(p_adj, format_p),
     `p (raw)`     = map_chr(p.value, format_p)
