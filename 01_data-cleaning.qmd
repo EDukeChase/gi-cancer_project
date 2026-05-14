@@ -23,6 +23,10 @@ gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FIN
 ```{r}
 #| label: apply-manual-patches
 
+
+age_data <- read_csv(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET-Age_added.csv")) |> 
+  select(record_id, `Age (years)`)
+
 gic_raw <- gic_raw |> 
   mutate(
     # [DAT-017] Fix invalid sex level (3 -> 1)
@@ -51,7 +55,10 @@ gic_raw <- gic_raw |>
     `Chemotherapy.completion.rates.(%)` = if_else(record_id == 498, 100 * `Total.number.of.chemotherapy.administered` / `Total.number.chemo.cycles.prescribed`, `Chemotherapy.completion.rates.(%)`),
     `Total.number.of.chemotherapy.administered` = if_else(record_id == 766, 2, `Total.number.of.chemotherapy.administered`),
     `Chemotherapy.completion.rates.(%)` = if_else(record_id == 766, 100 * `Total.number.of.chemotherapy.administered` / `Total.number.chemo.cycles.prescribed`, `Chemotherapy.completion.rates.(%)`)
-  )
+  ) |> 
+    # [DAT-025] Incorporate age data
+  left_join(age_data, by = "record_id") |> 
+  relocate(`Age (years)`, .after = `HIV.Status:.1,.Negative.|.2,.Positive`)
 ```
 
 
@@ -387,6 +394,7 @@ gic_renamed <- gic_renamed |>
     # Basic Variables
     hiv_status = "HIV.Status:.1,.Negative.|.2,.Positive",
     sex = "Sex.Male.1/Female.2",
+    age = "Age (years)",
     residence = "Primary.Residence.1.urban/.2.rural/3.peri-urban.",
     cancer_site = "Cancer.site:.1,.Esophagus.|.2,.Gastric.|.3,.Gastro-esophageal.junction.|.4,.Gall.bladder.,.Biliary.&.Pancreas.|.9,.Colorectal.|.11,.Anal.",
     histology = "Histology.type:.1,.adenocarcinoma/carcinoma.|.2,.Squamous.carcinoma.|.3,.Sarcoma.|.4,.Carcinoid.|.5,.Lymphoma.|.7,.Others",
@@ -557,7 +565,8 @@ static_audit <- check_list |>
       data_match    ~ "Match",
       TRUE          ~ "Data mismatch"
     )
-  )
+  ) |> 
+  arrange(Status)
 
 ## Define row indices for better visualization
 static_green <- which(static_audit$Status == "Match")
@@ -566,7 +575,6 @@ static_red <- which(static_audit$Status != "Match")
 
 ## Display static audit
 static_audit |> 
-  arrange(Status) |> 
   select(clean_col, raw_col, Status) |> 
   kbl(booktabs = TRUE) |> 
   kable_styling(full_width = TRUE) |> 
@@ -853,6 +861,23 @@ gic_encoded <- gic_encoded |>
       "Oxaliplatin/Fluoropyrimidine" = c("CapeOX", "FOLFOX4", "Capecitabine")
     ) |> fct_drop()
   )
+
+# Verify no data lost during chemo type collapse
+stopifnot(
+  "NA count changed during chemo collapse" = 
+    sum(is.na(gic_encoded$chemo_type)) == sum(is.na(gic_renamed$chemo_type)),
+  "Row count changed during chemo collapse" = 
+    length(gic_encoded$chemo_type) == length(gic_renamed$chemo_type)
+)
+
+# Verify collapse preserved all values
+collapsed_raw_values <- c(4, 5, 6)
+n_pre <- sum(gic_renamed$chemo_type %in% collapsed_raw_values, na.rm = TRUE)
+n_post <- sum(gic_encoded$chemo_type == "Oxaliplatin/Fluoropyrimidine", na.rm = TRUE)
+
+stopifnot(
+  "Patient count mismatch after chemo type collapse" = n_pre == n_post
+)
 ```
 
 :::{.callout-warning collapse="false"}
@@ -1067,6 +1092,12 @@ if (any(sf_audit$is_error)) warning("Data loss detected in static factors.")
 
 format_factor_audit_table(sf_audit)
 ```
+:::{.callout-note collapse="false"}
+### Note: Collapsed factors
+
+The three rows for `chemo_type` that are highlighted yellow are expected due to combining the CapeOX, FOLFOX4, and Capecitabine chemotherapy types into a larger group. Data integrity was checked when these categories were combined in the `collapse-chemo-type` chunk. 
+:::
+
 
 ### Audit Longitudinal Categorical Variables
 

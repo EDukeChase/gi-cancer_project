@@ -157,6 +157,19 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Re-run downstream analyses after regenerating graded data.
 	- **Timeline:**
 		- 2026-03-31: Identified while investigating sodium and potassium grading structure ahead of early dropout analysis. Confirmed 48 observations above normal range currently ungraded.
+- [ ] **DAT-025 [P2]: Incorporate age and sex into analysis**
+	- **Status:** In Progress
+	- **Type:** Data
+	- **Created:** 2026-04-20
+	- **Last updated:** 2026-04-20
+	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `03_exploratory-data-analysis.qmd`
+	- **Summary:** Age column was missing from the original Excel data export. Dr. Mazhindu provided an updated export as a CSV on 2026-04-20. Age was imported separately and joined by record ID rather than switching to the CSV, which had different column naming conventions. Sex data was already present but unused. Both variables now need to be carried through the full pipeline.
+	- **Actions:**
+		- [x] Import age column from supplementary CSV and join to existing data
+		- [x] Add age to data cleaning steps (type checks, range validation, missing values)
+		- [ ] Add age to data validation
+		- [ ] Incorporate age and sex into descriptive statistics
+		- [ ] Include age and sex as covariates in relevant models
 
 ## Methodology (MET)
 *Methodological and analytical decisions affecting the statistical plan.*
@@ -188,6 +201,11 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Rationale:** CapeOX, FOLFOX4, and Capecitabine can be considered clinically equivalent for this analysis (confirmed by Dr. Mazhindu in a Zoom meeting on 2026-03-04). Each also had fewer than 5 HIV-positive patients, which is below our minimum threshold used throughout this preject. Empty levels were dropped to avoid downsteam issues.
 	- **Actions:**
 		- [ ] Verify with Dr. Mazhindu that this was the correct way to combine the chemo types.
+	- **Timeline:**
+		- 2026-05-14: Added validation step after collapsing the categories.
+		- 2026-04-20: Confirmed with Dr. Mazhindu that the correct chemotherapy types were combined.
+		- 2026-03-31: Implemented collapse of chemotherapy types in `01_data-cleaning.qmd` (chunk: `collapse-chemo-type`).
+		- 2026-03-04: Low quantity of certain types of chemotherapy noted and possibility of combining several discussed in meeting.
 - **MET-005 [P3]: Early Treatment Discontinuation Analysis**
 	- **Status:** In Progress
 	- **Type:** Decision

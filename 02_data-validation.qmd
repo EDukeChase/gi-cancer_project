@@ -8,10 +8,6 @@ bibliography: references.bib
 #| include: false
 
 source("R/setup.R")
-
-
-# Packages
-
 ```
 
 ```{r}
@@ -89,14 +85,6 @@ if (length(problem_ids) > 0) {
 }
 ```
 
-::: {.callout-warning collapse="false"}
-### Anomaly: Extraneous Cycle Data
-
-**Issue:** The audit identified 4 patients with data recorded for cycles greater than their `cycles_given` count.
-
-* **Affected IDs:** 27, 146, 498, 766
-* **Status:** Flagged as **DAT-019**. Investigation required to determine if the administration count is incorrect or if the data should be removed.
-:::
 
 ```{r}
 #| label: investigate-extraneous-data
