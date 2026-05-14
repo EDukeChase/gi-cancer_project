@@ -1476,23 +1476,40 @@ For each AE type, the predictor used is the max grade recorded across cycles 1 t
 
 Sodium and potassium grades also don't distinguish between high and low abnormalities, so hypokalemia and hyperkalemia end up collapsed into the same grade variable. This can be revisited later, but I'm leaving it as is for the moment because the models below already have more regressors than ideal. See MET-005 and DAT-024.
 
+## Global test for early dropout by HIV status
+
+```{r}
+#| label: tst-early-dropout-hiv
+#| tbl-cap: "Early treatment discontinuation by HIV status"
+
+# 2x2 table: early dropout x HIV status
+dropout_hiv_table <- table(
+  dropout = factor(gic_models$early_dropout, levels = c(0, 1), labels = c("Completed", "Early dropout")),
+  HIV = gic_models$hiv_status
+)
+
+dropout_hiv_table |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE) |>
+  add_header_above(c(" " = 1, "HIV Status" = 2))
+
+# Check expected counts to decide test
+dropout_expected <- suppressWarnings(chisq.test(dropout_hiv_table)$expected)
+
+if (any(dropout_expected < 5)) {
+  dropout_test <- fisher.test(dropout_hiv_table)
+  cat("Fisher's exact test (expected count < 5 in at least one cell)\n")
+} else {
+  dropout_test <- chisq.test(dropout_hiv_table, correct = FALSE)
+  cat("Chi-squared test (all expected counts >= 5)\n")
+}
+
+dropout_test
+```
+
 ```{r}
 #| label: prep-ae-early-dropout
-
-ae_labels <- c(
-  hb        = "Anemia",
-  plt       = "Thrombocytopenia",
-  wbc       = "Leukopenia",
-  anc       = "Neutropenia",
-  lcc       = "Lymphopenia",
-  sodium    = "Sodium abnormality",
-  potassium = "Potassium abnormality",
-  alb       = "Hypoalbuminemia",
-  tbil      = "Hyperbilirubinemia",
-  alp       = "Elevated ALP",
-  alt       = "Elevated ALT",
-  ast       = "Elevated AST"
-)
 
 # Max grade per AE type across cycles 1-early_dropout_cycles
 # Patients with no recorded grade for a given AE type in this window
@@ -1582,6 +1599,69 @@ ae_early |>
   ) |>
   opt_footnote_marks(marks = "extended")
 ```
+
+
+```{r}
+#| label: tst-dropout-by-ae-type
+#| tbl-cap: "Association between experiencing each AE type (any grade) in cycles 1–4 and early dropout"
+
+dropout_ae_tests <- map_dfr(ae_types, function(at) {
+  dat <- ae_early_wide |>
+    filter(!is.na(early_dropout)) |>
+    mutate(has_ae = as.integer(.data[[at]] > 0))
+  
+  tab <- table(dropout = dat$early_dropout, has_ae = dat$has_ae)
+  
+  if (nrow(tab) < 2 | ncol(tab) < 2) {
+    return(tibble(ae_type = at, p = NA_real_, test = "—",
+                  n_ae = NA, n_ae_dropout = NA, n_total = NA))
+  }
+  
+  expected <- suppressWarnings(chisq.test(tab)$expected)
+  if (any(expected < 5)) {
+    result <- fisher.test(tab)
+    test_used <- "Fisher's"
+  } else {
+    result <- chisq.test(tab, correct = FALSE)
+    test_used <- "Chi-squared"
+  }
+  
+  tibble(
+    ae_type = at,
+    n_total = nrow(dat),
+    n_ae = sum(dat$has_ae == 1),
+    n_ae_dropout = sum(dat$has_ae == 1 & dat$early_dropout == 1),
+    p = result$p.value,
+    test = test_used
+  )
+}) |>
+  mutate(
+    ae_label = ae_labels[ae_type],
+    p_adj = p.adjust(p, method = "BH"),
+    `p (raw)` = map_chr(p, format_p),
+    `p (adj)` = map_chr(p_adj, format_p),
+    `With AE, n (dropout)` = paste0(n_ae, " (", n_ae_dropout, ")")
+  )
+
+dropout_ae_tests |>
+  select(`Adverse event` = ae_label, `With AE, n (dropout)`, Test = test, `p (raw)`, `p (adj)`) |>
+  gt() |>
+  cols_align(align = "left", columns = `Adverse event`) |>
+  cols_align(align = "center", columns = -`Adverse event`) |>
+  tab_footnote(
+    footnote = paste0(
+      "Tests whether having any occurrence of each AE type (grade > 0) in cycles 1–",
+      early_dropout_cycles,
+      " is associated with early dropout, pooling HIV groups. ",
+      "Chi-squared or Fisher's exact as appropriate. p-values BH-adjusted across AE types."
+    ),
+    locations = cells_column_spanners()
+  ) |>
+  opt_footnote_marks(marks = "extended")
+```
+
+Tests whether, among all patients in the early dropout analysis, is having any occurrence of a specific AE type (grade > 0) in cycles 1-4 associated with whether they droppoed out? Multiple comparrisons correction applied because testing the same population multiple times across adverse event types.
+
 
 The heatmap below gives a quick visual overview of where the grade differences between early dropout and completed patients are largest, and whether those patterns look similar across HIV groups.
 

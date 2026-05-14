@@ -205,6 +205,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- **Hyper/hypo electrolyte collapse:** Sodium and potassium each capture both high and low abnormalities in a single grade variable (direction lost during grade parsing in `ae_long`). This is a known limitation as, e.g., hyperkalemia and hypokalemia have different clinical presentations and may have different relationships with early dropout. Flagged for future revisions, see also DAT-024.
 	- **Rationale:** Cutoff of 4 cycles aligns with Dr. Mazhindu's framing of "early" treatment cycles as a clinically meaningful window. LASSO was chosen over standard logistic regression due to the high predictor-to-outcome-event ratio. Bootstrap stability selection was used in place of standard inference since LASSO coefficients are penalized and classical confidence intervals do not apply. Univariate models complement the LASSO by providing interpretable effect sizes and formal tests for the HIV interaction. Discussed with Dr. Hendricks and Dr. Mazhindu, 2026-03-04.
 	- **Timeline:**
+		- 2026-04-20: Removed LASSO section from EDA document. Dr. Hendricks noted LASSO is primarily a predictive tool and not well-suited for inferential goals of this analysis. Univariate models retained.
 		- 2026-04-01: Preliminary analysis completed and decisions documented.
 		- 2026-03-31: Preliminary analysis started
 - [ ] **MET-006 [P2]: Cancer site by HIV status testing strategy**
