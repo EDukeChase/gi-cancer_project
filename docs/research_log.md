@@ -143,19 +143,21 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- **Current location:** 
     - *Summary:* `ggplot` warning: "Removed 21 rows containing non-finite values".
     - *Task:* Verify if these correspond exactly to the known `NA`s in Height, Weight, and BMI, or if valid data is being excluded.
-- [ ] **DAT-024 [P2]: Missing hypernatremia grading rules**
+- [ ] **DAT-024 [P2]: Hypernatremia grading rules**
 	- **Status:** Open
 	- **Created:** 2026-03-31
 	- **Last updated:** 2026-03-31
 	- **Location:** `data/grading_rules.csv`; `02_data-validation.qmd` (chunk: `derive-adverse-events`)
-	- **Summary:** `grading_rules.csv` contains grading rules for hyponatremia but is missing rules for hypernatremia.
+	- **Summary:** `grading_rules.csv` was missing rules for hypernatremia, and after they were added, Grade 1 had an incorrect upper bound (155 instead of 150) that overlapped with Grade 2, causing 6 observations to receive dual grades and producing list columns in downstream analysis.
 	- **Scope:** `sodium_#` variables across all cycles; all patients with sodium > 145.
 	- **Impact:** Hypernatremia cases are silently excluded from all adverse event analyses, potentially underestimating sodium-related AE burden.
 	- **Actions:**
-		- [ ] Add hypernatremia grading rows to `grading_rules.csv` per NCI-CTCAE v5: Grade 1 (>145–150), Grade 2 (>150–155), Grade 3 (>155–160), Grade 4 (>160).
-		- [ ] Re-run `derive-adverse-events` after updating rules and re-save `gic_validated.rds`.
+		- [x] Add hypernatremia grading rows to `grading_rules.csv` per NCI-CTCAE v5: Grade 1 (>145–150), Grade 2 (>150–155), Grade 3 (>155–160), Grade 4 (>160).
+		- [x] Fix Grade 1 max_val from 155 to 150.
+		- [x] Re-run `derive-adverse-events` and re-save `gic_validated.rds`.
 		- [ ] Re-run downstream analyses after regenerating graded data.
 	- **Timeline:**
+		- 2026-05-14: Fixed overlapping Grade 1/Grade 2 range. Confirmed list column issue resolved.
 		- 2026-03-31: Identified while investigating sodium and potassium grading structure ahead of early dropout analysis. Confirmed 48 observations above normal range currently ungraded.
 - [ ] **DAT-025 [P2]: Incorporate age and sex into analysis**
 	- **Status:** In Progress
@@ -163,13 +165,21 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Created:** 2026-04-20
 	- **Last updated:** 2026-04-20
 	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `03_exploratory-data-analysis.qmd`
-	- **Summary:** Age column was missing from the original Excel data export. Dr. Mazhindu provided an updated export as a CSV on 2026-04-20. Age was imported separately and joined by record ID rather than switching to the CSV, which had different column naming conventions. Sex data was already present but unused. Both variables now need to be carried through the full pipeline.
+	- **Summary:** Age column was missing from the original Excel data export and was provided separately as a CSV. Sex data was already present but unused. Both variables need to be carried through the full pipeline.
+	- **Clinical context (2026-04-20 meeting):**
+		- HIV+ patients tend to get esophageal and anal cancer at younger ages due to faster progression
+		- Age 70 is a clinical cutoff influencing chemo regimen selection due to toxicity concerns — worth exploring as a threshold in addition to continuous
+		- Anal cancer in this setting is predominantly female; esophageal and gastric are roughly 50/50
+		- Zimbabwe life expectancy is ~63, which may contribute to survival bias in later-onset cancers
 	- **Actions:**
 		- [x] Import age column from supplementary CSV and join to existing data
 		- [x] Add age to data cleaning steps (type checks, range validation, missing values)
 		- [ ] Add age to data validation
 		- [ ] Incorporate age and sex into descriptive statistics
 		- [ ] Include age and sex as covariates in relevant models
+		- [ ] Explore age as a threshold variable at 70 in addition to continuous
+	- **Timeline:**
+		- 2026-04-20: Age data received. Imported and joined to existing data. Added to data cleaning pipeline.
 
 ## Methodology (MET)
 *Methodological and analytical decisions affecting the statistical plan.*
@@ -200,7 +210,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Decision:** Collapsed CapeOX, FOLFOX4, and Capecitabine into a single "Oxaliplatin/Fluoropyrimidine" group, and empty levels (Irinotecan and Other) were dropped from the variable.
 	- **Rationale:** CapeOX, FOLFOX4, and Capecitabine can be considered clinically equivalent for this analysis (confirmed by Dr. Mazhindu in a Zoom meeting on 2026-03-04). Each also had fewer than 5 HIV-positive patients, which is below our minimum threshold used throughout this preject. Empty levels were dropped to avoid downsteam issues.
 	- **Actions:**
-		- [ ] Verify with Dr. Mazhindu that this was the correct way to combine the chemo types.
+		- [x] Verify with Dr. Mazhindu that this was the correct way to combine the chemo types.
 	- **Timeline:**
 		- 2026-05-14: Added validation step after collapsing the categories.
 		- 2026-04-20: Confirmed with Dr. Mazhindu that the correct chemotherapy types were combined.
@@ -210,8 +220,8 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Status:** In Progress
 	- **Type:** Decision
 	- **Created:** 2026-03-31
-	- **Last updated:** 2026-04-01
-	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `prep-early-dropout`, `prep-ae-early-dropout`, `prep-lasso-matrix`, `fit-lasso-cv`, `fit-lasso-bootstrap`, `fit-univariate-ae-models`)
+	- **Last updated:** 2026-05-14
+	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `prep-early-dropout`, `prep-ae-early-dropout`, `tst-early-dropout-hiv`, `tst-dropout-by-ae-type`, `fit-univariate-ae-models`)
 	- **Summary:** Several analytical decisions were made regarding the definition of early dropout, predictor construction, handling of missing AE grades, and choice of statistical methods for identifying AE types associated with early treatment discontinuation.
 	- **Question:** Which patients constitute early dropouts, how should AE predictors be constructed, and what statistical approach best identifies which AE types are associated with early discontinuation and whether that association differs by HIV status?
 	- **Decision:**
@@ -223,28 +233,46 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- **Hyper/hypo electrolyte collapse:** Sodium and potassium each capture both high and low abnormalities in a single grade variable (direction lost during grade parsing in `ae_long`). This is a known limitation as, e.g., hyperkalemia and hypokalemia have different clinical presentations and may have different relationships with early dropout. Flagged for future revisions, see also DAT-024.
 	- **Rationale:** Cutoff of 4 cycles aligns with Dr. Mazhindu's framing of "early" treatment cycles as a clinically meaningful window. LASSO was chosen over standard logistic regression due to the high predictor-to-outcome-event ratio. Bootstrap stability selection was used in place of standard inference since LASSO coefficients are penalized and classical confidence intervals do not apply. Univariate models complement the LASSO by providing interpretable effect sizes and formal tests for the HIV interaction. Discussed with Dr. Hendricks and Dr. Mazhindu, 2026-03-04.
 	- **Timeline:**
-		- 2026-04-20: Removed LASSO section from EDA document. Dr. Hendricks noted LASSO is primarily a predictive tool and not well-suited for inferential goals of this analysis. Univariate models retained.
+		- 2026-04-20: Discussed with collaborators. LASSO section removed (better suited for prediction than inference). Per-AE-type dropout tests should also be stratified by HIV status where sample size permits. AE categories will be combined where clinically appropriate (see MET-007).
 		- 2026-04-01: Preliminary analysis completed and decisions documented.
 		- 2026-03-31: Preliminary analysis started
 - [ ] **MET-006 [P2]: Cancer site by HIV status testing strategy**
 	- **Status:** In Progress
 	- **Type:** Decision
 	- **Created:** 2026-04-20
-	- **Last updated:** 2026-04-20
+	- **Last updated:** 2026-05-14
 	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `tbl-cancer-site-hiv`, `tbl-cancer-site-hiv-expected`, `tst-cancer-site-hiv-global`, `tbl-cancer-site-hiv-expected-ovr`, `tbl-cancer-site-hiv-posthoc`)
 	- **Summary:** Established a two-stage testing strategy for assessing the relationship between cancer site and HIV status: a global test for any association, followed by one-vs-rest post-hoc comparisons per cancer site.
 	- **Question:** Is HIV status distributed differently across cancer sites, and if so, which specific sites are driving the association?
 	- **Decision:**
 		- **Global test:** Fisher's exact test on the full 6×2 cancer site × HIV status table. Chi-squared was ruled out because four cells had expected counts below 5.
-		- **Post-hoc tests:** One-vs-rest 2×2 tables per cancer site, using chi-squared where all expected counts ≥ 5 and Fisher's exact otherwise. This approach was chosen over one-sample proportion tests against the cohort rate, which Dr. Hendricks flagged as problematic because each site's patients also contribute to the reference rate.
-		- **Hypothesis-driven comparison:** Anal cancer is tested one-sided (greater) based on the association between HIV and elevated anal cancer risk as noted by Dr. Mazhindu.
-		- **No multiple comparisons correction:** Each cancer site represents a clinically distinct population.
+		- **Post-hoc tests:** One-vs-rest 2×2 tables per cancer site (excluding gallblader as n = 5) using two-sided Fisher's exact test for all sites for consistency. Ruled out multiple comparisons correction, as each cancer site represents a distinct population. 
+		- **Hypothesis-driven comparison:** Anal cancer is the primary comparison of interest, based on the documented association between HIV and elevated anal cancer risk. No additional hypothesis-driven sites identified.
+		- **Colorectal cancer:** HIV+ patients with colorectal cancer are underrepresented relative to expectation. Possible explanations include behavioral factors (HIV+ patients attending clinics more frequently leading to better screening), survival bias (HIV+ patients may not survive long enough to develop a typically later-onset cancer; Zimbabwe life expectancy is ~63), or higher undiagnosed mortality from competing diagnoses. To be explored in the discussion section, not additional testing.
 	- **Open items:**
 		- [ ] Confirm with Dr. Mazhindu whether additional hypothesis-driven comparisons are warranted beyond anal cancer.
 	- **Rationale:** The two-stage approach (global then post-hoc) avoids inflating Type I error from running post-hoc tests without first establishing an overall association. The one-vs-rest framing avoids the overlap problem inherent in testing against the cohort rate. Discussed with Dr. Hendricks on 2026-04-06.
 	- **Timeline:**
 		- 2026-04-20: Implemented global Fisher's exact test, expected count tables, and one-vs-rest post-hoc tests with test selection based on expected cell counts.
 		- 2026-04-06: Discussed testing strategy with Dr. Hendricks during Zoom meeting. Original one-sample proportion approach was replaced with one-vs-rest contingency tables.
+- [ ] **MET-007 [P2]: Combine adverse event categories**
+	- **Status:** Open
+	- **Type:** Decision
+	- **Created:** 2026-04-20
+	- **Last updated:** 2026-05-14
+	- **Location:** `03_exploratory-data-analysis.qmd` (affects `engineer-ae-variables`, `prep-ae-early-dropout`, and downstream tables/models)
+	- **Summary:** Several AE types are clinically similar enough to be combined to reduce the number of comparisons and improve statistical power. Groupings are clinically motivated — myelosuppression captures bone marrow suppression broadly, and the three liver enzymes reflect the same underlying hepatotoxicity.
+	- **Decision:** Confirmed per clinical input (2026-04-20 meeting):
+		- Neutropenia + lymphopenia + leukopenia + thrombocytopenia → "Myelosuppression" (thrombocytopenia has no events but belongs conceptually)
+		- Elevated ALP + elevated ALT + elevated AST → "Raised transaminases/enzymes"
+		- Anemia, sodium, potassium, hypoalbuminemia, hyperbilirubinemia → each standalone
+	- **Actions:**
+		- [ ] Implement combined categories in AE variable engineering
+		- [ ] Decide how to combine (max grade across component types? any grade > 0?)
+		- [ ] Re-run early dropout analyses with combined categories
+		- [ ] Update AE correlation heatmap
+	- **Timeline:**
+		- 2026-04-20: Groupings confirmed during meeting.
 
 ## Technical Tasks (TEC)
 *Action items for coding, refactoring, data cleaning, and validation scripts.*
@@ -318,19 +346,24 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Rewrite `kbl()`-based tables in `01_data-cleaning.qmd` using `gt`.
 	- **Timeline:**
 		- 2026-03-31: Converted `tbl-chemo-type-by-hiv`, `tbl-hiv-or-comparison`, and `tbl-severe-multivariate-or` as part of descriptive statistics update work.
+- [ ] **TEC-011 [P4]: Split EDA document into descriptive statistics and exploratory analysis**
+	- **Status:** Open
+	- **Created:** 2026-05-14
+	- **Last updated:** 2026-05-14
+	- **Location:** `03_exploratory-data-analysis.qmd`
+	- **Summary:** The EDA document has grown to cover variable engineering, descriptive statistics, and exploratory modeling. Splitting into `03_descriptive-statistics.qmd` and `04_exploratory-analysis.qmd` would improve navigability and render times. Variable engineering would stay in the descriptive stats doc with `gic_models` saved as an RDS for the analysis doc to load.
+	- **Actions:**
+		- [ ] Split document contents into descriptive vs modeling sections
+		- [ ] Save `gic_models` as an RDS at the end of variable engineering for the analysis doc to load
+		- [ ] Update `_quarto.yml` if document order matters
+		- [ ] Update all research log references to reflect new filenames and chunk locations
+	- **Note:** Renaming will introduce a significant overhead of tracking down references across the research log, code comments, and any cross-document references. Planning on doing both renames simultaneously to avoid an intermediate state where references are half-updated.
 
 ## Project Management & Admin (ADM)
 *Communication, documentation updates, and external coordination.*
 
 - [ ] **ADM-001 [P3]: Update Glossary**
 	- *Task:* Add all missing valid and reference ranges.
-- [ ] **ADM-002 [P0]: Outstanding Inquiries (for Dr. Mazhindu)**
-	- *Status:* Reply received [2025-12-01]
-	- *Outcomes:*
-		1. DAT-010: Confirmed `4` = "Stage IV".
-		2. DAT-018: Resolve during meeting on 2025-12-02
-		3. DAT-016: Replace "pn" with 28.
-		4. MET-001: Will move forward with ANC only analysis.
 	
 ## Archived Log Entries
 
@@ -518,6 +551,13 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- 2025-12-02: Confirmed in Zoom meeting that the missingness is not unusual because liver panels tend to be done only when there are indications of liver damage, and some specific metabolites aren't included in certain panels.
 		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`) during initial data import and inspection.
 	- **Resolution:** No action required.
+- [x] **ADM-002 [P0]: Outstanding Inquiries (for Dr. Mazhindu)**
+	- *Status:* Reply received [2025-12-01]
+	- *Outcomes:*
+		1. DAT-010: Confirmed `4` = "Stage IV".
+		2. DAT-018: Resolve during meeting on 2025-12-02
+		3. DAT-016: Replace "pn" with 28.
+		4. MET-001: Will move forward with ANC only analysis.
 - [x] **TEC-006 [P2]: Fix 'File Path Too Long' Warnings**
     - **Status:** Resolved
 	- **Created:** 2025-12-02

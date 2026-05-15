@@ -22,6 +22,22 @@ library(ggcorrplot)
 ```{r}
 #| label: engineer-ae-variables
 
+# Define adverse event abbreviations
+ae_labels <- c(
+  hb = "Anemia",
+  plt = "Thrombocytopenia",
+  wbc = "Leukopenia",
+  anc = "Neutropenia",
+  lcc = "Lymphopenia",
+  sodium = "Sodium abnormality",
+  potassium = "Potassium abnormality",
+  alb = "Hypoalbuminemia",
+  tbil = "Hyperbilirubinemia",
+  alp = "Elevated ALP",
+  alt = "Elevated ALT",
+  ast = "Elevated AST"
+)
+
 # Identify adverse event grade columns
 grade_cols <- names(gic_validated)[str_detect(names(gic_validated), "_grade_([1-9]|1[0-2])$")]
 ### Need to determine whether baselines should be included too
