@@ -1,0 +1,1221 @@
+---
+title: "GI Cancer: Descriptive Statistics"
+bibliography: references.bib
+execute:
+  warning: true
+  message: true
+---
+
+```{r}
+#| label: setup
+#| warning: false
+
+source("R/setup.R")
+
+# Load Data
+gic_validated <- readRDS(here("data", "processed", "gic_validated.rds"))
+
+# Load Libraries
+library(ggcorrplot)
+```
+
+```{r}
+#| label: engineer-ae-variables
+
+# Identify adverse event grade columns
+grade_cols <- names(gic_validated)[str_detect(names(gic_validated), "_grade_([1-9]|1[0-2])$")]
+
+# Create long table to engineer new variables
+ae_long <- gic_validated |> 
+  select(record_id, cycles_prescribed, cycles_given, all_of(grade_cols)) |> 
+  pivot_longer(
+    cols = all_of(grade_cols),
+    names_to = "grade_var",
+    values_to = "grade_raw"
+  ) |> 
+  mutate(
+    cycle = as.integer(str_extract(grade_var, "\\d+$")),
+    ae_type = str_remove(grade_var, "_grade_\\d+$"),
+    grade = as.numeric(str_match(grade_raw, "(?i)^\\s*grade\\s*(\\d+)")[,2])
+  )
+
+# Grouped version — max grade per combined category per patient-cycle
+ae_long_grouped <- ae_long |>
+  mutate(ae_group = ae_group_map[ae_type]) |>
+  filter(!is.na(grade)) |>
+  group_by(record_id, cycles_prescribed, cycles_given, cycle, ae_group) |>
+  summarize(
+    grade = max(grade),
+    .groups = "drop"
+  )
+
+# Cycle-level summaries
+cycle_summary <- ae_long |>
+  group_by(record_id, cycles_prescribed, cycles_given, cycle) |>
+  summarize(
+    ae_n_markers_measured = sum(!is.na(grade)),
+    .groups = "drop"
+  ) |>
+  left_join(
+    ae_long |>
+      filter(!is.na(grade)) |>
+      group_by(record_id, cycle) |>
+      summarize(
+        ae_n_events = sum(grade > 0),
+        ae_n_severe = sum(grade >= 3),
+        ae_max_grade = max(grade),
+        ae_any = any(grade > 0),
+        ae_severe_any = any(grade >= 3),
+        .groups = "drop"
+      ),
+    by = c("record_id", "cycle")
+  )
+
+cycle_summary_grouped <- ae_long_grouped |>
+  group_by(record_id, cycles_prescribed, cycles_given, cycle) |>
+  summarize(
+    ae_n_markers_measured = n(),
+    .groups = "drop"
+  ) |>
+  left_join(
+    ae_long_grouped |>
+      group_by(record_id, cycle) |>
+      summarize(
+        ae_n_events = sum(grade > 0),
+        ae_n_severe = sum(grade >= 3),
+        ae_max_grade = max(grade),
+        ae_any = any(grade > 0),
+        ae_severe_any = any(grade >= 3),
+        .groups = "drop"
+      ),
+    by = c("record_id", "cycle")
+  )
+
+ae_cycle_wide <- cycle_summary |>
+  pivot_wider(
+    id_cols = c(record_id, cycles_prescribed, cycles_given),
+    names_from = cycle,
+    values_from = c(ae_n_markers_measured, ae_max_grade, ae_n_events, ae_n_severe, ae_any, ae_severe_any),
+    names_glue = "{.value}_{cycle}"
+  )
+
+
+# Patient-level summaries
+ae_summary_pt <- ae_long |> 
+  group_by(record_id) |> 
+  summarize(
+    ae_any_early = as.integer(any(grade > 0 & cycle <= early_dropout_cycles, na.rm = TRUE)),
+    ae_severe_any_pt = as.integer(any(grade >= 3, na.rm = TRUE)),
+    ae_severe_any_early = as.integer(any(grade >= 3 & cycle <= early_dropout_cycles, na.rm = TRUE)),
+    ae_any_pt = as.integer(any(grade > 0, na.rm = TRUE)),
+    .groups = "drop"
+  ) |>
+  left_join(
+    cycle_summary |>
+      filter(ae_n_markers_measured > 0) |>   # only cycles with any grading recorded
+      group_by(record_id) |>
+      summarize(
+        ae_max_grade_pt = max(ae_max_grade, na.rm = TRUE),
+        .groups = "drop"
+      ),
+    by = "record_id"
+  )
+
+# Merge datasets for analysis
+gic_models <- gic_validated |>
+  left_join(ae_summary_pt, by = "record_id") |>
+  left_join(ae_cycle_wide, by = c("record_id", "cycles_prescribed", "cycles_given"))
+```
+
+
+
+
+# Patient Demographics
+
+Patient age and sex by HIV status.
+
+```{r}
+#| label: tbl-demographics
+#| tbl-cap: "Patient demographics by HIV status"
+
+gic_models |> 
+  group_by(hiv_status) |> 
+  summarize(
+    n = n(),
+    age_summary = summ_stats(age, mean = FALSE),
+    n_male = sum(sex == "Male", na.rm = TRUE),
+    n_female = sum(sex == "Female", na.rm = TRUE),
+    pct_male = round(100 * n_male / n, 1),
+    pct_female = round(100 * n_female / n, 1),
+    .groups = "drop"
+  ) |> 
+  transmute(
+    "HIV Status" = hiv_status,
+    N = n,
+    "Age, median (IQR)" = age_summary,
+    Male = paste0(n_male, " (", pct_male, "%)"),
+    Female = paste0(n_female, " (", pct_female, "%)")
+  ) |> 
+  gt() |> 
+  tab_spanner(label = "Sex", columns = c(Male, Female)) |> 
+  cols_align(align = "center", columns = -1) |> 
+  cols_align(align = "left", columns = 1)
+```
+
+Age distribution by HIV status.
+```{r}
+#| label: plt-age-by-hiv
+#| fig-cap: "Age distribution by HIV status."
+
+ggplot(gic_models, aes(x = hiv_status, y = age, fill = hiv_status, color = hiv_status)) +
+  geom_violin(alpha = 0.3, trim = FALSE) +
+  geom_boxplot(width = 0.15, alpha = 0.6, outlier.alpha = 1) +
+  labs(
+    title = "Age by HIV Status",
+    x = "HIV status",
+    y = "Age (years)",
+    fill = "HIV status",
+    color = "HIV status"
+  )
+```
+
+Age by sex
+```{r}
+#| label: tbl-age-by-sex
+#| tbl-cap: "Age by sex"
+
+gic_models |>
+  group_by(sex) |>
+  summarize(
+    n = n(),
+    age = summ_stats(age, mean = FALSE),
+    .groups = "drop"
+  ) |>
+  rename(Sex = sex, N = n, `Age, median (IQR)` = age) |>
+  gt() |>
+  cols_align(align = "center", columns = -1)
+```
+
+Median age by cancer site and HIV status
+
+```{r}
+#| label: tbl-age-by-cancer-site
+#| tbl-cap: "Age at diagnosis by cancer site and HIV status"
+
+# Tinashe noted HIV+ patients get esophageal and anal cancer at younger ages
+gic_models |>
+  group_by(cancer_site, hiv_status) |>
+  summarize(
+    n = n(),
+    age = summ_stats(age, mean = FALSE),
+    .groups = "drop"
+  ) |>
+  mutate(display = paste0(age, " [n=", n, "]")) |>
+  select(cancer_site, hiv_status, display) |>
+  pivot_wider(names_from = hiv_status, values_from = display) |>
+  rename(`Cancer Site` = cancer_site) |>
+  gt() |>
+  tab_spanner(label = "HIV Status", columns = c(Negative, Positive)) |>
+  cols_align(align = "left", columns = 1) |>
+  cols_align(align = "center", columns = -1) |>
+  tab_source_note("Median age (IQR) with sample size.")
+```
+
+Cycles prescribed as a function of age, with LOESS smooth by HIV status
+```{r}
+#| label: plt-age-vs-cycles
+#| fig-cap: "Chemotherapy cycles prescribed by age and HIV status."
+
+ggplot(gic_models, aes(x = age, y = cycles_prescribed, color = hiv_status)) +
+  geom_jitter(alpha = 0.7, width = 0.5, height = 0.2) + 
+  geom_smooth(method = "loess", se = TRUE) + 
+  scale_y_continuous(breaks = seq(1, 12, 1)) +
+  labs(
+    title = "Chemotherapy Cycles Prescribed by Age and HIV Status",
+    x = "Age at Diagnosis",
+    y = "Cycles Prescribed",
+    color = "HIV Status"
+  ) +
+  theme_minimal()
+```
+
+
+```{r}
+#| label: tbl-age-threshold-sensitivity
+#| tbl-cap: "Cycles prescribed by HIV status at different age cutoffs"
+
+c(50, 55, 60, 65, 70) |>
+  map(function(cutoff) {
+    gic_models |>
+      mutate(age_group = if_else(age >= cutoff, "Above", "Below")) |>
+      group_by(age_group, hiv_status) |>
+      summarize(
+        n = n(),
+        cycles = summ_stats(cycles_prescribed, mean = FALSE),
+        .groups = "drop"
+      ) |>
+      mutate(cutoff = cutoff)
+  }) |>
+  list_rbind() |>
+  mutate(display = paste0(cycles, " [n=", n, "]")) |>
+  select(cutoff, age_group, hiv_status, display) |>
+  pivot_wider(names_from = c(hiv_status, age_group),
+              values_from = display,
+              names_glue = "{hiv_status}: {age_group}") |>
+  gt() |>
+  tab_spanner(label = "HIV Negative", columns = starts_with("Negative")) |>
+  tab_spanner(label = "HIV Positive", columns = starts_with("Positive")) |>
+  cols_label(
+    cutoff = "Cutoff",
+    `Negative: Below` = "Below",
+    `Negative: Above` = "Above",
+    `Positive: Below` = "Below",
+    `Positive: Above` = "Above"
+  ) |>
+  cols_align(align = "center", columns = -1)
+```
+
+# Disease Characteristics
+
+## Cancer Site
+
+HIV status distribution within each cancer site
+```{r}
+#| label: tbl-cancer-site-hiv
+#| tbl-cap: "Cancer site by HIV status"
+
+cancer_levels <- levels(gic_models$cancer_site)
+site_hiv_table <- table(gic_models$cancer_site, gic_models$hiv_status)
+
+hiv_summ <- gic_models |>
+  group_by(cancer_site, hiv_status) |>
+  summarize(n = n(), .groups = "drop") |>
+  group_by(cancer_site) |>
+  mutate(
+    pct = round(100 * n / sum(n), 1),
+    `n (%)` = paste0(n, " (", pct, "%)")
+  ) |>
+  ungroup() |>
+  select(cancer_site, hiv_status, `n (%)`) |>
+  pivot_wider(names_from = hiv_status, values_from = `n (%)`,
+              names_prefix = "HIV ") |>
+  rename("Cancer Site" = cancer_site)
+
+hiv_summ |> 
+  gt() |> 
+  cols_align(align = "left", columns = "Cancer Site") |> 
+  cols_align(align = "center", columns = -1) |> 
+  tab_spanner(
+    label = "HIV Status",
+    columns = c("HIV Negative", "HIV Positive")
+  ) |> 
+  cols_label(
+    "HIV Negative" = "Negative",
+    "HIV Positive" = "Positive"
+  ) |> 
+  opt_row_striping() |> 
+  tab_options(
+    table.width = px(400)
+  )
+```
+
+Sex distribution within each cancer site
+```{r}
+#| label: tbl-sex-by-cancer-site
+#| tbl-cap: "Sex distribution by cancer site"
+
+sex_site <- gic_models |>
+  count(cancer_site, sex) |>
+  group_by(cancer_site) |>
+  mutate(pct = round(100 * n / sum(n), 1),
+         display = paste0(n, " (", pct, "%)")) |>
+  ungroup() |>
+  select(cancer_site, sex, display) |>
+  pivot_wider(names_from = sex, values_from = display, values_fill = "0 (0%)")
+
+tibble(
+  `Cancer Site` = sex_site$cancer_site,
+  Male = sex_site$Male,
+  Female = sex_site$Female
+) |>
+  gt() |>
+  tab_spanner(label = "Sex", columns = c(Male, Female)) |>
+  cols_align(align = "left", columns = `Cancer Site`) |>
+  cols_align(align = "center", columns = c(Male, Female))
+```
+
+Expected cell counts for the full cancer site $\times$ HIV status table under the null hypothesis of no association. Used to determine whether chi-squared or Fisher's exact is appropriate for global tests.
+```{r}
+#| label: tbl-cancer-site-hiv-expected
+#| tbl-cap: "Expected cell counts under the null hypothesis of no association"
+
+expected_tab <- chisq.test(site_hiv_table)$expected |>
+  round(1) |>
+  as.data.frame.matrix() |>
+  rownames_to_column("Cancer Site")
+
+expected_tab |> 
+  gt() |> 
+  tab_spanner(
+    label = "HIV Status",
+    columns = c(Negative, Positive)
+  ) |> 
+  cols_align(align = "left", columns = "Cancer Site") |>
+  cols_align(align = "center", columns = -1) |>
+  opt_row_striping() |>
+  tab_source_note(source_note = "Four cells have expected counts below 5")
+```
+
+Fisher's exact test on the full table. Tests whether HIV status is independent of cancer site. Fisher's exact used because four cells have expected counts below 5.
+
+```{r}
+#| label: tst-cancer-site-hiv-global
+
+# Global test: is there any association between cancer site and HIV status?
+fisher_global <- fisher.test(site_hiv_table)
+fisher_global
+```
+The global Fisher's exact test indicates that HIV status is not independent of cancer site. To identify which sites are potentially causing this, each site is compared against all remaining sites using contingency tables.
+
+
+Expected cell counts for the one-vs-rest $2 \times 2$ tables used in post-hoc testing. Each row shows the expected counts when comparing one cancer site against all other, split by HIV status.
+```{r}
+#| label: tbl-cancer-site-hiv-expected-ovr
+#| tbl-cap: "Expected cell counts for one-vs-rest 2×2 tables by cancer site"
+
+expected_counts_data <- cancer_levels |> 
+  map(\(cs) {
+    tab <- table(
+      site = gic_models$cancer_site == cs,
+      hiv = gic_models$hiv_status
+    )
+    expected <- chisq.test(tab)$expected
+    
+    tibble(
+      "Cancer Site" = cs,
+      "Site: HIV-" = expected["TRUE", "Negative"],
+      "Site: HIV+" = expected["TRUE", "Positive"],
+      "Rest: HIV-" = expected["FALSE", "Negative"],
+      "Rest: HIV+" = expected["FALSE", "Positive"]
+    )
+  }) |> 
+  list_rbind()
+
+expected_counts_data |> 
+  gt() |> 
+  tab_spanner(label = "Target Site", columns = starts_with("Site")) |> 
+  tab_spanner(label = "All Other Sites", columns = starts_with("Rest")) |> 
+  cols_label_with(
+    columns = -1,
+    fn = \(x) gsub(".*: ", "", x)
+  ) |>
+  fmt_number(columns = -1, decimals = 1) |> 
+  opt_row_striping() |> 
+  tab_source_note(source_note = html("Expected counts under H<sub>0</sub> for each site vs all other sites."))
+```
+
+One-vs-rest Fisher's exact tests. For each cancer site, tests whether the ratio of patients by HIV status at each site differs from the ratio at all other sites combined.
+```{r}
+#| label: tbl-cancer-site-hiv-posthoc
+#| tbl-cap: "Post-hoc: HIV prevalence by cancer site vs all other sites"
+
+site_posthoc <- cancer_levels |> 
+  map(\(cs) {
+  tab <- table(
+    site = gic_models$cancer_site == cs,
+    hiv  = gic_models$hiv_status
+  )
+  
+  # Perform two-sided Fisher's exact test
+  p <- fisher.test(tab)$p.value
+  
+  tibble("Cancer Site" = cs, p = format_p(p))
+}) |> 
+  list_rbind()
+
+
+hiv_summ |> 
+  left_join(site_posthoc, by = "Cancer Site") |> 
+  gt() |> 
+  cols_align(align = "left", columns = 1) |> 
+  cols_align(align = "center", columns = 2:4) |> 
+  opt_row_striping() |> 
+  tab_source_note(source_note = "Note: Each site tested against all other sites combined using two-sided Fisher's exact tests.")
+```
+
+
+
+
+## Cancer Stage
+
+Median age by cancer stage and HIV status
+```{r}
+#| label: tbl-stage-by-age
+#| tbl-cap: "Median age (IQR) by cancer stage and HIV status"
+
+gic_models |>
+  group_by(cancer_stage, hiv_status) |>
+  summarize(
+    n = n(),
+    age = summ_stats(age, mean = FALSE),
+    .groups = "drop"
+  ) |>
+  mutate(display = paste0(age, " [n=", n, "]")) |>
+  select(cancer_stage, hiv_status, display) |>
+  pivot_wider(names_from = hiv_status, values_from = display) |>
+  rename(`Cancer Stage` = cancer_stage) |>
+  gt() |>
+  tab_spanner(label = "HIV Status", columns = c(Negative, Positive)) |>
+  cols_align(align = "left", columns = 1) |>
+  cols_align(align = "center", columns = -1)
+```
+
+
+## Treatment Intent
+
+Treatment intent by age and HIV status
+```{r}
+#| label: tbl-tx-intent-by-age
+#| tbl-cap: "Age at diagnosis by treatment intent and HIV status"
+
+gic_models |>
+  group_by(tx_intent, hiv_status) |>
+  summarize(
+    n = n(),
+    age = summ_stats(age, mean = FALSE),
+    .groups = "drop"
+  ) |>
+  mutate(display = paste0(age, " [n=", n, "]")) |>
+  select(tx_intent, hiv_status, display) |>
+  pivot_wider(names_from = hiv_status, values_from = display) |>
+  rename(`Treatment Intent` = tx_intent) |>
+  gt() |>
+  tab_spanner(label = "HIV Status", columns = c(Negative, Positive)) |>
+  cols_align(align = "left", columns = 1) |>
+  cols_align(align = "center", columns = -1)
+```
+
+Age at diagnosis by treatment intent and HIV status
+```{r}
+#| label: plt-tx-intent-by-age
+#| fig-cap: "Age at diagnosis by treatment intent."
+
+ggplot(gic_models, aes(x = tx_intent, y = age)) +
+  geom_violin(alpha = 0.3, trim = FALSE) +
+  geom_boxplot(width = 0.15, alpha = 0.6, outlier.alpha = 1) +
+  labs(
+    title = "Age at Diagnosis by Treatment Intent",
+    x = "Treatment intent",
+    y = "Age (years)"
+  )
+```
+
+# Treatment Characteristics
+
+## Chemotherapy Assignment
+
+Chemotherapy assignment and cycles prescribed by HIV status. Assignment p-values test whether the proportion assigned to each regimen differs by HIV status. Cycles p-values test whether cycles prescribed differs by HIV status within each regimen.
+```{r}
+#| label: tbl-chemo-type-by-hiv
+#| tbl-cap: "Chemotherapy type by HIV status: patient counts, within-group proportions, and cycles prescribed"
+
+chemo_hiv_summ <- gic_models |>
+  group_by(hiv_status, chemo_type) |>
+  summarize(
+    n = n(),
+    cycles_med_iqr = summ_stats(cycles_prescribed, mean = FALSE),
+    .groups = "drop"
+  ) |>
+  group_by(hiv_status) |>
+  mutate(pct = round(100 * n / sum(n), 1),
+         `n (%)` = paste0(n, " (", pct, "%)")) |>
+  ungroup() |>
+  select(hiv_status, chemo_type, `n (%)`, cycles_med_iqr)
+
+neg <- chemo_hiv_summ |> filter(hiv_status == "Negative") |>
+  select(chemo_type, `Neg: n (%)` = `n (%)`, `Neg: med (IQR)` = cycles_med_iqr)
+pos <- chemo_hiv_summ |> filter(hiv_status == "Positive") |>
+  select(chemo_type, `Pos: n (%)` = `n (%)`, `Pos: med (IQR)` = cycles_med_iqr)
+
+# Chi-squared test per chemo type for assignment proportions
+chemo_levels <- levels(gic_models$chemo_type)
+
+chisq_pvals <- map_dbl(chemo_levels, function(ct) {
+  tab <- table(
+    assigned = gic_models$chemo_type == ct,
+    hiv      = gic_models$hiv_status
+  )
+  expected <- chisq.test(tab)$expected
+  if (any(expected < 5)) {
+    fisher.test(tab)$p.value
+  } else {
+    chisq.test(tab)$p.value
+  }
+})
+
+# Wilcoxon rank-sum test per chemo type for cycles prescribed
+wilcox_pvals <- map_dbl(chemo_levels, function(ct) {
+  dat <- gic_models |> filter(chemo_type == ct)
+  if (n_distinct(dat$hiv_status) < 2) return(NA_real_)
+  wilcox.test(cycles_prescribed ~ hiv_status, data = dat, exact = FALSE)$p.value
+})
+
+pval_df <- tibble(
+  chemo_type    = chemo_levels,
+  `p (asgmt)`   = map_chr(chisq_pvals, format_p),
+  `p (cycles)`  = map_chr(wilcox_pvals, format_p)
+)
+
+neg |>
+  left_join(pos,     by = "chemo_type") |>
+  left_join(pval_df, by = "chemo_type") |>
+  rename(`Chemotherapy type` = chemo_type) |>
+  select(
+    `Chemotherapy type`,
+    `Neg: n (%)`, `Pos: n (%)`, `p (asgmt)`,
+    `Neg: med (IQR)`, `Pos: med (IQR)`, `p (cycles)`
+  ) |>
+  gt() |>
+  tab_spanner(
+    label = "Chemo assignment",
+    columns = c(`Neg: n (%)`, `Pos: n (%)`, `p (asgmt)`)
+  ) |>
+  tab_spanner(
+    label = "Cycles prescribed",
+    columns = c(`Neg: med (IQR)`, `Pos: med (IQR)`, `p (cycles)`)
+  ) |>
+  cols_align(align = "center", columns = -`Chemotherapy type`) |>
+  cols_align(align = "left",   columns = `Chemotherapy type`) |>
+  tab_footnote(
+    footnote = "Chi-squared test (Fisher's exact where any expected cell count < 5); Wilcoxon rank-sum test.",
+    location = cells_column_labels(columns = c(`p (asgmt)`, `p (cycles)`))
+  ) |>
+  opt_footnote_marks(marks = "extended")
+```
+
+Age by chemotherapy type assigned and HIV status
+```{r}
+#| label: tbl-chemo-type-by-age
+#| tbl-cap: "Age at diagnosis by chemotherapy type and HIV status"
+
+gic_models |>
+  group_by(chemo_type, hiv_status) |>
+  summarize(
+    n = n(),
+    age = summ_stats(age, mean = FALSE),
+    .groups = "drop"
+  ) |>
+  mutate(display = paste0(age, " [n=", n, "]")) |>
+  select(chemo_type, hiv_status, display) |>
+  pivot_wider(names_from = hiv_status, values_from = display) |>
+  rename(`Chemo Type` = chemo_type) |>
+  gt() |>
+  tab_spanner(label = "HIV Status", columns = c(Negative, Positive)) |>
+  cols_align(align = "left", columns = 1) |>
+  cols_align(align = "center", columns = -1)
+```
+
+
+LOESS-smoothed proportion of patients assigned to each chemotherapy type as a function of age (each patient contributes a 1 for their assigned regimen and a 0 for all others)
+```{r}
+#| label: plt-chemo-by-age
+#| fig-cap: "Proportion assigned to each chemotherapy type by age."
+
+gic_models |>
+  select(record_id, age, chemo_type) |>
+  mutate(dummy = 1) |>
+  pivot_wider(id_cols = c(record_id, age), names_from = chemo_type, values_from = dummy, values_fill = 0) |>
+  pivot_longer(-c(record_id, age), names_to = "chemo_type", values_to = "assigned") |>
+  ggplot(aes(x = age, y = assigned, color = chemo_type)) +
+  geom_smooth(method = "loess", se = FALSE) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(
+    title = "Chemotherapy Assignment by Age",
+    x = "Age at diagnosis",
+    y = "Estimated proportion",
+    color = "Chemo type"
+  )
+```
+
+
+Chemotherapy assignment within each cancer site
+```{r}
+#| label: tbl-cancer-site-chemo
+#| tbl-cap: "Chemotherapy assignment by cancer site"
+
+
+
+gic_models |>
+  group_by(cancer_site, chemo_type) |>
+  summarize(n = n(), .groups = "drop") |>
+  group_by(cancer_site) |>
+  mutate(
+    pct = round(100 * n / sum(n), 1),
+    `n (%)` = paste0(n, " (", pct, "%)")
+  ) |>
+  ungroup() |>
+  select(cancer_site, chemo_type, `n (%)`) |>
+  pivot_wider(names_from = chemo_type, values_from = `n (%)`,
+              values_fill = "0 (0%)") |>
+  rename(`Cancer site` = cancer_site) |>
+  kbl(booktabs = TRUE, align = c("l", rep("c", length(chemo_levels)))) |>
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed"),
+    full_width = FALSE
+  )
+```
+
+## Cycles Prescribed and Received
+
+Cycles prescribed, cycles received, and completion rate by HIV status
+```{r}
+#| label: tbl-cycles-by-hiv
+#| tbl-cap: "Chemotherapy cycles prescribed and received by HIV status"
+
+cycles_summ <- gic_models |>
+  mutate(
+    completion_rate = if_else(
+      is.na(cycles_prescribed) | cycles_prescribed <= 0,
+      NA_real_,
+      cycles_given / cycles_prescribed
+    )
+  ) |>
+  group_by(hiv_status) |>
+  summarize(
+    n_patients = n(),
+    cycles_prescribed = summ_stats(cycles_prescribed),
+    cycles_given = summ_stats(cycles_given),
+    completion_rate = summ_stats(completion_rate, digits = 2),
+    .groups = "drop"
+  ) |>
+  mutate(
+    `HIV Status` = hiv_status,
+    `Patients (N)` = n_patients,
+    `Cycles prescribed, mean (SD); IQR` = cycles_prescribed,
+    `Cycles given, mean (SD); IQR` = cycles_given,
+    `Completion rate, mean (SD); IQR` = completion_rate
+  ) |>
+  select(
+    `HIV Status`,
+    `Patients (N)`,
+    `Cycles prescribed, mean (SD); IQR`,
+    `Cycles given, mean (SD); IQR`,
+    `Completion rate, mean (SD); IQR`
+  )
+
+cycles_summ |>
+  kbl(booktabs = TRUE, align = "lcccc") |>
+  kable_styling(full_width = FALSE, position = "left")
+```
+
+Distribution of cycles prescribed by HIV status, normalized within HIV status groups
+```{r}
+#| label: plt-density-cycles-rx
+
+gic_validated |>
+  count(hiv_status, cycles_prescribed) |>
+  group_by(hiv_status) |>
+  mutate(prop = n / sum(n)) |>
+  ggplot(aes(x = cycles_prescribed, y = prop, fill = hiv_status)) +
+  geom_col(position = "dodge") +
+  scale_x_continuous(name = "Cycles prescribed", breaks = 1:12) +
+  ylab("Proportion") + labs(title = "Chemo Cycles Prescribed by HIV Status")
+```
+
+Proportion of patients who completed treatment cycle $k$ from the population of patients prescribed at least $k$ cycles.
+```{r}
+#| label: plt-cycle-completion
+
+survival_data <- gic_validated |>
+  # for each patient, create a row for each cycle they were prescribed
+  rowwise() |>
+  mutate(cycle = list(1:cycles_prescribed)) |>
+  unnest(cycle) |>
+  # mark whether they actually received each cycle
+  mutate(received = cycle <= cycles_given) |>
+  # for each HIV status and cycle number, get the proportion who received it
+  group_by(hiv_status, cycle) |>
+  summarise(
+    n_prescribed = n(),
+    prop_received = mean(received),
+    .groups = "drop"
+  )
+
+# main plot (store it)
+p_main <- ggplot(survival_data, aes(x = cycle, y = prop_received, color = hiv_status)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = 1:12) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(
+    title = "Chemotherapy Cycle Completion by HIV Status",
+    x = NULL,
+    y = "Proportion receiving cycle\n(among those prescribed at least that many)",
+    color = "HIV status"
+  ) +
+  theme(plot.margin = margin(5, 5, 0, 5))
+
+# table underneath
+p_table <- ggplot(survival_data, aes(x = cycle, y = hiv_status, label = n_prescribed)) +
+  geom_text(size = 3) +
+  scale_x_continuous(breaks = 1:12, limits = range(survival_data$cycle)) +
+  labs(x = NULL, y = NULL, subtitle = "Patients prescribed at least k cycles") +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.y = element_text(face = "bold"),
+    axis.text.x = element_blank(),
+    plot.margin = margin(0, 5, 5, 5)
+  )
+
+# combine
+p_main / p_table + plot_layout(heights = c(4, 1))
+```
+
+
+# Adverse Event Overview
+
+```{r}
+ae_dict <- tribble(
+  ~Variable, ~Level, ~Meaning,
+  "ae_any_pt", "Patient Level", "Flag: did the patient have any AE (grade > 0) at any point in treatment?",
+  "ae_any_early", "Patient Level", glue("Flag: did the patient have any AE (grade > 0) in cycles 1–{early_dropout_cycles}?"),
+  "ae_severe_any_pt", "Patient Level", "Flag: did the patient have any severe AE (grade >= 3) across all cycles?",
+  "ae_severe_any_early", "Patient Level", glue("Flag: did the patient have any severe AE (grade >= 3) in cycles 1–{early_dropout_cycles}?"),
+  "ae_max_grade_pt", "Patient Level", "Maximum adverse event grade across all treatment cycles",
+  "ae_max_grade_#", "Cycle Level", "For cycle {#}, maximum AE grade across markers (NA if all AE grades are 0).",
+  "ae_n_events_#", "Cycle Level", "For cycle {#}, count of AEs across markers (grade > 0) (NA if all AE grades are 0).",
+  "ae_n_severe_#", "Cycle Level", "For cycle {#}, count of severe AEs across markers (grade >= 3) (NA if all AE grades are 0).",
+  "ae_any_#", "Cycle Level", "For cycle {#}, flag: any AE this cycle (ae_n_events_# > 0) (NA if all AE grades are 0).",
+  "ae_severe_any_#", "Cycle Level", "For cycle {#}, flag: any severe AE this cycle (ae_n_severe_# > 0) (NA if all AE grades are 0)."
+)
+
+ae_dict |>
+  gt(groupname_col = "Level") |>
+  tab_header(title = "Adverse Event Variable Dictionary") |>
+  cols_label(
+    Variable = "Variable",
+    Meaning = "Description"
+  ) |>
+  cols_align(align = "left") |> 
+  tab_style(
+    style = cell_text(font = google_font("Roboto Mono"), size = "small"),
+    locations = cells_body(columns = Variable)
+  ) |>
+  opt_row_striping() |>
+  tab_options(
+    table.margin.left = "0",
+    column_labels.font.weight = "bold",
+    row_group.font.size = px(13),
+    row_group.background.color = "#f9f9f9",
+    row_group.border.top.width = px(2),
+    row_group.border.top.color = "lightgrey",
+    row_group.font.weight = "bold"
+  )
+```
+
+## Patient-Level AE Summaries
+
+Patient-level adverse event summaries by HIV status
+```{r}
+#| label: tbl-ae-by-pt
+#| tbl-cap: "Patient-level AE summaries by HIV status."
+
+pt_summ <- gic_models |>
+  group_by(hiv_status) |>
+  summarize(
+    total_pts = as.character(n()),
+
+    any_ae = summ_n_pct(ae_any_pt),
+    any_ae_early = summ_n_pct(ae_any_early),
+    any_severe_ae = summ_n_pct(ae_severe_any_pt),
+    any_severe_ae_early = summ_n_pct(ae_severe_any_early),
+
+    max_grade_pt = summ_stats(ae_max_grade_pt, mean = FALSE),
+
+    .groups = "drop"
+  )
+
+early_label <- paste0("Any AE in cycles 1–", early_dropout_cycles, " (%, patients)")
+severe_early_label <- paste0("Any severe AE in cycles 1–", early_dropout_cycles, " (%, patients)")
+
+pt_wide <- pt_summ |>
+  rename(
+    "Total patients (N)" = total_pts,
+    "Any AE (%, patients)" = any_ae,
+    !!early_label := any_ae_early,
+    "Any severe AE (%, patients)" = any_severe_ae,
+    !!severe_early_label := any_severe_ae_early,
+    "Max AE grade across all cycles, median (IQR)" = max_grade_pt
+  ) |>
+  pivot_longer(-hiv_status, names_to = "Metric", values_to = "value") |>
+  pivot_wider(names_from = hiv_status, values_from = value)
+
+pt_wide |>
+  kbl(booktabs = TRUE, align = "lcc") |>
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE, position = "center")
+```
+
+Distribution of maximum adverse event grade across all treatment cycles per patient by HIV status
+```{r}
+#| label: plt-ae-max-grade-pt
+#| fig-cap: "Distribution of maximum AE grade by HIV status."
+
+gic_models |>
+  filter(!is.na(ae_max_grade_pt)) |>
+  count(hiv_status, ae_max_grade_pt) |>
+  group_by(hiv_status) |>
+  mutate(prop = n / sum(n)) |>
+  ggplot(aes(x = ae_max_grade_pt, y = prop, fill = hiv_status)) +
+  geom_col(position = "dodge") +
+  scale_x_continuous(breaks = 0:5) +
+  scale_y_continuous(labels = scales::percent) +
+  labs(
+    title = "Maximum AE Grade per Patient by HIV Status",
+    x = "Maximum CTCAE grade",
+    y = "Proportion of patients",
+    fill = "HIV status"
+  ) +
+  theme_minimal()
+```
+
+## Cycle-Level AE Summaries
+
+Cycle-level adverse event summaries by HIV status
+```{r}
+#| label: tbl-ae-by-cycle
+#| tbl-cap: "Cycle-level AE summaries by HIV status."
+#| results: asis
+
+ae_cycle_long <- gic_models |>
+  select(
+    record_id, hiv_status, cycles_prescribed, cycles_given,
+    matches("^ae_n_markers_measured_\\d+$"),
+    matches("^ae_n_events_\\d+$"),
+    matches("^ae_n_severe_\\d+$"),
+    matches("^ae_max_grade_\\d+$"),
+    matches("^ae_any_\\d+$"),
+    matches("^ae_severe_any_\\d+$")
+  ) |>
+  pivot_longer(
+    cols = -c(record_id, hiv_status, cycles_prescribed, cycles_given),
+    names_to = c("metric", "cycle"),
+    names_pattern = "^(.*)_(\\d+)$",
+    values_to = "value"
+  ) |>
+  mutate(cycle = as.integer(cycle)) |>
+  pivot_wider(names_from = metric, values_from = value)
+
+ae_cycle_summ <- ae_cycle_long |>
+  group_by(hiv_status, cycle) |>
+  summarize(
+    measured_n = sum(ae_n_markers_measured > 0, na.rm = TRUE),
+    total_pts = n(),
+
+    `Patients (%)` = paste0(measured_n, " (", round(100 * measured_n / total_pts, 1), "%)"),
+
+    `Any AE (%)` = {
+      n <- sum(ae_any == TRUE, na.rm = TRUE)
+      paste0(n, " (", round(100 * n / measured_n, 1), "%)")
+    },
+    `Any severe AE (%)` = {
+      n <- sum(ae_severe_any == TRUE, na.rm = TRUE)
+      paste0(n, " (", round(100 * n / measured_n, 1), "%)")
+    },
+
+    `# AEs, median (IQR)` = summ_stats(ae_n_events, mean = FALSE),
+    `# severe AEs, median (IQR)` = summ_stats(ae_n_severe, mean = FALSE),
+    `Max grade, median (IQR)` = summ_stats(ae_max_grade, mean = FALSE, digits = 0),
+
+    .groups = "drop"
+  ) |>
+  rename(Cycle = cycle) |>
+  select(-measured_n, -total_pts)
+
+# One table per HIV status
+for (status in split(ae_cycle_summ, ae_cycle_summ$hiv_status)) {
+  cat("\n\n### HIV status:", status$hiv_status[1], "\n\n")
+  status |>
+    select(-hiv_status) |>
+    kbl(booktabs = TRUE, align = "lccccccc") |>
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE) |>
+    print()
+}
+```
+
+
+```{r}
+#| label: prep-ae-cycle-plot-data
+
+# Build cycle-level dataset from gic_models for plotting
+ae_cycle_measured <- ae_cycle_long |> 
+  filter(ae_n_markers_measured > 0) |> 
+  mutate(
+    pct_complete = if_else(is.na(cycles_prescribed) | cycles_prescribed <= 0,
+                           NA_real_,
+                           cycle / cycles_prescribed),
+    pct_bin = cut(
+      pct_complete,
+      breaks = seq(0, 1, by = 0.1),
+      include.lowest = TRUE,
+      right = TRUE
+    )
+  )
+
+summarize_metric <- function(df, var) {
+  df |> 
+    group_by(hiv_status, cycle) |> 
+    summarize(
+      n = sum(!is.na(.data[[var]])),
+      median = median(.data[[var]], na.rm = TRUE),
+      q25 = quantile(.data[[var]], 0.25, na.rm = TRUE),
+      q75 = quantile(.data[[var]], 0.75, na.rm = TRUE),
+      min = min(.data[[var]], na.rm = TRUE),
+      max = max(.data[[var]], na.rm = TRUE),
+      .groups = "drop"
+    )
+}
+
+ae_events_summ <- summarize_metric(ae_cycle_measured, "ae_n_events")
+ae_maxgrade_summ <- summarize_metric(ae_cycle_measured, "ae_max_grade")
+```
+
+Number of adverse events per cycle by HIV status (median with IQR and min-max bands, measured cycles only)
+```{r}
+#| label: plt-ae-n-events
+#| fig-cap: "Number of adverse events per treatment cycle by HIV status (median with IQR and min–max bands; measured cycles only)"
+
+ggplot(ae_events_summ, aes(x = cycle, group = hiv_status, color = hiv_status, fill = hiv_status)) +
+  geom_ribbon(aes(ymin = min, ymax = max), alpha = 0.2, color = NA) +
+  geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.5, color = NA) +
+  geom_line(aes(y = median), linewidth = 1) +
+  geom_point(aes(y = median), size = 2) +
+  scale_x_continuous(breaks = 1:12) +
+  labs(title = "Adverse events per cycle",
+       subtitle = "Median (line) with IQR and min–max bands among cycles with any AE grading recorded",
+       x = "Treatment cycle",
+       y = "Number of AEs",
+       color = "HIV status", fill = "HIV status") +
+  theme_minimal()
+```
+Initially higher trend for number of adverse events amongst HIV positive patients, but the median drops below that of HIV negative patients after cycle 4. Need to investigate, but could have to do with high early dropout rates, or possibly related to patients with HIV generally having fewer cycles of chemotherapy prescribed.
+
+Maximum adverse event grade per cycle by HIV status (median with IQR band, measured cycles only)
+
+```{r}
+#| label: plt-ae-max-grade-cycle
+#| fig-cap: "Median max AE grade per cycle by HIV status among measured cycles."
+
+ggplot(ae_maxgrade_summ, aes(x = cycle, group = hiv_status, color = hiv_status, fill = hiv_status)) +
+  geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.3, color = NA) +
+  geom_line(aes(y = median), linewidth = 1) +
+  geom_point(aes(y = median), size = 2) +
+  scale_x_continuous(breaks = 1:12) +
+  scale_y_continuous(breaks = 0:5, limits = c(0, 5)) +
+  labs(
+    title = "Max AE Grade per Cycle",
+    subtitle = "Median (line) with IQR band among measured cycles",
+    x = "Treatment cycle",
+    y = "Max AE grade",
+    color = "HIV status",
+    fill = "HIV status"
+  ) +
+  theme_minimal()
+```
+No easily discernible visual difference between patients with respect to HIV status and maximum adverse event experienced aside from period 7 onward as previously noted.
+
+Proportion of patients with any grade 3+ adverse event per cycle by HIV status (measured cycles only)
+
+```{r}
+#| label: plt-ae-severe-prop-cycle
+#| fig-cap: "Proportion of measured patients experiencing any grade 3+ AE per cycle by HIV status."
+
+severe_prop <- ae_cycle_measured |>
+  group_by(hiv_status, cycle) |>
+  summarize(
+    n = n(),
+    prop_severe = mean(ae_severe_any, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(severe_prop, aes(x = cycle, y = prop_severe, color = hiv_status)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = 1:12) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, NA)) +
+  labs(
+    title = "Proportion with Severe AE (Grade 3+) per Cycle",
+    x = "Treatment cycle",
+    y = "Proportion with any grade 3+ AE",
+    color = "HIV status"
+  ) +
+  theme_minimal()
+```
+Maybe a slightly higher proportion of HIV positive patients have severe AEs than HIV negative, need to do a test to compare over cycles 1-6. As noted before, in cycles 7 and onwards, there is only a single HIV positive patient still receiving treatment.
+
+
+## Early Severe AEs
+
+Contingency table of severe early adverse events (cycles 1 - `r early_dropout_cycles`)
+```{r}
+#| label: tbl-severe-early-contingency
+#| tbl-cap: "Contingency table of severe early adverse events vs HIV status"
+
+table_severe_early <- table(severe_early_ae = factor(gic_models$ae_severe_any_early, levels = c(0, 1), labels = c("No", "Yes")), HIV = gic_models$hiv_status)
+
+table_severe_early |>
+  as.data.frame.matrix() |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left") |>
+  add_header_above(c("Severe Early AE" = 1, "HIV Status" = 2))
+```
+
+
+## AE Co-occurrence
+
+Spearman correlation of patient-level max AE grades across AE types. Shows which AE types tend to co-occur at similar severity.
+```{r}
+#| label: prep-ae-correlation
+
+# Patient-level max grade per AE type across all cycles
+ae_cor_data <- ae_long |>
+  filter(!is.na(grade)) |>
+  group_by(record_id, ae_type) |>
+  summarize(max_grade = max(grade), .groups = "drop") |>
+  pivot_wider(names_from = ae_type, values_from = max_grade, values_fill = 0)
+
+# Drop zero-variance columns
+ae_cor_cols <- ae_cor_data |>
+  select(-record_id) |>
+  select(where(~ sd(., na.rm = TRUE) > 0))
+
+# Note which were dropped
+all_ae_cols <- names(ae_cor_data |> select(-record_id))
+dropped <- setdiff(all_ae_cols, names(ae_cor_cols))
+if (length(dropped) > 0) {
+  cat("Dropped (zero variance):", paste(ae_labels[dropped], collapse = ", "), "\n")
+}
+
+ae_cor_mat <- cor(ae_cor_cols, use = "pairwise.complete.obs", method = "spearman")
+rownames(ae_cor_mat) <- ae_labels[rownames(ae_cor_mat)]
+colnames(ae_cor_mat) <- ae_labels[colnames(ae_cor_mat)]
+```
+
+```{r}
+#| label: plt-ae-correlation-heatmap
+#| fig-cap: "Spearman correlation of max AE grades across all cycles by granular AE type."
+#| fig-height: 8
+#| fig-width: 9
+
+ggcorrplot(
+  ae_cor_mat,
+  type = "lower",
+  lab = TRUE,
+  lab_size = 2.5,
+  colors = c("#2166AC", "white", "#B2182B"),
+  tl.cex = 9,
+  title = "AE Co-occurrence (Spearman Correlation of Max Grades)"
+)
+```
+
+```{r}
+#| label: prep-ae-correlation-grouped
+
+ae_cor_grouped <- ae_long_grouped |>
+  group_by(record_id, ae_group) |>
+  summarize(max_grade = max(grade), .groups = "drop") |>
+  pivot_wider(names_from = ae_group, values_from = max_grade, values_fill = 0)
+
+ae_cor_cols_grouped <- ae_cor_grouped |>
+  select(-record_id) |>
+  select(where(~ sd(., na.rm = TRUE) > 0))
+
+ae_cor_mat_grouped <- cor(ae_cor_cols_grouped, use = "pairwise.complete.obs", method = "spearman")
+```
+
+```{r}
+#| label: plt-ae-correlation-grouped
+#| fig-cap: "Spearman correlation of max AE grades by combined category."
+#| fig-height: 7
+#| fig-width: 8
+
+ggcorrplot(
+  ae_cor_mat_grouped,
+  type = "lower",
+  lab = TRUE,
+  lab_size = 3,
+  colors = c("#2166AC", "white", "#B2182B"),
+  tl.cex = 10,
+  title = "AE Co-occurrence by Combined Category"
+)
+```
+
+
+
+```{r}
+#| label: tbl-ae-grouped-summary
+#| tbl-cap: "Patient-level AE summaries by combined category and HIV status"
+
+ae_long_grouped |>
+  group_by(ae_group, record_id) |>
+  summarize(max_grade = max(grade), .groups = "drop") |>
+  left_join(
+    gic_models |> select(record_id, hiv_status),
+    by = "record_id"
+  ) |>
+  group_by(ae_group, hiv_status) |>
+  summarize(
+    n = n(),
+    any_ae = paste0(sum(max_grade > 0), " (", round(100 * mean(max_grade > 0), 1), "%)"),
+    any_severe = paste0(sum(max_grade >= 3), " (", round(100 * mean(max_grade >= 3), 1), "%)"),
+    max_grade = summ_stats(max_grade, mean = FALSE, digits = 0),
+    .groups = "drop"
+  ) |>
+  rename(`AE Category` = ae_group, `HIV Status` = hiv_status) |>
+  gt(groupname_col = "AE Category") |>
+  cols_label(
+    `HIV Status` = "",
+    n = "N",
+    any_ae = "Any AE",
+    any_severe = "Any severe",
+    max_grade = "Max grade, median (IQR)"
+  ) |>
+  cols_align(align = "center", columns = -`HIV Status`) |>
+  cols_align(align = "left", columns = `HIV Status`)
+```
+
+
+
+# Save Data for Analysis
+               
+```{r}
+#| label: save-descriptive-data
+
+gic_descriptive <- list(
+  gic_models = gic_models,
+  ae_long = ae_long,
+  ae_long_grouped = ae_long_grouped,
+  ae_cycle_long = ae_cycle_long,
+  ae_cycle_measured = ae_cycle_measured,
+  cycle_summary = cycle_summary,
+  cycle_summary_grouped = cycle_summary_grouped,
+  grade_cols = grade_cols
+)
+
+gic_descriptive_path <- here("data", "processed", "gic_descriptive.rds")
+
+# Save if file doesn't exist, or check if overwrite is intended if it does.
+if (file.exists(gic_descriptive_path) && interactive()) {
+  response <- readline(prompt = paste("Warning:", basename(gic_descriptive_path), "already exists. Overwrite? (y/n):"))
+  
+  if (tolower(substr(response, 1, 1)) == "y") {
+    saveRDS(gic_descriptive, gic_descriptive_path)
+    message("File overwritten: ", basename(gic_descriptive_path))
+  } else {
+    message("Save operation cancelled.")
+  }
+} else {
+  saveRDS(gic_descriptive, gic_descriptive_path)
+  message("File saved: ", basename(gic_descriptive_path))
+}
+```

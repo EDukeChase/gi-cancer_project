@@ -34,3 +34,4 @@ _quarto/
 # General OS files
 .DS_Store
 Thumbs.db
+.positai

@@ -1,7 +1,14 @@
-# --- Core packages ---
+# ===================== #
+#     Project Setup     #
+# ===================== #
+
+
+# --- Packages --- #
+
 library(broom)              # 
 library(broom.helpers)      # 
 library(car)                # VIF
+library(glue)               # Easier syntax than paste0
 library(gt)                 # HTML optimized tables
 library(gtsummary)          # 
 library(here)               # Robust file paths
@@ -14,10 +21,11 @@ library(scales)             # Simplify palette visualization
 library(tidyverse)          # Essential R packages (Can pare down later)
 
 
-# --- Set seed for reproducibility ---
+# --- Reproducibility --- #
 set.seed(4534174)
 
-# --- Set global options ---
+
+# --- Rendering options --- #
 knitr::opts_chunk$set(
   echo = TRUE,
   fig.width = 8,
@@ -25,7 +33,8 @@ knitr::opts_chunk$set(
   fig.align = 'center'
 )
 
-# --- Define color-blind friendly color palettes ---
+
+# --- Color palettes --- #
 cb_light  <- RColorBrewer::brewer.pal(8, "Set2")
 cb_dark   <- RColorBrewer::brewer.pal(8, "Dark2")
 cb_paired <- RColorBrewer::brewer.pal(12, "Paired")
@@ -34,10 +43,10 @@ show_pal <- function(palette) {
   scales::show_col(palette)
 }
 
-# --- Set plot options ---
+
+# --- Plot theme --- #
 theme_set(theme_minimal(base_size = 12))
 
-# Apply color palette
 options(
   ggplot2.discrete.colour = cb_light,
   ggplot2.discrete.fill = cb_light,
@@ -45,10 +54,14 @@ options(
   ggplot2.continuous.fill = "viridis"
 )
 
-# --- Project Metadata & Variable Mapping ---
 
-# Define clinical panels for longitudinal data
-# Used for audits, visualization grouping, and type-checks
+# --- Project parameters ---
+# [MET-005] Patients who stopped at or before this cycle count as early dropouts
+early_dropout_cycles <- 4
+
+# --- Variable metadata --- #
+
+# Clinical panels for longitudinal data (audits, visualization grouping, type-checks)
 var_groups <- tibble(
   stem = c(
     "hb", "mcv", "mch", "plt", "wbc", "anc", "lcc",                # 1. CBC
@@ -65,7 +78,107 @@ var_groups <- tibble(
   )
 )
 
-# Helper to identify management variables vs lab variables
 mgmt_stems <- var_groups |> 
   filter(panel == "4. Mgmt") |> 
   pull(stem)
+
+ae_labels <- c(
+  hb        = "Anemia",
+  plt       = "Thrombocytopenia",
+  wbc       = "Leukopenia",
+  anc       = "Neutropenia",
+  lcc       = "Lymphopenia",
+  sodium    = "Sodium abnormality",
+  potassium = "Potassium abnormality",
+  alb       = "Hypoalbuminemia",
+  tbil      = "Hyperbilirubinemia",
+  alp       = "Elevated ALP",
+  alt       = "Elevated ALT",
+  ast       = "Elevated AST"
+)
+
+# Combined AE categories per MET-007
+ae_group_map <- c(
+  hb        = "Anemia",
+  plt       = "Myelosuppression",
+  wbc       = "Myelosuppression",
+  anc       = "Myelosuppression",
+  lcc       = "Myelosuppression",
+  sodium    = "Sodium abnormality",
+  potassium = "Potassium abnormality",
+  alb       = "Hypoalbuminemia",
+  tbil      = "Hyperbilirubinemia",
+  alp       = "Raised transaminases",
+  alt       = "Raised transaminases",
+  ast       = "Raised transaminases"
+)
+
+# --- Helper functions --- #
+
+# Format count and percentage for binary variables
+summ_n_pct <- function(x, digits = 1) {
+  n <- sum(x == 1, na.rm = TRUE)
+  pct <- 100 * n / sum(!is.na(x))
+  paste0(n, " (", round(pct, digits), "%)")
+}
+
+summ_stats <- function(x, mean = TRUE, range = FALSE, digits = 1) {
+  x <- x[!is.na(x)]
+  
+  if (mean) {
+    # Format: Mean (SD); Lower–Upper
+    avg    <- mean(x)
+    spread <- sd(x)
+    outer  <- if (range) range(x) else quantile(x, c(0.25, 0.75), names = FALSE)
+    
+    paste0(
+      round(avg, digits), " (", round(spread, digits), "); ",
+      round(outer[1], digits), "–", round(outer[2], digits)
+    )
+  } else {
+    # Format: Median (IQR)
+    med <- median(x)
+    iqr <- quantile(x, c(0.25, 0.75), names = FALSE)
+    
+    paste0(round(med, digits), " (", round(iqr[1], digits), "–", round(iqr[2], digits), ")")
+  }
+}
+
+# Format median with IQR
+summ_median_iqr <- function(x, digits = 1) {
+  x <- x[!is.na(x)]
+  med <- median(x)
+  q <- quantile(x, probs = c(0.25, 0.75), names = FALSE)
+  paste0(round(med, digits), " (", round(q[1], digits), "–", round(q[2], digits), ")")
+}
+
+# Format mean, SD, and range
+summ_mean_sd_range <- function(x, digits = 1) {
+  x <- x[!is.na(x)]
+  m <- mean(x)
+  s <- sd(x)
+  rng <- range(x)
+  paste0(
+    round(m, digits), " (", round(s, digits), "); ",
+    round(rng[[1]], digits), "–", round(rng[[2]], digits)
+  )
+}
+
+# Format mean, SD, and IQR
+summ_mean_sd_iqr <- function(x, digits = 1) {
+  x <- x[!is.na(x)]
+  m <- mean(x)
+  s <- sd(x)
+  q <- quantile(x, probs = c(0.25, 0.75), na.rm = TRUE, names = FALSE)
+  paste0(
+    round(m, digits), " (", round(s, digits), "); ",
+    round(q[1], digits), "–", round(q[2], digits)
+  )
+}
+
+# Format p-values (scientific notation below 0.001)
+format_p <- function(p) {
+  if (is.na(p)) return("—")
+  if (p < 0.001) return(formatC(p, format = "e", digits = 3))
+  as.character(round(p, 3))
+}
