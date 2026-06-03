@@ -23,7 +23,7 @@ gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FIN
 ```{r}
 #| label: apply-manual-patches
 
-
+# [DAT-025] Incorporate age data
 age_data <- read_csv(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET-Age_added.csv")) |> 
   select(record_id, `Age (years)`)
 
@@ -47,7 +47,7 @@ gic_raw <- gic_raw |>
     `Blood.transfusion.2` = if_else(record_id == 505, 1, `Blood.transfusion.2`),
     `Blood.transfusion.5` = if_else(record_id == 567, 1, `Blood.transfusion.5`),
     
-    # [DAT-019] Remove erroneous cycle 12 data,  match cycles given to match data presence, update completion rate
+    # [DAT-019] Remove erroneous cycle 12 data, match cycles given to match data presence, update completion rate
     across(ends_with(".12"), ~ if_else(record_id == 146, NA, .x)),
     `Total.number.of.chemotherapy.administered` = if_else(record_id == 27, 6, `Total.number.of.chemotherapy.administered`),
     `Chemotherapy.completion.rates.(%)` = if_else(record_id == 27, 100 * `Total.number.of.chemotherapy.administered` / `Total.number.chemo.cycles.prescribed`, `Chemotherapy.completion.rates.(%)`),

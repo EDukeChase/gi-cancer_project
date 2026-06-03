@@ -131,7 +131,6 @@ gic_models <- gic_validated |>
 
 
 # Patient Demographics
-
 Patient age and sex by HIV status.
 
 ```{r}
@@ -637,32 +636,79 @@ gic_models |>
   )
 ```
 
-
-Chemotherapy assignment within each cancer site
 ```{r}
-#| label: tbl-cancer-site-chemo
-#| tbl-cap: "Chemotherapy assignment by cancer site"
-
-
+#| label: plt-site-by-age-hiv
+#| fig-cap: "Proportion of patients at each cancer site by age, stratified by HIV status."
+#| fig-height: 8
+#| fig-width: 10
 
 gic_models |>
-  group_by(cancer_site, chemo_type) |>
-  summarize(n = n(), .groups = "drop") |>
-  group_by(cancer_site) |>
-  mutate(
-    pct = round(100 * n / sum(n), 1),
-    `n (%)` = paste0(n, " (", pct, "%)")
-  ) |>
-  ungroup() |>
-  select(cancer_site, chemo_type, `n (%)`) |>
-  pivot_wider(names_from = chemo_type, values_from = `n (%)`,
-              values_fill = "0 (0%)") |>
-  rename(`Cancer site` = cancer_site) |>
-  kbl(booktabs = TRUE, align = c("l", rep("c", length(chemo_levels)))) |>
-  kable_styling(
-    bootstrap_options = c("striped", "hover", "condensed"),
-    full_width = FALSE
+  select(record_id, age, cancer_site, hiv_status) |>
+  mutate(dummy = 1) |>
+  pivot_wider(id_cols = c(record_id, age, hiv_status), names_from = cancer_site, values_from = dummy, values_fill = 0) |>
+  pivot_longer(-c(record_id, age, hiv_status), names_to = "cancer_site", values_to = "assigned") |>
+  ggplot(aes(x = age, y = assigned, color = hiv_status)) +
+  geom_rug(data = \(d) filter(d, assigned == 1), aes(x = age), sides = "b", alpha = 0.75) +
+  geom_smooth(method = "loess", se = FALSE) +
+  scale_y_continuous(labels = scales::percent) +
+  facet_wrap(~ cancer_site) +
+  labs(
+    title = "Cancer Site by Age and HIV Status",
+    x = "Age at diagnosis",
+    y = "Estimated proportion with each cancer sit",
+    color = "HIV status"
   )
+```
+
+```{r}
+#| label: plt-site-by-age-sex
+#| fig-cap: "Proportion of patients at each cancer site by age, stratified by sex."
+#| fig-height: 8
+#| fig-width: 10
+
+gic_models |>
+  select(record_id, age, cancer_site, sex) |>
+  mutate(dummy = 1) |>
+  pivot_wider(id_cols = c(record_id, age, sex), names_from = cancer_site, values_from = dummy, values_fill = 0) |>
+  pivot_longer(-c(record_id, age, sex), names_to = "cancer_site", values_to = "assigned") |>
+  ggplot(aes(x = age, y = assigned, color = sex)) +
+  geom_rug(data = \(d) filter(d, assigned == 1), aes(x = age), sides = "b", alpha = 0.5) +
+  geom_smooth(method = "loess", se = FALSE) +
+  scale_y_continuous(labels = scales::percent) +
+  facet_wrap(~ cancer_site) +
+  labs(
+    title = "Cancer Site by Age and Sex",
+    x = "Age at diagnosis",
+    y = "Estimated proportion",
+    color = "Sex"
+  )
+```
+
+
+
+Chemotherapy assignment within each cancer site
+
+```{r}
+#| label: plt-cancer-site-chemo
+#| fig-cap: "Chemotherapy assignment by cancer site."
+#| fig-height: 5
+#| fig-width: 7
+
+gic_models |>
+  count(cancer_site, chemo_type) |>
+  group_by(cancer_site) |>
+  mutate(prop = n / sum(n)) |>
+  ggplot(aes(x = chemo_type, y = cancer_site, fill = prop)) +
+  geom_tile() +
+  geom_text(aes(label = paste0(n, "\n", round(100 * prop), "%")), size = 2.5) +
+  scale_fill_gradient(low = "white", high = cb_light[1], labels = scales::percent) +
+  labs(
+    title = "Chemotherapy Assignment by Cancer Site",
+    x = "Chemo type",
+    y = "Cancer site",
+    fill = "Proportion"
+  ) +
+  theme(axis.text.x = element_text(angle = 30, hjust = 1))
 ```
 
 ## Cycles Prescribed and Received
@@ -1184,6 +1230,191 @@ ae_long_grouped |>
   cols_align(align = "left", columns = `HIV Status`)
 ```
 
+# Comprehensive Descriptive Table
+
+```{r}
+#| label: prep-tbl-desc
+#| include: false
+
+# Switch between the full intermediate view and the lean publication view.
+# Intermediate: all blocks, expected counts shown, p-values shown.
+# Publication: core four blocks only, no expected counts, p-values optional.
+detailed <- TRUE
+
+show_exp <- detailed   # expected counts only in the intermediate view
+show_p   <- TRUE       # set FALSE if you want a clean publication table
+
+# Patient-level "any event" flag per collapsed AE category (MET-007).
+# Categories follow ae_group_map: Anemia, Myelosuppression, Sodium/Potassium
+# abnormality, Hypoalbuminemia, Hyperbilirubinemia, Raised transaminases.
+ae_group_pt <- ae_long_grouped |>
+  group_by(record_id, ae_group) |>
+  summarize(any_event = as.integer(max(grade) > 0), .groups = "drop") |>
+  pivot_wider(
+    names_from   = ae_group,
+    values_from  = any_event,
+    values_fill  = 0,
+    names_prefix = "aegrp_"
+  )
+
+aegrp_cols <- names(ae_group_pt)[startsWith(names(ae_group_pt), "aegrp_")]
+
+tbl_desc_dat <- gic_models |>
+  left_join(ae_group_pt, by = "record_id") |>
+  mutate(across(all_of(aegrp_cols), ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))))
+
+# Shared formatting so every stacked block matches (median (Q1–Q3) per summ_stats)
+tbl_opts <- list(
+  by           = "hiv_status",
+  statistic    = list(all_continuous() ~ "{median} ({p25}–{p75})",
+                      all_categorical() ~ "{n} ({p}%)"),
+  digits       = all_continuous() ~ 1,
+  missing      = "ifany",
+  missing_text = "Missing"
+)
+
+mk_block <- function(vars, labels, types = NULL, with_p = TRUE, show_expected = TRUE) {
+  args <- c(
+    list(data = tbl_desc_dat |> select(hiv_status, all_of(vars)),
+         include = all_of(vars),
+         label = labels),
+    tbl_opts
+  )
+  if (!is.null(types)) args$type <- types
+
+  tbl <- do.call(tbl_summary, args)
+
+  if (with_p) {
+    tbl <- tbl |>
+      add_p(
+        test = list(all_continuous() ~ "wilcox.test",
+                    all_categorical() ~ "fisher.test"),
+        pvalue_fun = ~ style_pvalue(.x, digits = 2)
+      )
+  }
+
+  if (show_expected) {
+    # Intermediate aid only — appends [expected count] to each HIV column for
+    # categorical levels. Keyed on variable/label so it's robust to row order.
+    cat_vars <- tbl_desc_dat |>
+      select(all_of(vars)) |>
+      select(where(is.factor)) |>
+      names()
+
+    exp_tbl <- tbl_desc_dat |>
+      select(hiv_status, all_of(cat_vars)) |>
+      pivot_longer(-hiv_status, names_to = "variable", values_to = "level") |>
+      filter(!is.na(level)) |>
+      group_by(variable) |>
+      group_modify(~ {
+        tab <- table(.x$level, .x$hiv_status)
+        ex  <- outer(rowSums(tab), colSums(tab)) / sum(tab)
+        as_tibble(ex, rownames = "level") |>
+          pivot_longer(-level, names_to = "hiv_status", values_to = "expected")
+      }) |>
+      ungroup() |>
+      mutate(expected = round(expected, 1))
+
+    tbl <- tbl |>
+      modify_table_body(~ .x |>
+        left_join(
+          exp_tbl |> filter(hiv_status == "Negative") |> select(variable, label = level, exp_neg = expected),
+          by = c("variable", "label")
+        ) |>
+        left_join(
+          exp_tbl |> filter(hiv_status == "Positive") |> select(variable, label = level, exp_pos = expected),
+          by = c("variable", "label")
+        ) |>
+        mutate(
+          stat_1 = if_else(!is.na(exp_neg), paste0(stat_1, " [", exp_neg, "]"), stat_1),
+          stat_2 = if_else(!is.na(exp_pos), paste0(stat_2, " [", exp_pos, "]"), stat_2)
+        ) |>
+        select(-exp_neg, -exp_pos)
+      )
+  }
+
+  tbl
+}
+
+t_patient <- mk_block(
+  c("age", "sex"),
+  list(age ~ "Age, years", sex ~ "Sex"),
+  types = list(age ~ "continuous")
+)
+
+t_disease <- mk_block(
+  c("cancer_site", "histology", "cancer_stage"),
+  list(cancer_site ~ "Cancer site", histology ~ "Histology", cancer_stage ~ "Cancer stage")
+)
+
+t_treatment <- mk_block(
+  c("tx_intent", "tx_concurrent_rtx", "chemo_type", "cycles_prescribed", "cycles_given"),
+  list(tx_intent ~ "Treatment intent", tx_concurrent_rtx ~ "Concurrent radiotherapy",
+       chemo_type ~ "Chemotherapy type", cycles_prescribed ~ "Cycles prescribed",
+       cycles_given ~ "Cycles received"),
+  types = list(cycles_prescribed ~ "continuous", cycles_given ~ "continuous")
+)
+
+t_ae <- mk_block(
+  aegrp_cols,
+  list(
+    `aegrp_Anemia`               ~ "Anemia",
+    `aegrp_Myelosuppression`     ~ "Myelosuppression",
+    `aegrp_Raised transaminases` ~ "Raised transaminases",
+    `aegrp_Sodium abnormality`   ~ "Sodium abnormality",
+    `aegrp_Potassium abnormality` ~ "Potassium abnormality",
+    `aegrp_Hypoalbuminemia`      ~ "Hypoalbuminemia",
+    `aegrp_Hyperbilirubinemia`   ~ "Hyperbilirubinemia"
+  )
+)
+
+t_comorbid <- mk_block(
+  c("comorbid_htn", "comorbid_dm", "comorbid_tb", "comorbid_asthma",
+    "comorbid_chd", "comorbid_none"),
+  list(comorbid_htn ~ "Hypertension", comorbid_dm ~ "Diabetes",
+       comorbid_tb ~ "Tuberculosis", comorbid_asthma ~ "Asthma",
+       comorbid_chd ~ "Coronary heart disease", comorbid_none ~ "No comorbidities")
+)
+
+t_history <- mk_block(
+  c("hx_etoh", "hx_tobacco", "hx_cancer", "residence"),
+  list(hx_etoh ~ "Alcohol history", hx_tobacco ~ "Tobacco history",
+       hx_cancer ~ "Prior cancer", residence ~ "Residence")
+)
+
+tbl_desc_dat <- gic_models |>
+  left_join(ae_group_pt, by = "record_id") |>
+  mutate(
+    across(all_of(aegrp_cols), ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))),
+    ae_any_pt        = factor(ae_any_pt, levels = c(0, 1), labels = c("No", "Yes")),
+    ae_severe_any_pt = factor(ae_severe_any_pt, levels = c(0, 1), labels = c("No", "Yes"))
+  )
+
+t_ae_summary <- mk_block(
+  c("ae_any_pt", "ae_severe_any_pt", "ae_max_grade_pt"),
+  list(ae_any_pt ~ "Any adverse event", ae_severe_any_pt ~ "Any severe AE (grade 3–4)",
+       ae_max_grade_pt ~ "Max AE grade"),
+  types = list(ae_max_grade_pt ~ "continuous")
+)
+```
+
+```{r}
+#| label: tbl-desc
+#| tbl-cap: "Patient, disease, treatment, and adverse event characteristics by HIV status"
+
+tbl_stack(
+  list(t_patient, t_disease, t_treatment, t_comorbid, t_history, t_ae, t_ae_summary),
+  group_header = c("Patient characteristics", "Disease characteristics", "Treatment",
+                   "Comorbidities", "History", "Adverse events (any grade, by category)",
+                   "Adverse event summary")
+) |>
+  modify_header(label ~ "**Characteristic**") |>
+  modify_spanning_header(c("stat_1", "stat_2") ~ "**HIV Status**") |>
+  as_gt() |>
+  tab_source_note(
+    "Continuous: median (Q1–Q3). Categorical: n (%). AE rows show patients with any-grade event in each collapsed category. p-values: Wilcoxon rank-sum (continuous), Fisher's exact (categorical); unadjusted, descriptive only."
+  )
+```
 
 
 # Save Data for Analysis
