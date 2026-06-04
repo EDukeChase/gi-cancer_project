@@ -143,22 +143,6 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- **Current location:** 
     - *Summary:* `ggplot` warning: "Removed 21 rows containing non-finite values".
     - *Task:* Verify if these correspond exactly to the known `NA`s in Height, Weight, and BMI, or if valid data is being excluded.
-- [ ] **DAT-024 [P2]: Hypernatremia grading rules**
-	- **Status:** Open
-	- **Created:** 2026-03-31
-	- **Last updated:** 2026-03-31
-	- **Location:** `data/grading_rules.csv`; `02_data-validation.qmd` (chunk: `derive-adverse-events`)
-	- **Summary:** `grading_rules.csv` was missing rules for hypernatremia, and after they were added, Grade 1 had an incorrect upper bound (155 instead of 150) that overlapped with Grade 2, causing 6 observations to receive dual grades and producing list columns in downstream analysis.
-	- **Scope:** `sodium_#` variables across all cycles; all patients with sodium > 145.
-	- **Impact:** Hypernatremia cases are silently excluded from all adverse event analyses, potentially underestimating sodium-related AE burden.
-	- **Actions:**
-		- [x] Add hypernatremia grading rows to `grading_rules.csv` per NCI-CTCAE v5: Grade 1 (>145–150), Grade 2 (>150–155), Grade 3 (>155–160), Grade 4 (>160).
-		- [x] Fix Grade 1 max_val from 155 to 150.
-		- [x] Re-run `derive-adverse-events` and re-save `gic_validated.rds`.
-		- [ ] Re-run downstream analyses after regenerating graded data.
-	- **Timeline:**
-		- 2026-05-14: Fixed overlapping Grade 1/Grade 2 range. Confirmed list column issue resolved.
-		- 2026-03-31: Identified while investigating sodium and potassium grading structure ahead of early dropout analysis. Confirmed 48 observations above normal range currently ungraded.
 - [ ] **DAT-025 [P2]: Incorporate age and sex into analysis**
 	- **Status:** In Progress
 	- **Type:** Data
@@ -180,6 +164,23 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Explore age as a threshold variable at 70 in addition to continuous
 	- **Timeline:**
 		- 2026-04-20: Age data received. Imported and joined to existing data. Added to data cleaning pipeline.
+- [ ] **DAT-026 [P2]: Restructure adverse event grading to structured long format**
+	- **Status:** In Progress
+	- **Type:** Data
+	- **Created:** 2026-06-04
+	- **Last updated:** 2026-06-04
+	- **Location:** `data/grading_rules.csv`; `02_data-validation.qmd` (chunk: `derive-adverse-events`); `03_descriptive-statistics.qmd` (chunk: `engineer-ae-variables`); `R/setup.R`
+	- **Summary:** Reworked the grading pipeline to output a long-format table (`ae_graded_long`) with numeric grade and a condition column, replacing the previous approach of storing text labels and regex-parsing the grade back out. Sodium and potassium are now graded as separate hypo/hyper conditions and treated as four distinct adverse event types (hyponatremia, hypernatremia, hypokalemia, hyperkalemia) rather than collapsing direction into a single variable.
+	- **Rationale:** The regex parsing existed only because the grading step discarded the structured grade and condition. Outputting structured data removes all downstream regex and resolves the directional collapse documented in DAT-024 — hypo and hyper are clinically distinct adverse events per CTCAE and are now scored independently, including grade-0 (normal) assessments for each direction.
+	- **Actions:**
+		- [x] Rewrite grading_rules.csv sodium/potassium values
+		- [x] Rewrite derive-adverse-events to output ae_graded_long
+		- [x] Save ae_graded_long.rds
+		- [ ] Update engineer-ae-variables to load structured data
+		- [ ] Update ae_labels and ae_group_map
+		- [ ] Restructure grading verification/audit for directional columns
+		- [ ] Re-render full pipeline and verify outputs
+	- **Supersedes:** Resolves the directional limitation noted in DAT-024.
 
 ## Methodology (MET)
 *Methodological and analytical decisions affecting the statistical plan.*
@@ -585,3 +586,19 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Question:** Which summary measure best captures per-patient adverse event severity and is most interpretable?
 	- **Decision:** `ae_max_grade_pt` selected as the primary patient-level measure, and `ae_max_grade_#` selected as the primary cycle-level measure. `ae_n_events_#` and `ae_n_severe_#` were retained for possible use in future models, but all other candidates were removed from the analysis document.
 	- **Rationale:** Max grade is standard in the literature, while cumulative burden type measurements (e.g., `ae_mean_sum_grade`) are uncommon and not used frequently in similar analyses. Settled on decision after Zoom meeting with Dr. Hendricks and Dr. Mazhindu on 2026-03-04.
+- [x] **DAT-024 [P2]: Hypernatremia grading rules**
+	- **Status:** Closed
+	- **Created:** 2026-03-31
+	- **Last updated:** 2026-03-31
+	- **Location:** `data/grading_rules.csv`; `02_data-validation.qmd` (chunk: `derive-adverse-events`)
+	- **Summary:** `grading_rules.csv` was missing rules for hypernatremia, and after they were added, Grade 1 had an incorrect upper bound (155 instead of 150) that overlapped with Grade 2, causing 6 observations to receive dual grades and producing list columns in downstream analysis.
+	- **Scope:** `sodium_#` variables across all cycles; all patients with sodium > 145.
+	- **Impact:** Hypernatremia cases are silently excluded from all adverse event analyses, potentially underestimating sodium-related AE burden.
+	- **Actions:**
+		- [x] Add hypernatremia grading rows to `grading_rules.csv` per NCI-CTCAE v5: Grade 1 (>145–150), Grade 2 (>150–155), Grade 3 (>155–160), Grade 4 (>160).
+		- [x] Fix Grade 1 max_val from 155 to 150.
+		- [x] Re-run `derive-adverse-events` and re-save `gic_validated.rds`.
+		- [x] Re-run downstream analyses after regenerating graded data.
+	- **Timeline:**
+		- 2026-05-14: Fixed overlapping Grade 1/Grade 2 range. Confirmed list column issue resolved.
+		- 2026-03-31: Identified while investigating sodium and potassium grading structure ahead of early dropout analysis. Confirmed 48 observations above normal range currently ungraded.

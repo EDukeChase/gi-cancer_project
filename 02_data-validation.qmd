@@ -88,75 +88,99 @@ if (length(problem_ids) > 0) {
 
 ```{r}
 #| label: investigate-extraneous-data
-#| results: asis
+#| output: asis
 
 view_pt_hx <- function(pid, df, audit_data = NULL, show_empty = TRUE) {
   # Get official count and audit info for the pt
   pt_row <- df |> filter(record_id == pid)
   n_given <- pt_row |> pull(cycles_given)
-  
-  audit_row <- if(!is.null(audit_data)) audit_data |> filter(record_id == pid) else NULL
-  
+
+  audit_row <- if (!is.null(audit_data)) audit_data |> filter(record_id == pid) else NULL
+
   # Extract and pivot longitudinal data
-  pt_data <- pt_row |> 
-    select(matches("_[1-9]\\d*$")) |> 
+  pt_data <- pt_row |>
+    select(matches("_[1-9]\\d*$")) |>
     pivot_longer(
       cols = everything(),
       names_to = c("stem", "cycle"),
       names_pattern = "(.*)_(\\d+)$",
       values_to = "value",
-      values_transform = list(value = as.character) 
-    ) |> 
-    mutate(cycle = as.numeric(cycle)) |> 
+      values_transform = list(value = as.character)
+    ) |>
+    mutate(cycle = as.numeric(cycle)) |>
     # Keep cycles based on tx hx or data presence
-    filter(if(show_empty) cycle <= n_given | !is.na(value) else !is.na(value)) |> 
+    filter(if (show_empty) cycle <= n_given | !is.na(value) else !is.na(value)) |>
     left_join(var_groups, by = "stem") |>
     arrange(panel, stem)
-  
-  # Create wide format for kable
-  pt_wide <- pt_data |> 
-    select(panel, stem, cycle, value) |> 
+
+  # Create wide format
+  pt_wide <- pt_data |>
+    select(panel, stem, cycle, value) |>
     pivot_wider(names_from = cycle, values_from = value)
-  
+
   cycle_cols <- as.numeric(setdiff(names(pt_wide), c("panel", "stem")))
-  
+
   # Build table
-  kb <- pt_wide |> 
-    kbl(booktabs = T,
-        caption = paste("Pt Data: Record ID", pid, "(Given:", n_given, ")")) |> 
-    kable_styling(font_size = 11)
+  tbl <- pt_wide |>
+    gt(groupname_col = "panel", rowname_col = "stem") |>
+    tab_header(
+      title = paste("Pt Data: Record ID", pid, "(Given:", n_given, ")")
+    ) |>
+    tab_options(table.font.size = px(11))
 
   # Highlight affected columns
-  for(cyc in cycle_cols) {
-    col_idx <- which(names(pt_wide) == as.character(cyc))
-    has_any_data <- any(!is.na(pt_wide[[as.character(cyc)]]))
-    
+  for (cyc in cycle_cols) {
+    cyc_chr <- as.character(cyc)
+    has_any_data <- any(!is.na(pt_wide[[cyc_chr]]))
+
     # Check for missing management in this cycle
-    mgmt_in_cycle <- pt_data |> 
-      filter(cycle == cyc, panel == "4. Mgmt") |> 
+    mgmt_in_cycle <- pt_data |>
+      filter(cycle == cyc, panel == "4. Mgmt") |>
       pull(value)
     is_mgmt_incomplete <- any(is.na(mgmt_in_cycle))
-    
-    if (cyc > n_given) {
-      # Data recorded beyond the official count
-      kb <- kb |> column_spec(col_idx, background = cb_light[2])
+
+    fill <- if (cyc > n_given) {
+      cb_light[2]          # Data recorded beyond the official count
     } else if (!has_any_data) {
-      # Entirely empty cycles that should have data
-      kb <- kb |> column_spec(col_idx, background = cb_light[4])
+      cb_light[4]          # Entirely empty cycles that should have data
     } else if (is_mgmt_incomplete) {
-      # Partial management data
-      kb <- kb |> column_spec(col_idx, background = cb_light[6])
+      cb_light[6]          # Partial management data
+    } else {
+      NA_character_
+    }
+
+    if (!is.na(fill)) {
+      tbl <- tbl |>
+        tab_style(
+          style = cell_fill(color = fill),
+          locations = cells_body(columns = all_of(cyc_chr))
+        )
     }
   }
-  
-  return(kb)
+
+  tbl
 }
 
 # Run audit for flagged records
-walk(problem_ids, function(pid) {
-  print(view_pt_hx(pid, gic_encoded, audit_data = patient_audit, show_empty = TRUE))
-  cat("\n<br><br>\n") 
-})
+cat("::: {.panel-tabset}\n\n")
+
+for (current_pid in problem_ids) {
+  cat(knitr::knit_child(
+    text = c(
+      "## `r current_pid`",
+      "",
+      "```{r}",
+      "#| echo: false",
+      "view_pt_hx(current_pid, gic_encoded, audit_data = patient_audit, show_empty = TRUE)",
+      "```",
+      ""
+    ),
+    envir = environment(),
+    quiet = TRUE
+  ))
+}
+
+cat(":::\n\n")
 ```
 
 
@@ -477,32 +501,35 @@ Apply grading logic to raw laboratory values using `grading_rules.csv`.
 # Load adverse event grading rules
 rules <- read_csv(here("data", "grading_rules.csv"), show_col_types = FALSE)
 
-# Pivot, Grade, and Pivot Back
-gic_graded <- gic_encoded |> 
-  # Pivot Long
+# Long-format graded data
+ae_graded_long <- gic_encoded |> 
   select(record_id, matches("_\\d+$")) |> 
   pivot_longer(
     cols = -record_id,
     names_to = c("stem", "cycle"),
     names_pattern = "(.*)_(\\d+)$",
     values_to = "value",
-    values_transform = list(value = as.numeric) # Ensure numeric for grading math
+    values_transform = list(value = as.numeric)
   ) |> 
+  mutate(cycle = as.integer(cycle)) |> 
   filter(!is.na(value)) |> 
   semi_join(rules, by = "stem") |> 
-  
-  # Apply Logic (Min < Val <= Max)
   left_join(rules, by = "stem", relationship = "many-to-many") |> 
   filter(value > min_val & value <= max_val) |> 
-  
-  # Pivot Wide (Create labels)
-  mutate(new_col = paste0(stem, "_grade_", cycle)) |> 
+  mutate(
+    ae_type = if_else(stem %in% c("sodium", "potassium"), tolower(condition), stem)
+  ) |> 
+  select(record_id, stem, ae_type, cycle, value, grade, condition, label)
+
+# Wide grade columns for human-readable auditing
+gic_graded_wide <- ae_graded_long |> 
+  mutate(new_col = paste0(ae_type, "_grade_", cycle)) |> 
   select(record_id, new_col, label) |> 
   pivot_wider(names_from = new_col, values_from = label)
 
-# Join back to main data
+
 gic_validated <- gic_encoded |> 
-  left_join(gic_graded, by = "record_id")
+  left_join(gic_graded_wide, by = "record_id")
 
 # Print a random sample of grades to see if it worked, will perform audit later
 gic_validated |> 
@@ -528,6 +555,14 @@ gic_validated |>
   head(10) |> 
   kbl(caption = "Verification: WBC Cycle 6 Grading") |> 
   kable_styling(full_width = FALSE)
+
+gic_validated |> 
+  select(record_id, sodium_3, hypernatremia_grade_3) |> 
+  # Filter for patients who have data for the given cycle
+  filter(!is.na(sodium_3)) |> 
+  head(10) |> 
+  kbl(caption = "Verification: Hypernatremia Cycle 3 Grading") |> 
+  kable_styling(full_width = FALSE)
 ```
 
 ## Adverse Event Counts
@@ -538,24 +573,7 @@ gic_validated |>
 ```{r}
 #| label: save-validated-data
 
-# Define path to file
-gic_validated_path <- here("data", "processed", "gic_validated.rds")
-
-# Save if file doesn't exist, or check if overwrite is intended if it does.
-if (file.exists(gic_validated_path) && interactive()) {
-  # If file exists and this is being run manually in RStudio ask before overwriting
-  response <- readline(prompt = paste("Warning:", basename(gic_validated_path), "already exists. Overwrite? (y/n):"))
-  
-  if (tolower(substr(response, 1, 1)) == "y") {
-    saveRDS(gic_validated, gic_validated_path)
-    message("File overwritten: ", basename(gic_validated_path))
-  } else {
-    message("Save operation cancelled.")
-  }
-} else {
-  # If the file doesn't exist or document is being rendered, just save it
-  saveRDS(gic_validated, gic_validated_path)
-  message("File saved: ", basename(gic_validated_path))
-}
+save_rds_safe(gic_validated, here("data", "processed", "gic_validated.rds"))
+save_rds_safe(ae_graded_long, here("data", "processed", "ae_graded_long.rds"))
 ```
 

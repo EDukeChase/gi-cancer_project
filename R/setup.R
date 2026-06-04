@@ -8,6 +8,7 @@
 library(broom)              # 
 library(broom.helpers)      # 
 library(car)                # VIF
+library(downloadthis)       # Download csv versions of gt tables
 library(glue)               # Easier syntax than paste0
 library(gt)                 # HTML optimized tables
 library(gtsummary)          # 
@@ -181,4 +182,20 @@ format_p <- function(p) {
   if (is.na(p)) return("—")
   if (p < 0.001) return(formatC(p, format = "e", digits = 3))
   as.character(round(p, 3))
+}
+
+# Safe/interactive save function
+save_rds_safe <- function(object, path) {
+  if (file.exists(path) && interactive()) {
+    response <- readline(prompt = paste("Warning:", basename(path), "already exists. Overwrite? (y/n):"))
+    if (tolower(substr(response, 1, 1)) == "y") {
+      saveRDS(object, path)
+      message("File overwritten: ", basename(path))
+    } else {
+      message("Save operation cancelled: ", basename(path))
+    }
+  } else {
+    saveRDS(object, path)
+    message("File saved: ", basename(path))
+  }
 }

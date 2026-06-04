@@ -1,6 +1,6 @@
 {
   "R": {
-    "Version": "4.5.0",
+    "Version": "4.5.2",
     "Repositories": [
       {
         "Name": "CRAN",
@@ -768,7 +768,8 @@
       "License": "Unlimited",
       "NeedsCompilation": "no",
       "Author": "Angelo Canty [aut] (author of original code for S), Brian Ripley [aut, trl] (conversion to R, maintainer 1999--2022, author of parallel support), Alessandra R. Brazzale [ctb, cre] (minor bug fixes)",
-      "Repository": "CRAN"
+      "Repository": "RSPM",
+      "Encoding": "UTF-8"
     },
     "broom": {
       "Package": "broom",
@@ -1046,6 +1047,47 @@
       "NeedsCompilation": "no",
       "Author": "Carson Sievert [aut, cre] (ORCID: <https://orcid.org/0000-0002-4958-2844>), Joe Cheng [aut], Garrick Aden-Buie [aut] (ORCID: <https://orcid.org/0000-0002-7111-0077>), Posit Software, PBC [cph, fnd], Bootstrap contributors [ctb] (Bootstrap library), Twitter, Inc [cph] (Bootstrap library), Javi Aguilar [ctb, cph] (Bootstrap colorpicker library), Thomas Park [ctb, cph] (Bootswatch library), PayPal [ctb, cph] (Bootstrap accessibility plugin)",
       "Maintainer": "Carson Sievert <carson@posit.co>",
+      "Repository": "CRAN"
+    },
+    "bsplus": {
+      "Package": "bsplus",
+      "Version": "0.1.5",
+      "Source": "Repository",
+      "Type": "Package",
+      "Title": "Adds Functionality to the R Markdown + Shiny Bootstrap Framework",
+      "Authors@R": "c( person( given = \"Ian\", family = \"Lyttle\", email = \"ijlyttle@me.com\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0001-9962-4849\"), ), person(given = \"Alex\", family = \"Shum\", email = \"alex@ALShum.com\", role = c(\"ctb\")), person(given = \"Emerson\", family = \"Berry\", email = \"berrye123@gmail.com\", role = c(\"ctb\")) )",
+      "Description": "The Bootstrap framework lets you add some JavaScript functionality to your web site by adding attributes to your HTML tags - Bootstrap takes care of the JavaScript <https://getbootstrap.com/docs/3.3/javascript/>. If you are using R Markdown or Shiny, you can use these functions to create collapsible sections, accordion panels, modals, tooltips, popovers, and an accordion sidebar framework (not described at Bootstrap site). Please note this package was designed for Bootstrap 3.3.",
+      "License": "MIT + file LICENSE",
+      "URL": "https://ijlyttle.github.io/bsplus/, https://github.com/ijlyttle/bsplus",
+      "Depends": [
+        "R (>= 3.3.0)"
+      ],
+      "Imports": [
+        "htmltools",
+        "magrittr",
+        "purrr",
+        "lubridate",
+        "stringr",
+        "rmarkdown",
+        "glue",
+        "jsonlite",
+        "methods"
+      ],
+      "BugReports": "https://github.com/ijlyttle/bsplus/issues",
+      "RoxygenNote": "7.3.2",
+      "Encoding": "UTF-8",
+      "Suggests": [
+        "testthat",
+        "shiny",
+        "covr",
+        "knitr",
+        "markdown",
+        "withr",
+        "litedown"
+      ],
+      "NeedsCompilation": "no",
+      "Author": "Ian Lyttle [aut, cre] (<https://orcid.org/0000-0001-9962-4849>), Alex Shum [ctb], Emerson Berry [ctb]",
+      "Maintainer": "Ian Lyttle <ijlyttle@me.com>",
       "Repository": "CRAN"
     },
     "cachem": {
@@ -1845,6 +1887,46 @@
       "NeedsCompilation": "no",
       "Author": "Ulrich Halekoh [aut, cph], Søren Højsgaard [aut, cre, cph]",
       "Maintainer": "Søren Højsgaard <sorenh@math.aau.dk>",
+      "Repository": "CRAN"
+    },
+    "downloadthis": {
+      "Package": "downloadthis",
+      "Version": "0.5.0",
+      "Source": "Repository",
+      "Title": "Implement Download Buttons in 'rmarkdown'",
+      "Authors@R": "c( person(given = \"Felipe\", family = \"Mattioni Maturana\", role = c(\"aut\", \"cre\"), email = \"felipe.mattioni@med.uni-tuebingen.de\", comment = c(ORCID = \"0000-0002-4221-6104\")), person(given = \"John\", family = \"Coene\", role = c(\"ctb\"), email = \"jcoenep@gmail.com\") )",
+      "Description": "Implement download buttons in HTML output from 'rmarkdown' without the need for 'runtime:shiny'.",
+      "License": "MIT + file LICENSE",
+      "URL": "https://github.com/fmmattioni/downloadthis",
+      "BugReports": "https://github.com/fmmattioni/downloadthis/issues",
+      "Encoding": "UTF-8",
+      "Imports": [
+        "fs",
+        "readr",
+        "writexl",
+        "bsplus",
+        "mime",
+        "htmltools",
+        "magrittr",
+        "zip",
+        "ggplot2",
+        "base64enc"
+      ],
+      "RoxygenNote": "7.3.2",
+      "Suggests": [
+        "knitr",
+        "rmarkdown",
+        "testthat (>= 3.0.1)",
+        "spelling",
+        "covr"
+      ],
+      "VignetteBuilder": "knitr",
+      "Language": "en-US",
+      "Config/testthat/edition": "3",
+      "Config/testthat/parallel": "true",
+      "NeedsCompilation": "no",
+      "Author": "Felipe Mattioni Maturana [aut, cre] (ORCID: <https://orcid.org/0000-0002-4221-6104>), John Coene [ctb]",
+      "Maintainer": "Felipe Mattioni Maturana <felipe.mattioni@med.uni-tuebingen.de>",
       "Repository": "CRAN"
     },
     "dplyr": {
@@ -6088,6 +6170,33 @@
       "Maintainer": "Lionel Henry <lionel@posit.co>",
       "Repository": "CRAN"
     },
+    "writexl": {
+      "Package": "writexl",
+      "Version": "1.5.4",
+      "Source": "Repository",
+      "Type": "Package",
+      "Title": "Export Data Frames to Excel 'xlsx' Format",
+      "Authors@R": "c( person(\"Jeroen\", \"Ooms\", ,\"jeroenooms@gmail.com\", role = c(\"aut\", \"cre\"), comment = c(ORCID = \"0000-0002-4035-0289\")), person(\"John McNamara\", role = \"cph\", comment = \"Author of libxlsxwriter (see AUTHORS and COPYRIGHT files for details)\"))",
+      "Description": "Zero-dependency data frame to xlsx exporter based on 'libxlsxwriter' <https://libxlsxwriter.github.io>. Fast and no Java or Excel required.",
+      "License": "BSD_2_clause + file LICENSE",
+      "Encoding": "UTF-8",
+      "URL": "https://ropensci.r-universe.dev/writexl https://docs.ropensci.org/writexl/",
+      "BugReports": "https://github.com/ropensci/writexl/issues",
+      "RoxygenNote": "7.0.2",
+      "Suggests": [
+        "spelling",
+        "readxl",
+        "nycflights13",
+        "testthat",
+        "bit64"
+      ],
+      "Language": "en-US",
+      "SystemRequirements": "zlib",
+      "NeedsCompilation": "yes",
+      "Author": "Jeroen Ooms [aut, cre] (<https://orcid.org/0000-0002-4035-0289>), John McNamara [cph] (Author of libxlsxwriter (see AUTHORS and COPYRIGHT files for details))",
+      "Maintainer": "Jeroen Ooms <jeroenooms@gmail.com>",
+      "Repository": "CRAN"
+    },
     "xfun": {
       "Package": "xfun",
       "Version": "0.57",
@@ -6200,6 +6309,34 @@
       "NeedsCompilation": "yes",
       "Author": "Hadley Wickham [cre] (ORCID: <https://orcid.org/0000-0003-4757-117X>), Shawn Garbett [ctb] (ORCID: <https://orcid.org/0000-0003-4079-5621>), Jeremy Stephens [aut, ctb], Kirill Simonov [aut], Yihui Xie [ctb] (ORCID: <https://orcid.org/0000-0003-0645-5666>), Zhuoer Dong [ctb], Jeffrey Horner [ctb], reikoch [ctb], Will Beasley [ctb] (ORCID: <https://orcid.org/0000-0002-5613-5006>), Brendan O'Connor [ctb], Michael Quinn [ctb], Charlie Gao [ctb], Gregory R. Warnes [ctb], Zhian N. Kamvar [ctb]",
       "Maintainer": "Hadley Wickham <hadley@posit.co>",
+      "Repository": "CRAN"
+    },
+    "zip": {
+      "Package": "zip",
+      "Version": "2.3.3",
+      "Source": "Repository",
+      "Title": "Cross-Platform 'zip' Compression",
+      "Authors@R": "c( person(\"Gábor\", \"Csárdi\", , \"csardi.gabor@gmail.com\", role = c(\"aut\", \"cre\")), person(\"Kuba\", \"Podgórski\", role = \"ctb\"), person(\"Rich\", \"Geldreich\", role = \"ctb\"), person(\"Posit Software, PBC\", role = c(\"cph\", \"fnd\"), comment = c(ROR = \"03wc8by49\")) )",
+      "Description": "Cross-Platform 'zip' Compression Library. A replacement for the 'zip' function, that does not require any additional external tools on any platform.",
+      "License": "MIT + file LICENSE",
+      "URL": "https://github.com/r-lib/zip, https://r-lib.github.io/zip/",
+      "BugReports": "https://github.com/r-lib/zip/issues",
+      "Suggests": [
+        "covr",
+        "pillar",
+        "processx",
+        "R6",
+        "testthat",
+        "withr"
+      ],
+      "Config/Needs/website": "tidyverse/tidytemplate",
+      "Config/testthat/edition": "3",
+      "Config/usethis/last-upkeep": "2025-05-07",
+      "Encoding": "UTF-8",
+      "RoxygenNote": "7.3.2.9000",
+      "NeedsCompilation": "yes",
+      "Author": "Gábor Csárdi [aut, cre], Kuba Podgórski [ctb], Rich Geldreich [ctb], Posit Software, PBC [cph, fnd] (ROR: <https://ror.org/03wc8by49>)",
+      "Maintainer": "Gábor Csárdi <csardi.gabor@gmail.com>",
       "Repository": "CRAN"
     },
     "zoo": {
