@@ -1,4 +1,5 @@
 # --- Project Specific Folders and Files---
+.obsidian/
 /data/*
 !/data/README.md
 !/data/grading_rules.csv

@@ -11,6 +11,7 @@
 | record_id | Record ID | Numeric | N/A |
 | pgh_number | PGH Number | Numeric | N/A |
 | **Demographics** |  |  |  |
+| age | Age (years) | Numeric | **Valid:** 18 - 120 |
 | sex | Sex | Factor | 1 = Male<br />2 = Female |
 | residence | Residence density | Factor | 1 = Urban<br />2 = Rural<br />3 = Semi-urban |
 | **Clinical** |  |  |  |
