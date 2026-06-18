@@ -9,6 +9,7 @@ library(broom)              #
 library(broom.helpers)      # 
 library(car)                # VIF
 library(downloadthis)       # Download csv versions of gt tables
+library(flextable)          # Table formatting for docx
 library(glue)               # Easier syntax than paste0
 library(gt)                 # HTML optimized tables
 library(gtsummary)          # 
@@ -84,34 +85,38 @@ mgmt_stems <- var_groups |>
   pull(stem)
 
 ae_labels <- c(
-  hb        = "Anemia",
-  plt       = "Thrombocytopenia",
-  wbc       = "Leukopenia",
-  anc       = "Neutropenia",
-  lcc       = "Lymphopenia",
-  sodium    = "Sodium abnormality",
-  potassium = "Potassium abnormality",
-  alb       = "Hypoalbuminemia",
-  tbil      = "Hyperbilirubinemia",
-  alp       = "Elevated ALP",
-  alt       = "Elevated ALT",
-  ast       = "Elevated AST"
+  hb            = "Anemia",
+  plt           = "Thrombocytopenia",
+  wbc           = "Leukopenia",
+  anc           = "Neutropenia",
+  lcc           = "Lymphopenia",
+  hyponatremia  = "Hyponatremia",
+  hypernatremia = "Hypernatremia",
+  hypokalemia   = "Hypokalemia",
+  hyperkalemia  = "Hyperkalemia",
+  alb           = "Hypoalbuminemia",
+  tbil          = "Hyperbilirubinemia",
+  alp           = "Elevated ALP",
+  alt           = "Elevated ALT",
+  ast           = "Elevated AST"
 )
 
 # Combined AE categories per MET-007
 ae_group_map <- c(
-  hb        = "Anemia",
-  plt       = "Myelosuppression",
-  wbc       = "Myelosuppression",
-  anc       = "Myelosuppression",
-  lcc       = "Myelosuppression",
-  sodium    = "Sodium abnormality",
-  potassium = "Potassium abnormality",
-  alb       = "Hypoalbuminemia",
-  tbil      = "Hyperbilirubinemia",
-  alp       = "Raised transaminases",
-  alt       = "Raised transaminases",
-  ast       = "Raised transaminases"
+  hb            = "Anemia",
+  plt           = "Myelosuppression",
+  wbc           = "Myelosuppression",
+  anc           = "Myelosuppression",
+  lcc           = "Myelosuppression",
+  hyponatremia  = "Hyponatremia",
+  hypernatremia = "Hypernatremia",
+  hypokalemia   = "Hypokalemia",
+  hyperkalemia  = "Hyperkalemia",
+  alb           = "Hypoalbuminemia",
+  tbil          = "Hyperbilirubinemia",
+  alp           = "Raised transaminases",
+  alt           = "Raised transaminases",
+  ast           = "Raised transaminases"
 )
 
 # --- Helper functions --- #
@@ -180,8 +185,8 @@ summ_mean_sd_iqr <- function(x, digits = 1) {
 # Format p-values (scientific notation below 0.001)
 format_p <- function(p) {
   if (is.na(p)) return("—")
-  if (p < 0.001) return(formatC(p, format = "e", digits = 3))
-  as.character(round(p, 3))
+  if (p < 0.01) return(formatC(p, format = "e", digits = 2))
+  as.character(round(p, 2))
 }
 
 # Safe/interactive save function
@@ -198,4 +203,39 @@ save_rds_safe <- function(object, path) {
     saveRDS(object, path)
     message("File saved: ", basename(path))
   }
+}
+
+
+save_table_docx <- function(gtsum, name) {
+  if (!save_outputs) return(invisible(NULL))
+  gtsum |>
+    as_flex_table() |>
+    flextable::save_as_docx(path = here("output", "tables", paste0(name, ".docx")))
+}
+
+# Write a data frame to csv + docx and return a flextable for display
+make_downloadable <- function(df, slug, ft = NULL) {
+  csv_path  <- paste0(slug, ".csv")
+  docx_path <- paste0(slug, ".docx")
+  
+  write.csv(df, csv_path, row.names = FALSE)
+  if (is.null(ft)) ft <- df |> flextable() |> theme_booktabs() |> autofit()
+  save_as_docx(ft, path = docx_path)
+  
+  list(ft = ft, csv = csv_path, docx = docx_path, slug = slug)
+}
+
+emit_buttons <- function(obj) {
+  cat('<div style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 25px;">')
+  print(download_file(
+    path = obj$csv, output_name = obj$slug,
+    button_label = "Download CSV", button_type = "primary",
+    class = "btn-sm", has_icon = TRUE, icon = "fa fa-database"
+  ))
+  print(download_file(
+    path = obj$docx, output_name = obj$slug,
+    button_label = "Download Word Doc", button_type = "default",
+    class = "btn-sm", has_icon = TRUE, icon = "fa fa-file-word"
+  ))
+  cat('</div>')
 }

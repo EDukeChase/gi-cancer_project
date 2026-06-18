@@ -14,10 +14,45 @@ source("R/setup.R")
 
 # Load Data
 gic_validated <- readRDS(here("data", "processed", "gic_validated.rds"))
+ae_graded_long <- readRDS(here("data", "processed", "ae_graded_long.rds"))
 
 # Load Libraries
 library(ggcorrplot)
 ```
+
+```{r}
+#| label: download-helper
+#| include: false
+
+# Write a data frame to csv + docx and return a flextable for display
+make_downloadable <- function(df, slug, ft = NULL) {
+  csv_path  <- paste0(slug, ".csv")
+  docx_path <- paste0(slug, ".docx")
+
+  write.csv(df, csv_path, row.names = FALSE)
+  if (is.null(ft)) ft <- df |> flextable() |> theme_booktabs() |> autofit()
+  save_as_docx(ft, path = docx_path)
+
+  list(ft = ft, csv = csv_path, docx = docx_path, slug = slug)
+}
+
+
+emit_buttons <- function(obj) {
+  cat('<div style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 25px;">')
+  print(download_file(
+    path = obj$csv, output_name = obj$slug,
+    button_label = "Download CSV", button_type = "primary",
+    class = "btn-sm", has_icon = TRUE, icon = "fa fa-database"
+  ))
+  print(download_file(
+    path = obj$docx, output_name = obj$slug,
+    button_label = "Download Word Doc", button_type = "default",
+    class = "btn-sm", has_icon = TRUE, icon = "fa fa-file-word"
+  ))
+  cat('</div>')
+}
+```
+
 
 ```{r}
 #| label: engineer-ae-variables
@@ -25,18 +60,12 @@ library(ggcorrplot)
 # Identify adverse event grade columns
 grade_cols <- names(gic_validated)[str_detect(names(gic_validated), "_grade_([1-9]|1[0-2])$")]
 
-# Create long table to engineer new variables
-ae_long <- gic_validated |> 
-  select(record_id, cycles_prescribed, cycles_given, all_of(grade_cols)) |> 
-  pivot_longer(
-    cols = all_of(grade_cols),
-    names_to = "grade_var",
-    values_to = "grade_raw"
-  ) |> 
-  mutate(
-    cycle = as.integer(str_extract(grade_var, "\\d+$")),
-    ae_type = str_remove(grade_var, "_grade_\\d+$"),
-    grade = as.numeric(str_match(grade_raw, "(?i)^\\s*grade\\s*(\\d+)")[,2])
+# Attach cycle counts to graded data
+ae_long <- ae_graded_long |> 
+  select(record_id, ae_type, cycle, grade) |> 
+  left_join(
+    gic_validated |> select(record_id, cycles_prescribed, cycles_given),
+    by = "record_id"
   )
 
 # Grouped version — max grade per combined category per patient-cycle
@@ -1236,17 +1265,9 @@ ae_long_grouped |>
 #| label: prep-tbl-desc
 #| include: false
 
-# Switch between the full intermediate view and the lean publication view.
-# Intermediate: all blocks, expected counts shown, p-values shown.
-# Publication: core four blocks only, no expected counts, p-values optional.
-detailed <- TRUE
+show_p <- TRUE
 
-show_exp <- detailed   # expected counts only in the intermediate view
-show_p   <- TRUE       # set FALSE if you want a clean publication table
-
-# Patient-level "any event" flag per collapsed AE category (MET-007).
-# Categories follow ae_group_map: Anemia, Myelosuppression, Sodium/Potassium
-# abnormality, Hypoalbuminemia, Hyperbilirubinemia, Raised transaminases.
+# Patient-level "any event" flag per collapsed AE category (MET-007)
 ae_group_pt <- ae_long_grouped |>
   group_by(record_id, ae_group) |>
   summarize(any_event = as.integer(max(grade) > 0), .groups = "drop") |>
@@ -1259,11 +1280,15 @@ ae_group_pt <- ae_long_grouped |>
 
 aegrp_cols <- names(ae_group_pt)[startsWith(names(ae_group_pt), "aegrp_")]
 
+# Single source data frame with all factor conversions
 tbl_desc_dat <- gic_models |>
   left_join(ae_group_pt, by = "record_id") |>
-  mutate(across(all_of(aegrp_cols), ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))))
+  mutate(
+    across(all_of(aegrp_cols), ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))),
+    ae_any_pt        = factor(ae_any_pt, levels = c(0, 1), labels = c("No", "Yes")),
+    ae_severe_any_pt = factor(ae_severe_any_pt, levels = c(0, 1), labels = c("No", "Yes"))
+  )
 
-# Shared formatting so every stacked block matches (median (Q1–Q3) per summ_stats)
 tbl_opts <- list(
   by           = "hiv_status",
   statistic    = list(all_continuous() ~ "{median} ({p25}–{p75})",
@@ -1273,66 +1298,31 @@ tbl_opts <- list(
   missing_text = "Missing"
 )
 
-mk_block <- function(vars, labels, types = NULL, with_p = TRUE, show_expected = TRUE) {
+mk_block <- function(vars, labels, types = NULL, with_p = show_p) {
   args <- c(
     list(data = tbl_desc_dat |> select(hiv_status, all_of(vars)),
-         include = all_of(vars),
-         label = labels),
+         include = all_of(vars), label = labels),
     tbl_opts
   )
   if (!is.null(types)) args$type <- types
 
-  tbl <- do.call(tbl_summary, args)
+  tbl <- do.call(tbl_summary, args) |>
+    add_overall(last = FALSE) |>
+    add_stat_label(
+      label = list(
+        all_categorical() ~ "n (% of group)",
+        all_continuous()  ~ "Median (IQR)"
+      )
+    )
 
   if (with_p) {
     tbl <- tbl |>
       add_p(
         test = list(all_continuous() ~ "wilcox.test",
                     all_categorical() ~ "fisher.test"),
-        pvalue_fun = ~ style_pvalue(.x, digits = 2)
+        pvalue_fun = ~ map_chr(.x, format_p)
       )
   }
-
-  if (show_expected) {
-    # Intermediate aid only — appends [expected count] to each HIV column for
-    # categorical levels. Keyed on variable/label so it's robust to row order.
-    cat_vars <- tbl_desc_dat |>
-      select(all_of(vars)) |>
-      select(where(is.factor)) |>
-      names()
-
-    exp_tbl <- tbl_desc_dat |>
-      select(hiv_status, all_of(cat_vars)) |>
-      pivot_longer(-hiv_status, names_to = "variable", values_to = "level") |>
-      filter(!is.na(level)) |>
-      group_by(variable) |>
-      group_modify(~ {
-        tab <- table(.x$level, .x$hiv_status)
-        ex  <- outer(rowSums(tab), colSums(tab)) / sum(tab)
-        as_tibble(ex, rownames = "level") |>
-          pivot_longer(-level, names_to = "hiv_status", values_to = "expected")
-      }) |>
-      ungroup() |>
-      mutate(expected = round(expected, 1))
-
-    tbl <- tbl |>
-      modify_table_body(~ .x |>
-        left_join(
-          exp_tbl |> filter(hiv_status == "Negative") |> select(variable, label = level, exp_neg = expected),
-          by = c("variable", "label")
-        ) |>
-        left_join(
-          exp_tbl |> filter(hiv_status == "Positive") |> select(variable, label = level, exp_pos = expected),
-          by = c("variable", "label")
-        ) |>
-        mutate(
-          stat_1 = if_else(!is.na(exp_neg), paste0(stat_1, " [", exp_neg, "]"), stat_1),
-          stat_2 = if_else(!is.na(exp_pos), paste0(stat_2, " [", exp_pos, "]"), stat_2)
-        ) |>
-        select(-exp_neg, -exp_pos)
-      )
-  }
-
   tbl
 }
 
@@ -1355,19 +1345,6 @@ t_treatment <- mk_block(
   types = list(cycles_prescribed ~ "continuous", cycles_given ~ "continuous")
 )
 
-t_ae <- mk_block(
-  aegrp_cols,
-  list(
-    `aegrp_Anemia`               ~ "Anemia",
-    `aegrp_Myelosuppression`     ~ "Myelosuppression",
-    `aegrp_Raised transaminases` ~ "Raised transaminases",
-    `aegrp_Sodium abnormality`   ~ "Sodium abnormality",
-    `aegrp_Potassium abnormality` ~ "Potassium abnormality",
-    `aegrp_Hypoalbuminemia`      ~ "Hypoalbuminemia",
-    `aegrp_Hyperbilirubinemia`   ~ "Hyperbilirubinemia"
-  )
-)
-
 t_comorbid <- mk_block(
   c("comorbid_htn", "comorbid_dm", "comorbid_tb", "comorbid_asthma",
     "comorbid_chd", "comorbid_none"),
@@ -1381,39 +1358,215 @@ t_history <- mk_block(
   list(hx_etoh ~ "Alcohol history", hx_tobacco ~ "Tobacco history",
        hx_cancer ~ "Prior cancer", residence ~ "Residence")
 )
-
-tbl_desc_dat <- gic_models |>
-  left_join(ae_group_pt, by = "record_id") |>
-  mutate(
-    across(all_of(aegrp_cols), ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))),
-    ae_any_pt        = factor(ae_any_pt, levels = c(0, 1), labels = c("No", "Yes")),
-    ae_severe_any_pt = factor(ae_severe_any_pt, levels = c(0, 1), labels = c("No", "Yes"))
-  )
-
-t_ae_summary <- mk_block(
-  c("ae_any_pt", "ae_severe_any_pt", "ae_max_grade_pt"),
-  list(ae_any_pt ~ "Any adverse event", ae_severe_any_pt ~ "Any severe AE (grade 3–4)",
-       ae_max_grade_pt ~ "Max AE grade"),
-  types = list(ae_max_grade_pt ~ "continuous")
-)
 ```
 
 ```{r}
 #| label: tbl-desc
-#| tbl-cap: "Patient, disease, treatment, and adverse event characteristics by HIV status"
+#| tbl-cap: "Patient, disease, and treatment characteristics by HIV status"
+#| results: asis
+#| echo: false
 
-tbl_stack(
-  list(t_patient, t_disease, t_treatment, t_comorbid, t_history, t_ae, t_ae_summary),
-  group_header = c("Patient characteristics", "Disease characteristics", "Treatment",
-                   "Comorbidities", "History", "Adverse events (any grade, by category)",
-                   "Adverse event summary")
+tbl_main_gts <- tbl_stack(
+  list(t_patient, t_disease, t_treatment, t_comorbid, t_history)
 ) |>
-  modify_header(label ~ "**Characteristic**") |>
-  modify_spanning_header(c("stat_1", "stat_2") ~ "**HIV Status**") |>
-  as_gt() |>
-  tab_source_note(
-    "Continuous: median (Q1–Q3). Categorical: n (%). AE rows show patients with any-grade event in each collapsed category. p-values: Wilcoxon rank-sum (continuous), Fisher's exact (categorical); unadjusted, descriptive only."
+  modify_header(
+    label  ~ "**Variable**",
+    stat_0 ~ "**Total** \nN = {N}",
+    stat_1 ~ "**HIV Negative** \nN = {n}",
+    stat_2 ~ "**HIV Positive** \nN = {n}"
   )
+
+ft_main <- tbl_main_gts |>
+  as_flex_table() |>
+  flextable::add_footer_lines(
+    "p-values: Wilcoxon rank-sum (continuous), Fisher's exact (categorical); unadjusted, descriptive only."
+  )
+
+obj <- make_downloadable(
+  df = as_tibble(tbl_main_gts),
+  slug = "table1_descriptive",
+  ft = ft_main
+)
+
+obj$ft
+emit_buttons(obj)
+```
+
+```{r}
+#| label: tbl-desc-ae
+#| tbl-cap: "Adverse events (any grade) by category and HIV status"
+#| results: asis
+#| echo: false
+
+tbl_ae_gts <- tbl_stack(list(t_ae)) |>
+  modify_header(
+    label  ~ "**Adverse event category**",
+    stat_0 ~ "**Total** \nN = {N}",
+    stat_1 ~ "**HIV Negative** \nN = {n}",
+    stat_2 ~ "**HIV Positive** \nN = {n}"
+  )
+
+ft_ae <- tbl_ae_gts |>
+  as_flex_table() |>
+  flextable::add_footer_lines(
+    "Cells show patients with any-grade event in each collapsed category. p-values: Fisher's exact; unadjusted, descriptive only."
+  )
+
+obj <- make_downloadable(
+  df = as_tibble(tbl_ae_gts),
+  slug = "table_ae_by_category",
+  ft = ft_ae
+)
+obj$ft
+emit_buttons(obj)
+```
+
+
+# Blood Transfusions
+
+```{r}
+# Pull the three management variables to long form
+mgmt_long <- gic_models |>
+  select(record_id, hiv_status,
+         matches("^transfusion_given_\\d+$"),
+         matches("^transfusion_units_\\d+$"),
+         matches("^csfg_indicated_\\d+$")) |>
+  mutate(
+    across(c(matches("^transfusion_given_\\d+$"), matches("^csfg_indicated_\\d+$")),
+           ~ as.integer(.x == "Yes")),
+    across(matches("^transfusion_units_\\d+$"),
+           ~ as.numeric(as.character(.x)))
+  ) |>
+  pivot_longer(
+    -c(record_id, hiv_status),
+    names_to = c("var", "cycle"),
+    names_pattern = "(.*)_(\\d+)$",
+    values_to = "value"
+  ) |>
+  mutate(cycle = as.integer(cycle)) |>
+  pivot_wider(names_from = var, values_from = value)
+
+# Anemia and myelosuppression grade per patient-cycle from the grouped data
+grade_by_cycle <- ae_long_grouped |>
+  filter(ae_group %in% c("Anemia", "Myelosuppression")) |>
+  select(record_id, cycle, ae_group, grade) |>
+  pivot_wider(names_from = ae_group, values_from = grade) |>
+  rename(anemia_grade = Anemia, myelo_grade = Myelosuppression)
+
+# Neutropenia grade specifically (from the ungrouped long data)
+anc_by_cycle <- ae_long |>
+  filter(ae_type == "anc") |>
+  select(record_id, cycle, anc_grade = grade)
+
+mgmt_cycle <- mgmt_long |>
+  left_join(grade_by_cycle, by = c("record_id", "cycle")) |>
+  left_join(anc_by_cycle, by = c("record_id", "cycle")) |>
+  filter(!is.na(transfusion_given) | !is.na(csfg_indicated))
+```
+
+```{r}
+#| label: tbl-transfusion-rate
+#| results: asis
+#| echo: false
+
+transfusion_rate <- mgmt_cycle |>
+  filter(!is.na(anemia_grade)) |>
+  group_by(hiv_status, anemia_grade) |>
+  summarize(
+    n_cycles = n(),
+    n_transfused = sum(transfusion_given == 1, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(cell = paste0(n_transfused, "/", n_cycles, " (",
+                       round(100 * n_transfused / n_cycles, 1), "%)")) |>
+  select(anemia_grade, hiv_status, cell) |>
+  pivot_wider(names_from = hiv_status, values_from = cell, values_fill = "0/0 (—)") |>
+  rename(`Anemia grade` = anemia_grade)
+
+ft <- transfusion_rate |>
+  flextable() |>
+  add_header_row(values = c("", "Transfused / cycles (%)"), colwidths = c(1, 2)) |>
+  theme_booktabs() |>
+  align(align = "center", part = "all") |>
+  align(j = 1, align = "left", part = "all") |>
+  autofit()
+
+obj <- make_downloadable(transfusion_rate, "transfusion_rate_by_anemia_hiv", ft = ft)
+obj$ft
+emit_buttons(obj)
+```
+
+```{r}
+#| label: tbl-transfusion-units
+#| results: asis
+#| echo: false
+
+transfusion_units_tbl <- mgmt_cycle |>
+  filter(transfusion_given == 1, !is.na(anemia_grade)) |>
+  group_by(hiv_status, anemia_grade) |>
+  summarize(
+    cell = paste0(summ_stats(transfusion_units, mean = FALSE), " [n=", n(), "]"),
+    .groups = "drop"
+  ) |>
+  select(anemia_grade, hiv_status, cell) |>
+  pivot_wider(names_from = hiv_status, values_from = cell, values_fill = "—") |>
+  rename(`Anemia grade` = anemia_grade)
+
+ft <- transfusion_units_tbl |>
+  flextable() |>
+  add_header_row(values = c("", "Units, median (IQR) [n cycles]"), colwidths = c(1, 2)) |>
+  theme_booktabs() |>
+  align(align = "center", part = "all") |>
+  align(j = 1, align = "left", part = "all") |>
+  autofit()
+
+obj <- make_downloadable(transfusion_units_tbl, "transfusion_units_by_anemia_hiv", ft = ft)
+obj$ft
+emit_buttons(obj)
+```
+
+```{r}
+#| label: tbl-gcsf-rate-myelo
+#| results: asis
+#| echo: false
+
+gcsf_myelo <- mgmt_cycle |>
+  filter(!is.na(myelo_grade)) |>
+  group_by(hiv_status, myelo_grade) |>
+  summarize(
+    n_cycles = n(),
+    n_gcsf = sum(csfg_indicated == 1, na.rm = TRUE),
+    pct_gcsf = round(100 * mean(csfg_indicated == 1, na.rm = TRUE), 1),
+    .groups = "drop"
+  ) |>
+  rename(`HIV status` = hiv_status, `Myelosuppression grade` = myelo_grade,
+         `Cycles` = n_cycles, `G-CSF given` = n_gcsf, `% G-CSF` = pct_gcsf)
+
+obj <- make_downloadable(gcsf_myelo, "gcsf_rate_by_myelo_hiv")
+obj$ft
+emit_buttons(obj)
+```
+
+```{r}
+#| label: tbl-gcsf-rate-anc
+#| results: asis
+#| echo: false
+
+gcsf_anc <- mgmt_cycle |>
+  filter(!is.na(anc_grade)) |>
+  group_by(hiv_status, anc_grade) |>
+  summarize(
+    n_cycles = n(),
+    n_gcsf = sum(csfg_indicated == 1, na.rm = TRUE),
+    pct_gcsf = round(100 * mean(csfg_indicated == 1, na.rm = TRUE), 1),
+    .groups = "drop"
+  ) |>
+  rename(`HIV status` = hiv_status, `Neutropenia grade` = anc_grade,
+         `Cycles` = n_cycles, `G-CSF given` = n_gcsf, `% G-CSF` = pct_gcsf)
+
+obj <- make_downloadable(gcsf_anc, "gcsf_rate_by_anc_hiv")
+obj$ft
+emit_buttons(obj)
 ```
 
 
@@ -1430,23 +1583,10 @@ gic_descriptive <- list(
   ae_cycle_measured = ae_cycle_measured,
   cycle_summary = cycle_summary,
   cycle_summary_grouped = cycle_summary_grouped,
-  grade_cols = grade_cols
+  grade_cols = grade_cols,
+  mgmt_long = mgmt_long,
+  mgmt_cycle = mgmt_cycle
 )
 
-gic_descriptive_path <- here("data", "processed", "gic_descriptive.rds")
-
-# Save if file doesn't exist, or check if overwrite is intended if it does.
-if (file.exists(gic_descriptive_path) && interactive()) {
-  response <- readline(prompt = paste("Warning:", basename(gic_descriptive_path), "already exists. Overwrite? (y/n):"))
-  
-  if (tolower(substr(response, 1, 1)) == "y") {
-    saveRDS(gic_descriptive, gic_descriptive_path)
-    message("File overwritten: ", basename(gic_descriptive_path))
-  } else {
-    message("Save operation cancelled.")
-  }
-} else {
-  saveRDS(gic_descriptive, gic_descriptive_path)
-  message("File saved: ", basename(gic_descriptive_path))
-}
+save_rds_safe(gic_descriptive, here("data", "processed", "gic_descriptive.rds"))
 ```

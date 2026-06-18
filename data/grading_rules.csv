@@ -1,4 +1,4 @@
-﻿stem,grade,min_val,max_val,condition,label
+stem,grade,min_val,max_val,condition,label
 hb,0,12,Inf,Anemia,Grade 0 (Normal)
 hb,1,10,12,Anemia,Grade 1 (Anemia)
 hb,2,8,10,Anemia,Grade 2 (Anemia)
@@ -38,7 +38,7 @@ potassium,4,-Inf,2.5,Hypokalemia,Grade 4 (Hypokalemia)
 potassium,3,2.5,3,Hypokalemia,Grade 3 (Hypokalemia)
 potassium,2,3,3.2,Hypokalemia,Grade 2 (Hypokalemia)
 potassium,1,3.2,3.5,Hypokalemia,Grade 1 (Hypokalemia)
-potassium,0,3.5,Inf,Normal,Grade 0 (Normal)
+potassium,0,3.5,Inf,Hypokalemia,Grade 0 (Normal)
 potassium,0,-Inf,5.2,Hyperkalemia,Grade 0 (Normal)
 potassium,1,5.2,5.5,Hyperkalemia,Grade 1 (Hyperkalemia)
 potassium,2,5.5,6,Hyperkalemia,Grade 2 (Hyperkalemia)

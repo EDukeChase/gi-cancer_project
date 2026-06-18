@@ -18,6 +18,8 @@ ae_cycle_measured <- gic_descriptive$ae_cycle_measured
 cycle_summary <- gic_descriptive$cycle_summary
 cycle_summary_grouped <- gic_descriptive$cycle_summary_grouped
 grade_cols <- gic_descriptive$grade_cols
+mgmt_long <- gic_descriptive$mgmt_long
+mgmt_cycle <- gic_descriptive$mgmt_cycle
 rm(gic_descriptive)
 ```
 
@@ -87,16 +89,7 @@ Invalid model due to having a 100% adverse event rate in the HIV-positive group.
 
 #### Basic logicstic model of any severe adverse events by HIV status
 
-{Deprecated}
-```{r}
-#| label: model-severe-basic-deprecated
 
-model_severe_basic_deprecated <- glm(ae_severe_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent,
-                       data = gic_models, family = binomial)
-
-summary(model_severe_basic_deprecated)
-```
-{Current}
 ```{r}
 #| label: model-severe-basic
 
@@ -216,19 +209,7 @@ model_hiv_simple |>
 
 
 ### Adjusted model
-{Deprecated}
-```{r}
-#| label: model-hiv-basic-deprecated
 
-model_hiv_basic_deprecated <- glm(
-  hiv_status ~ ae_max_grade_pt + cancer_stage + chemo_type + tx_intent,
-  data = gic_models,
-  family = binomial
-)
-
-summary(model_hiv_basic_deprecated)
-```
-{Current}
 ```{r}
 #| label: model-hiv-basic
 
@@ -351,31 +332,6 @@ All pts with a large Cook's D are HIV positive, but I haven't immediately spotte
 
 
 ## Cycles Prescribed as Outcome
-{Deprecated}
-```{r}
-#| label: model-cycles-full-deprecated
-
-# Full cycles prescribed model
-model_cycles_full_deprecated <- glm(
-  cycles_prescribed ~ hiv_status + cancer_site + cancer_stage + chemo_type + tx_intent,
-  data   = gic_models,
-  family = poisson
-)
-```
-
-
-```{r}
-#| label: model-cycles-no-site-deprecated
-
-# Cycles prescribed model without cancer site
-model_cycles_no_site_deprecated <- glm(
-  cycles_prescribed ~ hiv_status + cancer_stage + chemo_type + tx_intent,
-  data   = gic_models,
-  family = poisson
-)
-```
-
-{Current}
 ```{r}
 #| label: model-cycles-full
 
@@ -398,71 +354,6 @@ model_cycles_no_site <- glm(
 )
 ```
 
-{Deprecated}
-```{r}
-#| label: tbl-cycles-models-deprecated
-#| tbl-cap: "Poisson regression: cycles prescribed (exponentiated coefficients = rate ratios)"
-
-tbl_full <- model_cycles_full_deprecated |>
-  tbl_regression(
-    exponentiate = TRUE,
-    label = list(
-      hiv_status   ~ "HIV Status",
-      cancer_site  ~ "Cancer Site",
-      cancer_stage ~ "Cancer Stage",
-      chemo_type   ~ "Chemotherapy Type",
-      tx_intent    ~ "Treatment Intent"
-    )
-  ) |>
-  bold_labels() |> 
-  italicize_levels() |> 
-  bold_p() |> 
-  add_global_p(keep = TRUE) |> 
-  add_vif(statistic = "aGVIF")
-
-tbl_no_site <- model_cycles_no_site_deprecated |>
-  tbl_regression(
-    exponentiate = TRUE,
-    label = list(
-      hiv_status   ~ "HIV Status",
-      cancer_stage ~ "Cancer Stage",
-      chemo_type   ~ "Chemotherapy Type",
-      tx_intent    ~ "Treatment Intent"
-    )
-  ) |>
-  bold_labels() |> 
-  italicize_levels() |> 
-  bold_p() |> 
-  add_global_p(keep = TRUE) |> 
-  add_vif(statistic = "aGVIF")
-
-lrt_p <- anova(model_cycles_no_site_deprecated, model_cycles_full_deprecated, test = "LRT")$`Pr(>Chi)`[2]
-
-
-tbl_merge(
-  list(tbl_no_site, tbl_full),
-  tab_spanner = c("Without cancer site", "With cancer site")
-) |>
-  as_gt() |>
-  tab_source_note(
-    source_note = paste0(
-      "Model without cancer site: AIC = ", round(AIC(model_cycles_no_site_deprecated), 1),
-      ", N = ", nobs(model_cycles_no_site_deprecated),
-      " | Model with cancer site: AIC = ", round(AIC(model_cycles_full_deprecated), 1),
-      ", N = ", nobs(model_cycles_full_deprecated)
-    )
-  ) |>
-  tab_source_note(
-    source_note = paste0(
-      "LRT (with vs without cancer site): p = ",
-      round(anova(model_cycles_no_site_deprecated, model_cycles_full_deprecated, 
-                  test = "LRT")$`Pr(>Chi)`[2], 3)
-    )
-  )
-  
-```
-
-{Current}
 ```{r}
 #| label: tbl-cycles-models
 #| tbl-cap: "Poisson regression: cycles prescribed (exponentiated coefficients = rate ratios)"
@@ -738,29 +629,12 @@ hosp_model_data <- hosp_model_data |>
   mutate(any_hosp = as.integer(hosp_days > 0))
 ```
 
-{Deprecated}
-```{r}
-#| label: model-hosp-any-deprecated
-
-# Any hospitalization this cycle (logistic)
-model_any_hosp_deprecated <- glmer(
-  any_hosp ~ ae_max_grade + hiv_status + (1 | record_id),
-  data = hosp_model_data,
-  family = binomial
-)
-summary(model_any_hosp_deprecated)
-fixef(model_any_hosp_deprecated) |> exp()
-confint(model_any_hosp_deprecated, method = "Wald") |> exp()
-```
-Each increase in max AE grade in a given cycle is associated with about a 5.5-fold increase (95% CI: 3.7-8.2) in the odds of being hospitalized. For patients with no adverse events, being HIV positive is associated with about a 3.4-fold increase in odds of being hospitalized, but the effect of being HIV positive on being hospitalized decreases by about 35% for each unit increase in max AE grade.
-
-{Current}
 ```{r}
 #| label: model-hosp-any
 
 # Any hospitalization this cycle (logistic)
 model_any_hosp <- glmer(
-  any_hosp ~ ae_max_grade + hiv_status + age +(1 | record_id),
+  any_hosp ~ ae_max_grade + hiv_status + age + (1 | record_id),
   data = hosp_model_data,
   family = binomial
 )
@@ -768,16 +642,6 @@ summary(model_any_hosp)
 fixef(model_any_hosp) |> exp()
 confint(model_any_hosp, method = "Wald") |> exp()
 ```
-
-```{r}
-# Length of stay given hospitalization
-model_hosp_days_deprecated <- lmer(
-  hosp_days ~ ae_max_grade + hiv_status + (1 | record_id),
-  data = hosp_model_data |> filter(hosp_days > 0)
-)
-summary(model_hosp_days_deprecated)
-```
-
 
 ```{r}
 # Length of stay given hospitalization
@@ -850,7 +714,6 @@ map_df(c(2, 4), function(cutoff) {
 
 For each AE type, the predictor used is the max grade recorded across cycles 1 to 4. Where no grade was recorded for a given AE type in that window, it's been set to 0, on the assumption that if nothing was flagged there was probably nothing to flag. That's a more reasonable assumption for the liver panel markers, which Dr. Mazhindu said are usually only ordered when there's a clinical reason to, than it is for something like hemoglobin or platelets where a missing value might just mean the data wasn't entered. It was done this way mainly because doing a complete case analysis instead would have left only 97 patients and 26 early dropout events, which isn't really enough to work with. This is worth coming back to before the analysis is finalized.
 
-Sodium and potassium grades also don't distinguish between high and low abnormalities, so hypokalemia and hyperkalemia end up collapsed into the same grade variable. This can be revisited later, but I'm leaving it as is for the moment because the models below already have more regressors than ideal. See MET-005 and DAT-024.
 
 ## Global test for early dropout by HIV status
 
@@ -890,10 +753,11 @@ dropout_test
 # Max grade per AE type across cycles 1-early_dropout_cycles
 # Patients with no recorded grade for a given AE type in this window
 # are excluded from that AE type's predictor (not treated as grade 0)
-ae_early <- ae_long |>
+ae_early <- ae_long_grouped |>
   filter(cycle <= early_dropout_cycles, !is.na(grade)) |>
-  group_by(record_id, ae_type) |>
+  group_by(record_id, ae_group) |>
   summarize(max_grade_early = max(grade, na.rm = TRUE), .groups = "drop") |>
+  rename(ae_type = ae_group) |>
   left_join(
     gic_models |> select(record_id, hiv_status, early_dropout),
     by = "record_id"
@@ -911,8 +775,7 @@ ae_early_wide <- ae_early |>
   mutate(
     # All missing AE grades imputed to 0 — absence of a recorded grade treated
     # as no adverse event. Less defensible for some markers (e.g. plt, hb) than
-    # for liver panels, but necessary to retain full sample for LASSO.
-    # Revisit imputation strategy when time permits.
+    # for liver panels. Revisit when time permits
     across(all_of(ae_types), ~ replace_na(.x, 0))
   ) |>
   left_join(
@@ -921,60 +784,62 @@ ae_early_wide <- ae_early |>
   )
 ```
 
-```{r}
-#| label: tbl-ae-early-dropout
-#| tbl-cap: "Adverse event grades in cycles 1–4 by early dropout status and HIV status"
 
-ae_early |>
-  mutate(ae_label = ae_labels[ae_type]) |>
-  group_by(hiv_status, early_dropout, ae_label) |>
-  summarize(
-    n_any    = sum(max_grade_early > 0, na.rm = TRUE),
-    med      = median(max_grade_early, na.rm = TRUE),
-    n_severe = sum(max_grade_early >= 3, na.rm = TRUE),
-    .groups  = "drop"
-  ) |>
-  mutate(
-    dropout_label = if_else(early_dropout == 1, "Early dropout", "Completed >4 cycles"),
-    cell          = paste0(n_any, " / ", round(med, 1), " / ", n_severe)
-  ) |>
-  select(hiv_status, ae_label, dropout_label, cell) |>
-  pivot_wider(
-    names_from  = c(hiv_status, dropout_label),
-    values_from = cell,
-    names_glue  = "{hiv_status}: {dropout_label}"
-  ) |>
-  select(
-    ae_label,
-    `Negative: Completed >4 cycles`,
-    `Negative: Early dropout`,
-    `Positive: Completed >4 cycles`,
-    `Positive: Early dropout`
-  ) |>
-  rename(`Adverse event` = ae_label) |>
-  gt() |>
-  tab_spanner(
-    label   = "HIV Negative",
-    columns = starts_with("Negative")
-  ) |>
-  tab_spanner(
-    label   = "HIV Positive",
-    columns = starts_with("Positive")
-  ) |>
-  cols_label(
-    `Negative: Completed >4 cycles` = "Completed >4",
-    `Negative: Early dropout`        = "Early dropout",
-    `Positive: Completed >4 cycles`  = "Completed >4",
-    `Positive: Early dropout`         = "Early dropout"
-  ) |>
-  cols_align(align = "center", columns = -`Adverse event`) |>
-  cols_align(align = "left",   columns = `Adverse event`) |>
-  tab_footnote(
-    footnote = "Cells show: n with any AE / median max grade / n with severe AE (grade ≥ 3)",
-    location = cells_column_spanners()
-  ) |>
-  opt_footnote_marks(marks = "extended")
-```
+<!-- ```{r} -->
+<!-- #| label: tbl-ae-early-dropout -->
+<!-- #| tbl-cap: "Adverse event grades in cycles 1–4 by early dropout status and HIV status" -->
+
+<!-- ae_early |> -->
+<!--   mutate(ae_label = ae_type) |> -->
+<!--   group_by(hiv_status, early_dropout, ae_label) |> -->
+<!--   summarize( -->
+<!--     n_any    = sum(max_grade_early > 0, na.rm = TRUE), -->
+<!--     med      = median(max_grade_early, na.rm = TRUE), -->
+<!--     n_severe = sum(max_grade_early >= 3, na.rm = TRUE), -->
+<!--     .groups  = "drop" -->
+<!--   ) |> -->
+<!--   mutate( -->
+<!--     dropout_label = if_else(early_dropout == 1, "Early dropout", "Completed >4 cycles"), -->
+<!--     cell          = paste0(n_any, " / ", round(med, 1), " / ", n_severe) -->
+<!--   ) |> -->
+<!--   select(hiv_status, ae_label, dropout_label, cell) |> -->
+<!--   pivot_wider( -->
+<!--     names_from  = c(hiv_status, dropout_label), -->
+<!--     values_from = cell, -->
+<!--     names_glue  = "{hiv_status}: {dropout_label}" -->
+<!--   ) |> -->
+<!--   select( -->
+<!--     ae_label, -->
+<!--     `Negative: Completed >4 cycles`, -->
+<!--     `Negative: Early dropout`, -->
+<!--     `Positive: Completed >4 cycles`, -->
+<!--     `Positive: Early dropout` -->
+<!--   ) |> -->
+<!--   rename(`Adverse event` = ae_label) |> -->
+<!--   gt() |> -->
+<!--   tab_spanner( -->
+<!--     label   = "HIV Negative", -->
+<!--     columns = starts_with("Negative") -->
+<!--   ) |> -->
+<!--   tab_spanner( -->
+<!--     label   = "HIV Positive", -->
+<!--     columns = starts_with("Positive") -->
+<!--   ) |> -->
+<!--   cols_label( -->
+<!--     `Negative: Completed >4 cycles` = "Completed >4", -->
+<!--     `Negative: Early dropout`        = "Early dropout", -->
+<!--     `Positive: Completed >4 cycles`  = "Completed >4", -->
+<!--     `Positive: Early dropout`         = "Early dropout" -->
+<!--   ) |> -->
+<!--   cols_align(align = "center", columns = -`Adverse event`) |> -->
+<!--   cols_align(align = "left",   columns = `Adverse event`) |> -->
+<!--   tab_footnote( -->
+<!--     footnote = "Cells show: n with any AE / median max grade / n with severe AE (grade ≥ 3)", -->
+<!--     location = cells_column_spanners() -->
+<!--   ) |> -->
+<!--   opt_footnote_marks(marks = "extended") -->
+<!-- ``` -->
+
 
 
 ```{r}
@@ -1012,7 +877,7 @@ dropout_ae_tests <- map_dfr(ae_types, function(at) {
   )
 }) |>
   mutate(
-    ae_label = ae_labels[ae_type],
+    ae_label = ae_type,
     p_adj = p.adjust(p, method = "BH"),
     `p (raw)` = map_chr(p, format_p),
     `p (adj)` = map_chr(p_adj, format_p),
@@ -1043,7 +908,7 @@ The heatmap below gives a quick visual overview of where the grade differences b
 
 ```{r}
 #| label: plt-ae-early-dropout-heatmap
-#| fig-cap: "Median max AE grade in cycles 1–4 by AE type, early dropout status, and HIV status"
+#| fig-cap: "Median max ADE grade in cycles 1–4 by ADE category, early dropout status, and HIV status"
 
 ae_early |>
   group_by(hiv_status, early_dropout, ae_type) |>
@@ -1063,7 +928,7 @@ ae_early |>
   facet_wrap(~ facet_label) +
   labs(
     x = NULL,
-    y = "Adverse event type"
+    y = "Adverse event category"
   ) +
   theme_minimal() +
   theme(
@@ -1093,7 +958,7 @@ ae_early_wide |>
     .groups    = "drop"
   ) |>
   mutate(
-    ae_label = ae_labels[ae_type],
+    ae_label = ae_type,
     `n (%)` = paste0(n_any_ae, " (", pct_any_ae, "%)")
   ) |>
   select(ae_label, hiv_status, `n (%)`) |>
@@ -1160,21 +1025,14 @@ univariate_results <- map_df(ae_types, function(at) {
   }
 
   mod <- glm(
-    as.formula(paste0("early_dropout ~ `", at, "` * hiv_status")),
+    as.formula(paste0("early_dropout ~ `", at, "` + hiv_status")),
     data   = dat,
     family = binomial
   )
 
   tidy(mod, conf.int = TRUE, exponentiate = TRUE) |>
-    filter(str_detect(term, at)) |>
-    mutate(
-      ae_type    = at,
-      term_label = if_else(
-        str_detect(term, "hiv_status"),
-        "AE grade × HIV Positive",
-        "AE grade (main effect)"
-      )
-    )
+    filter(str_detect(term, fixed(at))) |>
+    mutate(ae_type = at)
 }) |>
   filter(!is.na(estimate)) |>
   mutate(p_adj = p.adjust(p.value, method = "BH"))
@@ -1185,42 +1043,33 @@ univariate_results <- map_df(ae_types, function(at) {
 #| tbl-cap: "Univariate logistic regression: association between AE type max grade and early dropout (adjusted for HIV status)"
 
 # Sample sizes per AE type for context
-ae_sample_sizes <- map_df(ae_types, function(at) {
-  dat <- ae_early_wide |>
-    filter(!is.na(early_dropout), !is.na(hiv_status))
-  
-  dat |>
-    group_by(hiv_status) |>
-    summarize(
-      n_nonzero        = sum(.data[[at]] > 0),
-      n_events_nonzero = sum(.data[[at]] > 0 & early_dropout == 1),
-      .groups          = "drop"
-    ) |>
-    mutate(
-      ae_type  = at,
-      cell     = paste0(n_nonzero, " (", n_events_nonzero, ")")
-    ) |>
-    select(ae_type, hiv_status, cell) |>
-    pivot_wider(names_from = hiv_status, values_from = cell,
-                names_glue = "n_{hiv_status}")
-})
-
-# Sort labels
-ae_order <- sort(ae_labels)
+# Sample sizes per AE category for context
+ae_sample_sizes <- ae_types |>
+  map(function(at) {
+    ae_early_wide |>
+      filter(!is.na(early_dropout), !is.na(hiv_status)) |>
+      group_by(hiv_status) |>
+      summarize(
+        n_nonzero        = sum(.data[[at]] > 0),
+        n_events_nonzero = sum(.data[[at]] > 0 & early_dropout == 1),
+        .groups          = "drop"
+      ) |>
+      mutate(ae_type = at, cell = paste0(n_nonzero, " (", n_events_nonzero, ")")) |>
+      select(ae_type, hiv_status, cell) |>
+      pivot_wider(names_from = hiv_status, values_from = cell, names_glue = "n_{hiv_status}")
+  }) |>
+  list_rbind()
 
 univariate_results |>
   left_join(ae_sample_sizes, by = "ae_type") |>
   mutate(
-    ae_label      = ae_labels[ae_type],
-    ae_label      = factor(ae_label, levels = sort(ae_labels)),
     `OR (95% CI)` = paste0(round(estimate, 2), " (", round(conf.low, 2), "–", round(conf.high, 2), ")"),
-    `p (adj)`     = map_chr(p_adj, format_p),
-    `p (raw)`     = map_chr(p.value, format_p)
+    `p (raw)`     = map_chr(p.value, format_p),
+    `p (adj)`     = map_chr(p_adj, format_p)
   ) |>
-  arrange(ae_label, term_label) |>
+  arrange(ae_type) |>
   select(
-    `Adverse event`  = ae_label,
-    `Term`           = term_label,
+    `Adverse event`  = ae_type,
     `HIV-: n (drop)` = n_Negative,
     `HIV+: n (drop)` = n_Positive,
     `OR (95% CI)`,
@@ -1228,67 +1077,132 @@ univariate_results |>
     `p (adj)`
   ) |>
   gt() |>
-  tab_row_group(
-    label = "AE grade × HIV interaction",
-    rows  = Term == "AE grade × HIV Positive"
-  ) |>
-  tab_row_group(
-    label = "AE grade main effect (HIV adjusted)",
-    rows  = Term == "AE grade (main effect)"
-  ) |>
-  cols_hide(Term) |>
   cols_align(align = "left",   columns = `Adverse event`) |>
   cols_align(align = "center", columns = -`Adverse event`) |>
   tab_footnote(
-    footnote = "Main effect OR: change in odds of early dropout per one-unit increase in max AE grade, holding HIV status constant. Interaction OR: difference in that association for HIV-positive vs HIV-negative patients. N (events) = patients with any grade > 0 for this AE type / early dropouts among those patients. p-values BH-adjusted across all tests.",
-    location = cells_column_labels(columns = `p (adj)`)
+    footnote = "OR: change in odds of early dropout per one-unit increase in max AE grade (cycles 1–4), holding HIV status constant. n (drop) = patients with any grade > 0 for this AE category / early dropouts among those. p-values BH-adjusted across AE categories.",
+    locations = cells_column_labels(columns = `p (adj)`)
   ) |>
   opt_footnote_marks(marks = "extended")
 ```
 
-To make the HIV comparison more concrete, the table below shows estimated ORs separately for HIV-negative and HIV-positive patients. The HIV-positive OR is derived by multiplying the main effect OR by the interaction OR, since those add on the log-odds scale. There's no direct standard error for the HIV-positive OR from the model, so treat those as directional estimates rather than something to draw firm conclusions from.
+
+# Management Interventions: Transfusions and G-CSF
 
 ```{r}
-#| label: tbl-univariate-hiv-pos-or
-#| tbl-cap: "Estimated odds ratios for early dropout per unit increase in max AE grade among HIV-positive patients"
+#| label: prep-mgmt-analysis
 
-univariate_results |>
-  select(ae_type, term_label, estimate, p_adj) |>
-  pivot_wider(names_from = term_label, 
-              values_from = c(estimate, p_adj)) |>
-  mutate(
-    ae_label   = factor(ae_labels[ae_type], levels = ae_order),
-    or_hiv_pos = `estimate_AE grade (main effect)` * `estimate_AE grade × HIV Positive`
-  ) |>
-  arrange(ae_label) |>
-  mutate(
-    `OR (HIV-)` = round(`estimate_AE grade (main effect)`, 3),
-    `p (HIV-)`  = map_chr(`p_adj_AE grade (main effect)`, format_p),
-    `OR (HIV+)` = round(or_hiv_pos, 3),
-    `p (interaction)` = map_chr(`p_adj_AE grade × HIV Positive`, format_p)
-  ) |>
-  select(
-    `Adverse event`   = ae_label,
-    `OR (HIV-)`,
-    `p (HIV-)`,
-    `OR (HIV+)`,
-    `p (interaction)`
-  ) |>
-  gt() |>
-  tab_spanner(
-    label   = "HIV Negative",
-    columns = c(`OR (HIV-)`, `p (HIV-)`)
-  ) |>
-  tab_spanner(
-    label   = "HIV Positive",
-    columns = c(`OR (HIV+)`, `p (interaction)`)
-  ) |>
-  cols_align(align = "left",   columns = `Adverse event`) |>
-  cols_align(align = "center", columns = -`Adverse event`) |>
-  tab_footnote(
-    footnote = "ORs reflect change in odds of early dropout per unit increase in max AE grade. OR (HIV+) = main effect OR × interaction OR. p-values are BH-adjusted; p (interaction) tests whether the association differs between HIV groups.",
-    location = cells_column_spanners(spanners = "HIV Positive")
-  ) |>
-  opt_footnote_marks(marks = "extended")
+# Load lmerTest to get p-values for linear mixed models
+library(lmerTest)
 ```
+
+
+## Transfusion Received
+Test likelihood of receiving a transfusion, adjusting for HIV status and grade of anemia in the given cycle
+```{r}
+#| label: model-transfusion-given
+#| tbl-cap: "Logistic Mixed Model: Odds of Receiving a Blood Transfusion"
+
+model_tx_given <- glmer(
+  transfusion_given ~ hiv_status + anemia_grade + (1 | record_id),
+  data = mgmt_cycle |> filter(!is.na(anemia_grade)),
+  family = binomial
+)
+
+summary(model_tx_given)
+
+model_tx_given |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      hiv_status ~ "HIV Status",
+      anemia_grade ~ "Anemia Grade"
+    )
+  ) |>
+  bold_labels() |>
+  bold_p()
+```
+
+```{r}
+#| label: model-transfusion-given-withoutanemia
+#| tbl-cap: "Logistic Mixed Model: Odds of Receiving a Blood Transfusion"
+
+model_tx_given <- glmer(
+  transfusion_given ~ hiv_status + (1 | record_id),
+  data = mgmt_cycle |> filter(!is.na(anemia_grade)),
+  family = binomial
+)
+
+summary(model_tx_given)
+
+model_tx_given |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      hiv_status ~ "HIV Status"
+    )
+  ) |>
+  bold_labels() |>
+  bold_p()
+```
+
+
+
+Going to revisit this in a bit, probably will collapse down to anemia grade < 3 or grade >= 3. The anemia grade is so massive because only 1 patient with grade 0 or 1 anemia received a transfusion
+
+
+## Blood Units Given
+
+For patients who were given transfusions, is HIV status associated with the number of units of blood given, adjusting for level of anemia
+
+```{r}
+#| label: model-transfusion-units
+#| tbl-cap: "Linear Mixed Model: Transfusion Units Received (Among Transfused Cycles)"
+
+model_tx_units <- lmer(
+  transfusion_units ~ hiv_status + anemia_grade + (1 | record_id),
+  data = mgmt_cycle |> filter(transfusion_given == 1, !is.na(anemia_grade))
+)
+
+summary(model_tx_units)
+
+model_tx_units |>
+  tbl_regression(
+    label = list(
+      hiv_status ~ "HIV Status",
+      anemia_grade ~ "Anemia Grade"
+    )
+  ) |>
+  bold_labels() |>
+  bold_p()
+```
+
+## G-CSF Administration
+
+Looking at whether HIV status influences likelihood of having G-CSF administration after adjusting for degree of myelosuppression
+
+```{r}
+#| label: model-gcsf-given
+#| tbl-cap: "Logistic Mixed Model: Odds of Receiving G-CSF"
+
+model_gcsf_given <- glmer(
+  csfg_indicated ~ hiv_status + anc_grade + (1 | record_id),
+  data = mgmt_cycle |> filter(!is.na(myelo_grade)),
+  family = binomial
+)
+
+summary(model_gcsf_given)
+
+model_gcsf_given |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      hiv_status ~ "HIV Status",
+      anc_grade ~ "Neutropenia Grade"
+    )
+  ) |>
+  bold_labels() |>
+  bold_p()
+```
+
 
