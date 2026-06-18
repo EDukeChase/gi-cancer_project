@@ -150,7 +150,7 @@ tbl_main_gts <- tbl_stack(
 ft_main <- tbl_main_gts |>
   as_flex_table() |>
   flextable::add_footer_lines(
-    "p-values: Wilcoxon rank-sum (continuous), Fisher's exact (categorical); unadjusted, descriptive only."
+    "p-values: Wilcoxon rank-sum (continuous), Fisher's exact (categorical)."
   )
 
 obj <- make_downloadable(
@@ -159,6 +159,50 @@ obj <- make_downloadable(
   ft = ft_main
 )
 
+obj$ft
+emit_buttons(obj)
+```
+
+```{r}
+#| label: tbl-desc-ae
+#| tbl-cap: "Adverse drug events (any grade) by category and HIV status"
+#| results: asis
+#| echo: false
+
+t_ae <- mk_block(
+  aegrp_cols,
+  list(
+    `aegrp_Anemia`               ~ "Anemia",
+    `aegrp_Myelosuppression`     ~ "Myelosuppression",
+    `aegrp_Raised transaminases` ~ "Raised transaminases",
+    `aegrp_Hyponatremia`   ~ "Hyponatremia",
+    `aegrp_Hypernatremia`   ~ "Hypernatremia",
+    `aegrp_Hypokalemia`   ~ "Hypokalemia",
+    `aegrp_Hyperkalemia`   ~ "Hyperkalemia",
+    `aegrp_Hypoalbuminemia`      ~ "Hypoalbuminemia",
+    `aegrp_Hyperbilirubinemia`   ~ "Hyperbilirubinemia"
+  )
+)
+
+tbl_ae_gts <- tbl_stack(list(t_ae)) |>
+  modify_header(
+    label  ~ "**Adverse event category**",
+    stat_0 ~ "**Total** \nN = {N}",
+    stat_1 ~ "**HIV Negative** \nN = {n}",
+    stat_2 ~ "**HIV Positive** \nN = {n}"
+  )
+
+ft_ae <- tbl_ae_gts |>
+  as_flex_table() |>
+  flextable::add_footer_lines(
+    "Cells show patients with any ADE in each category. P-values: Fisher's exact."
+  )
+
+obj <- make_downloadable(
+  df = as_tibble(tbl_ae_gts),
+  slug = "table_ae_by_category",
+  ft = ft_ae
+)
 obj$ft
 emit_buttons(obj)
 ```

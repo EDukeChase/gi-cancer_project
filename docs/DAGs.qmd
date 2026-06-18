@@ -1,0 +1,114 @@
+---
+title: "DAGs"
+---
+
+```{r}
+#| label: setup
+#| include: false
+
+library(dagitty)
+library(ggdag)
+library(ggplot2)
+```
+
+## Blood Transfusion DAG
+
+```{r}
+#| label: transfusion-dag
+#| echo: false
+
+transfusion_dag <- dagify(
+  transfusion ~ hiv + anemia + chemo,
+  anemia ~ chemo + site + stage + hiv + sex,
+  chemo ~ age + site,
+  site ~ age + hiv + sex,
+  stage ~ hiv,
+  
+  exposure = "hiv",
+  outcome = "transfusion",
+  
+  coords = list(
+    x = c(hiv = 0, age = 0.25, sex = 0.25, stage = 1, site = 1, chemo = 2, anemia = 3, transfusion = 4),
+    y = c(hiv = 0.5, age = 0, sex = 2, stage = 1.5, site = 2, chemo = 1, anemia = 1, transfusion = 0.5)
+  ),
+  labels = c(
+    hiv = "HIV\nStatus", 
+    age = "Age", 
+    sex = "Sex", 
+    stage = "Cancer\nStage", 
+    site = "Cancer\nSite", 
+    chemo = "Chemo\ntype", 
+    anemia = "Anemia\nGrade", 
+    transfusion = "Transfusion")
+)
+
+transfusion_dag_tidy <- tidy_dagitty(transfusion_dag)
+
+p_transfusion_dag <- ggplot(transfusion_dag_tidy, aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_edges() +
+  geom_dag_point(size = 20) +
+  geom_dag_label(aes(label = label),
+                 fill = "white",
+                 color = "black",
+                 size = 3,
+                 nudge_y = 0) +
+  theme_dag_blank()+
+  labs(title = "Draft DAG: HIV and Blood Transfusions")
+
+p_transfusion_dag
+
+ggsave(here("output", "figures", "dag_transfusion.png"),
+       p_transfusion_dag, width = 8, height = 5, dpi = 300)
+```
+## G-CSF DAG
+```{r}
+#| label: gcsf-dag
+#| echo: false
+
+gcsf_dag <- dagify(
+  gcsf ~ hiv + anemia + chemo,
+  anemia ~ chemo + site + stage + hiv + sex,
+  chemo ~ age + site,
+  site ~ age + hiv + sex,
+  stage ~ hiv,
+  
+  exposure = "hiv",
+  outcome = "gcsf",
+  
+  coords = list(
+    x = c(hiv = 0, age = 0.25, sex = 0.25, stage = 1, site = 1, chemo = 2, anemia = 3, gcsf = 4),
+    y = c(hiv = 0.5, age = 0, sex = 2, stage = 1.5, site = 2, chemo = 1, anemia = 1, gcsf = 0.5)
+  ),
+  labels = c(
+    hiv = "HIV\nStatus", 
+    age = "Age", 
+    sex = "Sex", 
+    stage = "Cancer\nStage", 
+    site = "Cancer\nSite", 
+    chemo = "Chemo\ntype", 
+    anemia = "ANC\nGrade", 
+    gcsf = "G-CSF\nindicated")
+)
+
+gcsf_dag_tidy <- tidy_dagitty(gcsf_dag)
+
+p_gcsf_dag <- ggplot(gcsf_dag_tidy, aes(x = x, y = y, xend = xend, yend = yend)) +
+  geom_dag_edges() +
+  geom_dag_point(size = 20) +
+  geom_dag_label(aes(label = label),
+                 fill = "white",
+                 color = "black",
+                 size = 3,
+                 nudge_y = 0) +
+  theme_dag_blank()+
+  labs(title = "Draft DAG: HIV and G-CSF Indication")
+
+p_gcsf_dag
+
+ggsave(here("output", "figures", "dag_gcsf.png"),
+       p_gcsf_dag, width = 8, height = 5, dpi = 300)
+```
+
+
+
+

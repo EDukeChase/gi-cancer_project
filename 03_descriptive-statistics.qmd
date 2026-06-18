@@ -20,38 +20,40 @@ ae_graded_long <- readRDS(here("data", "processed", "ae_graded_long.rds"))
 library(ggcorrplot)
 ```
 
-```{r}
-#| label: download-helper
-#| include: false
 
-# Write a data frame to csv + docx and return a flextable for display
-make_downloadable <- function(df, slug, ft = NULL) {
-  csv_path  <- paste0(slug, ".csv")
-  docx_path <- paste0(slug, ".docx")
+<!-- ```{r} -->
+<!-- #| label: download-helper -->
+<!-- #| include: false -->
 
-  write.csv(df, csv_path, row.names = FALSE)
-  if (is.null(ft)) ft <- df |> flextable() |> theme_booktabs() |> autofit()
-  save_as_docx(ft, path = docx_path)
+<!-- # Write a data frame to csv + docx and return a flextable for display -->
+<!-- make_downloadable <- function(df, slug, ft = NULL) { -->
+<!--   csv_path  <- paste0(slug, ".csv") -->
+<!--   docx_path <- paste0(slug, ".docx") -->
 
-  list(ft = ft, csv = csv_path, docx = docx_path, slug = slug)
-}
+<!--   write.csv(df, csv_path, row.names = FALSE) -->
+<!--   if (is.null(ft)) ft <- df |> flextable() |> theme_booktabs() |> autofit() -->
+<!--   save_as_docx(ft, path = docx_path) -->
+
+<!--   list(ft = ft, csv = csv_path, docx = docx_path, slug = slug) -->
+<!-- } -->
 
 
-emit_buttons <- function(obj) {
-  cat('<div style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 25px;">')
-  print(download_file(
-    path = obj$csv, output_name = obj$slug,
-    button_label = "Download CSV", button_type = "primary",
-    class = "btn-sm", has_icon = TRUE, icon = "fa fa-database"
-  ))
-  print(download_file(
-    path = obj$docx, output_name = obj$slug,
-    button_label = "Download Word Doc", button_type = "default",
-    class = "btn-sm", has_icon = TRUE, icon = "fa fa-file-word"
-  ))
-  cat('</div>')
-}
-```
+<!-- emit_buttons <- function(obj) { -->
+<!--   cat('<div style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 25px;">') -->
+<!--   print(download_file( -->
+<!--     path = obj$csv, output_name = obj$slug, -->
+<!--     button_label = "Download CSV", button_type = "primary", -->
+<!--     class = "btn-sm", has_icon = TRUE, icon = "fa fa-database" -->
+<!--   )) -->
+<!--   print(download_file( -->
+<!--     path = obj$docx, output_name = obj$slug, -->
+<!--     button_label = "Download Word Doc", button_type = "default", -->
+<!--     class = "btn-sm", has_icon = TRUE, icon = "fa fa-file-word" -->
+<!--   )) -->
+<!--   cat('</div>') -->
+<!-- } -->
+<!-- ``` -->
+
 
 
 ```{r}
@@ -1397,6 +1399,21 @@ emit_buttons(obj)
 #| tbl-cap: "Adverse events (any grade) by category and HIV status"
 #| results: asis
 #| echo: false
+
+t_ae <- mk_block(
+  aegrp_cols,
+  list(
+    `aegrp_Anemia`               ~ "Anemia",
+    `aegrp_Myelosuppression`     ~ "Myelosuppression",
+    `aegrp_Raised transaminases` ~ "Raised transaminases",
+    `aegrp_Hyponatremia`   ~ "Hyponatremia",
+    `aegrp_Hypernatremia`   ~ "Hypernatremia",
+    `aegrp_Hypokalemia`   ~ "Hypokalemia",
+    `aegrp_Hyperkalemia`   ~ "Hyperkalemia",
+    `aegrp_Hypoalbuminemia`      ~ "Hypoalbuminemia",
+    `aegrp_Hyperbilirubinemia`   ~ "Hyperbilirubinemia"
+  )
+)
 
 tbl_ae_gts <- tbl_stack(list(t_ae)) |>
   modify_header(

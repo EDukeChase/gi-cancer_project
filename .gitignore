@@ -6,10 +6,8 @@
 /docs/gic_statistical-analysis-plan.docx
 /docs/meeting-transcription-overviews/
 /docs/.obsidian/
-/docs/DAGs.qmd
-/docs/journal.md
 /docs/manuscript/
-/docs/original_contents
+/docs/original_contents/
 /output/*
 !/output/README.md
 
