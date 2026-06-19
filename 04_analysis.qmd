@@ -1094,31 +1094,86 @@ univariate_results |>
 
 # Load lmerTest to get p-values for linear mixed models
 library(lmerTest)
+
+mgmt_cycle_transfusion <- mgmt_cycle |>
+  filter(!is.na(anemia_grade), !is.na(transfusion_given), anemia_grade >= 1) |>
+  mutate(
+    anemia_grade_f = factor(anemia_grade),
+    anemia_grade_f = fct_collapse(anemia_grade_f, "3-4" = c("3", "4"))
+  )
+
+mgmt_grade2 <- mgmt_cycle |>
+  filter(anemia_grade == 2, !is.na(transfusion_given))
 ```
+
+```{r}
+mgmt_cycle_transfusion |>
+  count(anemia_grade, hiv_status, transfusion_given) |>
+  pivot_wider(names_from = transfusion_given, values_from = n, values_fill = 0) |>
+  rename(`No transfusion` = `0`, `Transfusion given` = `1`) |>
+  mutate(
+    total = `No transfusion` + `Transfusion given`,
+    pct_transfused = round(100 * `Transfusion given` / total, 1)
+  ) |>
+  arrange(anemia_grade, hiv_status)
+```
+
+```{r}
+mgmt_cycle |>
+  filter(!is.na(anc_grade), !is.na(csfg_indicated)) |>
+  count(anc_grade, hiv_status, csfg_indicated) |>
+  pivot_wider(names_from = csfg_indicated, values_from = n, values_fill = 0) |>
+  rename(`No G-CSF` = `0`, `G-CSF given` = `1`) |>
+  mutate(
+    total = `No G-CSF` + `G-CSF given`,
+    pct_gcsf = round(100 * `G-CSF given` / total, 1)
+  ) |>
+  arrange(anc_grade, hiv_status)
+```
+
+
+
 
 
 ## Transfusion Received
 Test likelihood of receiving a transfusion, adjusting for HIV status and grade of anemia in the given cycle
 ```{r}
 #| label: model-transfusion-given
-#| tbl-cap: "Logistic Mixed Model: Odds of Receiving a Blood Transfusion"
+#| tbl-cap: "Odds of Receiving a Blood Transfusion (Anemia Grade 2 Only)"
 
-model_tx_given <- glmer(
-  transfusion_given ~ hiv_status + anemia_grade + (1 | record_id),
-  data = mgmt_cycle |> filter(!is.na(anemia_grade)),
-  family = binomial
+model_tx_unadj <- glmer(
+  transfusion_given ~ hiv_status + (1 | record_id),
+  data = mgmt_grade2, family = binomial
 )
 
-summary(model_tx_given)
+model_tx_grade2 <- glmer(
+  transfusion_given ~ hiv_status + chemo_type + cancer_site + (1 | record_id),
+  data = mgmt_grade2, family = binomial
+)
 
-model_tx_given |>
+summary(model_tx_unadj)
+summary(model_tx_grade2)
+
+tbl_unadj <- model_tx_unadj |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(hiv_status ~ "HIV Status")
+  )
+
+tbl_adj <- model_tx_grade2 |>
   tbl_regression(
     exponentiate = TRUE,
     label = list(
       hiv_status ~ "HIV Status",
-      anemia_grade ~ "Anemia Grade"
+      chemo_type ~ "Chemotherapy Type",
+      cancer_site ~ "Cancer Site"
     )
-  ) |>
+  )
+
+tbl_merge(
+  list(tbl_unadj, tbl_adj),
+  tab_spanner = c("**Unadjusted**", "**Adjusted**")
+) |>
   bold_labels() |>
   bold_p()
 ```

@@ -215,8 +215,8 @@ save_table_docx <- function(gtsum, name) {
 
 # Write a data frame to csv + docx and return a flextable for display
 make_downloadable <- function(df, slug, ft = NULL) {
-  csv_path  <- paste0(slug, ".csv")
-  docx_path <- paste0(slug, ".docx")
+  csv_path  <- here("output", "tables", paste0(slug, ".csv"))
+  docx_path <- here("output", "tables", paste0(slug, ".docx"))
   
   write.csv(df, csv_path, row.names = FALSE)
   if (is.null(ft)) ft <- df |> flextable() |> theme_booktabs() |> autofit()
