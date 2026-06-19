@@ -206,23 +206,74 @@ save_rds_safe <- function(object, path) {
 }
 
 
-save_table_docx <- function(gtsum, name) {
-  if (!save_outputs) return(invisible(NULL))
-  gtsum |>
-    as_flex_table() |>
-    flextable::save_as_docx(path = here("output", "tables", paste0(name, ".docx")))
+# Multicollinearity check for any model car::vif() supports (lm, glm, merMod).
+# Returns a tidy tibble of (G)VIF values with a flag column rather than raw
+# car::vif() output, so it can be dropped into a table/callout without
+# fussing over the lm vs glm vs merMod return shape each time. Wrapped in
+# tryCatch because sparse/rank-deficient model fits (common with small
+# subgroup models here) make car::vif() error rather than return a value.
+check_vif <- function(model, threshold = 5) {
+  result <- tryCatch(car::vif(model), error = function(e) e)
+
+  if (inherits(result, "error")) {
+    return(tibble(term = NA_character_, gvif = NA_real_, flag = NA,
+                  note = paste("VIF not computable:", conditionMessage(result))))
+  }
+
+  if (is.matrix(result)) {
+    # Multi-df terms (factors) return a matrix with columns
+    # GVIF, Df, GVIF^(1/(2*Df)) — the first column is the raw GVIF itself,
+    # comparable in spirit to a single-df VIF (though strictly speaking the
+    # df-adjusted third column is what's conventionally compared to
+    # sqrt(threshold) for high-df terms; using raw GVIF here is the simpler,
+    # more conservative screening choice).
+    out <- tibble(term = rownames(result), gvif = result[, "GVIF"])
+  } else {
+    out <- tibble(term = names(result), gvif = as.numeric(result))
+  }
+
+  out |>
+    mutate(flag = gvif > threshold, note = NA_character_)
 }
 
-# Write a data frame to csv + docx and return a flextable for display
-make_downloadable <- function(df, slug, ft = NULL) {
-  csv_path  <- here("output", "tables", paste0(slug, ".csv"))
-  docx_path <- here("output", "tables", paste0(slug, ".docx"))
-  
-  write.csv(df, csv_path, row.names = FALSE)
+# Save a table (gtsummary object and/or data frame) to csv + docx and
+# return a flextable for display. Pass `gtsum` for gtsummary objects (df/ft
+# derived automatically if not supplied), or `df`/`ft` directly for anything
+# else (e.g. a plain data frame with a hand-built flextable).
+save_table <- function(slug, gtsum = NULL, df = NULL, ft = NULL) {
+  tables_dir <- here("output", "tables")
+  if (!dir.exists(tables_dir)) dir.create(tables_dir, recursive = TRUE)
+
+  if (is.null(ft) && !is.null(gtsum)) ft <- as_flex_table(gtsum)
+  if (is.null(df) && !is.null(gtsum)) df <- as_tibble(gtsum)
   if (is.null(ft)) ft <- df |> flextable() |> theme_booktabs() |> autofit()
+
+  csv_path  <- file.path(tables_dir, paste0(slug, ".csv"))
+  docx_path <- file.path(tables_dir, paste0(slug, ".docx"))
+
+  if (!is.null(df)) write.csv(df, csv_path, row.names = FALSE)
   save_as_docx(ft, path = docx_path)
-  
+
   list(ft = ft, csv = csv_path, docx = docx_path, slug = slug)
+}
+
+# Save a ggplot/patchwork figure as PNG (output/figures/) and SVG
+# (output/figures/svgs/), creating directories as needed.
+save_figure <- function(plot, slug, width = 8, height = NULL, dpi = 300) {
+  if (is.null(height)) height <- width * 0.618
+
+  png_dir <- here("output", "figures")
+  svg_dir <- here("output", "figures", "svgs")
+  if (!dir.exists(png_dir)) dir.create(png_dir, recursive = TRUE)
+  if (!dir.exists(svg_dir)) dir.create(svg_dir, recursive = TRUE)
+
+  png_path <- file.path(png_dir, paste0(slug, ".png"))
+  svg_path <- file.path(svg_dir, paste0(slug, ".svg"))
+
+  ggsave(png_path, plot = plot, width = width, height = height, dpi = dpi)
+  ggsave(svg_path, plot = plot, width = width, height = height)
+
+  list(plot = plot, png = png_path, svg = svg_path, slug = slug)
 }
 
 emit_buttons <- function(obj) {

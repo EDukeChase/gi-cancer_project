@@ -21,6 +21,10 @@ grade_cols <- gic_descriptive$grade_cols
 mgmt_long <- gic_descriptive$mgmt_long
 mgmt_cycle <- gic_descriptive$mgmt_cycle
 rm(gic_descriptive)
+
+# Finalized tables/figures destined for the publication doc (05), keyed by slug.
+# Each save_table()/save_figure() call below also appends its result here.
+pub_objects_analysis <- list()
 ```
 
 # Model Building
@@ -119,11 +123,63 @@ model_severe_basic |>
     ),
     add_estimate_to_reference_rows = TRUE
   ) |>
-  bold_labels() |> 
-  italicize_levels() |> 
-  bold_p() |> 
-  add_global_p(keep = TRUE) |> 
+  bold_labels() |>
+  italicize_levels() |>
+  bold_p() |>
+  add_global_p(keep = TRUE) |>
   add_glance_source_note(include = c(nobs, AIC))
+```
+
+::: {.callout-note collapse="true" title="Model diagnostics: model_severe_basic"}
+```{r}
+#| label: chk-severe-basic-vif
+
+check_vif(model_severe_basic)
+```
+:::
+
+Publication version: unadjusted vs adjusted odds ratios for severe AE, side by side.
+```{r}
+#| label: tbl-severe-or-comparison
+#| tbl-cap: "Association between HIV status and severe adverse events: unadjusted vs adjusted"
+
+tbl_severe_simple <- model_severe_simple |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(hiv_status ~ "HIV Status"),
+    pvalue_fun = label_style_pvalue(digits = 3),
+    add_estimate_to_reference_rows = TRUE
+  ) |>
+  bold_p()
+
+tbl_severe_adjusted <- model_severe_basic |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      hiv_status   ~ "HIV Status",
+      cancer_stage ~ "Cancer Stage",
+      chemo_type   ~ "Chemotherapy Regimen",
+      tx_intent    ~ "Treatment Intent",
+      age          ~ "Age (years)",
+      sex          ~ "Sex"
+    ),
+    pvalue_fun = label_style_pvalue(digits = 3),
+    add_estimate_to_reference_rows = TRUE
+  ) |>
+  bold_p()
+
+tbl_severe_or_comparison <- tbl_merge(
+  list(tbl_severe_simple, tbl_severe_adjusted),
+  tab_spanner = c("**Unadjusted OR**", "**Adjusted OR**"),
+  quiet = TRUE
+) |>
+  bold_labels() |>
+  italicize_levels()
+
+tbl_severe_or_comparison
+
+obj <- save_table(slug = "tbl_severe_or_comparison", gtsum = tbl_severe_or_comparison)
+pub_objects_analysis$tbl_severe_or_comparison <- obj
 ```
 
 
@@ -280,6 +336,7 @@ tbl_merge(
 
 ### Assumption checks
 
+::: {.callout-note collapse="true" title="Model diagnostics: model_hiv_basic"}
 ```{r}
 #| label: chk-hiv-assumptions
 
@@ -297,13 +354,10 @@ gic_models |>
 print("Linearity isn't amazing, but a straight line fit would show a reasonable fit.")
 
 # Multicollinearity
-vif(model_hiv_basic)
-
-print("No significant multicollinearity noted.")
+check_vif(model_hiv_basic)
 
 # Influential observations
 plot(model_hiv_basic, which = 4)  # Cook's distance
-print("Three influential observations, need to investigate further")
 ```
 
 ```{r}
@@ -328,6 +382,7 @@ gic_models |>
 ```
 
 All pts with a large Cook's D are HIV positive, but I haven't immediately spotted any other commonality amongst them to explain the group collectively being so influential, will have to do more investigation.
+:::
 
 
 
@@ -426,8 +481,8 @@ tbl_merge(
 
 hosp_cols <- names(gic_models)[str_detect(names(gic_models), "^hosp_days_([1-9]|1[0-2])$")]
 
-hosp_long <- gic_models |> 
-  select(record_id, hiv_status, cycles_given, age, all_of(hosp_cols)) |> 
+hosp_long <- gic_models |>
+  select(record_id, hiv_status, cycles_given, age, sex, cancer_stage, chemo_type, all_of(hosp_cols)) |>
   pivot_longer(
     cols = all_of(hosp_cols),
     names_to = "cycle_var",
@@ -595,7 +650,7 @@ hosp_maxgrade_summ <- hosp_maxgrade_cycle |>
     .groups = "drop"
   )
 
-ggplot(hosp_maxgrade_summ, aes(x = ae_max_grade, y = mean_hosp_days, color = hiv_status, group = hiv_status)) +
+plt_hosp_vs_max_grade <- ggplot(hosp_maxgrade_summ, aes(x = ae_max_grade, y = mean_hosp_days, color = hiv_status, group = hiv_status)) +
   geom_line(linewidth = 1) +
   geom_point(size = 2) +
   scale_x_continuous(breaks = 0:5) +
@@ -605,6 +660,10 @@ ggplot(hosp_maxgrade_summ, aes(x = ae_max_grade, y = mean_hosp_days, color = hiv
     color = "HIV status"
   ) +
   theme_minimal()
+
+plt_hosp_vs_max_grade
+
+pub_objects_analysis$plt_hosp_vs_max_grade <- save_figure(plt_hosp_vs_max_grade, "plt_hosp_vs_max_grade")
 ```
 
 ## Regression Models
@@ -634,7 +693,7 @@ hosp_model_data <- hosp_model_data |>
 
 # Any hospitalization this cycle (logistic)
 model_any_hosp <- glmer(
-  any_hosp ~ ae_max_grade + hiv_status + age + (1 | record_id),
+  any_hosp ~ ae_max_grade + hiv_status + age + sex + (1 | record_id),
   data = hosp_model_data,
   family = binomial
 )
@@ -643,15 +702,111 @@ fixef(model_any_hosp) |> exp()
 confint(model_any_hosp, method = "Wald") |> exp()
 ```
 
+OR table for whether a patient was hospitalized at all in a given cycle.
 ```{r}
-# Length of stay given hospitalization
-model_hosp_days <- lmer(
-  hosp_days ~ ae_max_grade + hiv_status + age + (1 | record_id),
+#| label: tbl-any-hosp
+#| tbl-cap: "Odds of any toxicity-related hospitalization in a cycle"
+
+tbl_any_hosp <- model_any_hosp |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      ae_max_grade ~ "Max AE Grade in Cycle",
+      hiv_status   ~ "HIV Status",
+      age          ~ "Age (years)",
+      sex          ~ "Sex"
+    ),
+    pvalue_fun = label_style_pvalue(digits = 3),
+    add_estimate_to_reference_rows = TRUE
+  ) |>
+  bold_p() |>
+  bold_labels() |>
+  italicize_levels()
+
+tbl_any_hosp
+
+obj <- save_table(slug = "tbl_any_hosp", gtsum = tbl_any_hosp)
+pub_objects_analysis$tbl_any_hosp <- obj
+```
+
+::: {.callout-note collapse="true" title="Model diagnostics: model_any_hosp"}
+```{r}
+#| label: chk-any-hosp-vif
+
+check_vif(model_any_hosp)
+```
+:::
+
+```{r}
+#| label: model-hosp-days
+
+# Length of stay given hospitalization: unadjusted vs adjusted
+model_hosp_days_simple <- lmer(
+  hosp_days ~ hiv_status + (1 | record_id),
   data = hosp_model_data |> filter(hosp_days > 0)
 )
-summary(model_hosp_days)
+
+model_hosp_days_adjusted <- lmer(
+  hosp_days ~ hiv_status + age + sex + chemo_type + cancer_stage + (1 | record_id),
+  data = hosp_model_data |> filter(hosp_days > 0)
+)
+
+summary(model_hosp_days_simple)
+summary(model_hosp_days_adjusted)
 ```
 AE severity has minimal impact on length of stay for either group once someone is already hospitalized, although HIV positive patients are expected to spend slightly longer in the hospital than HIV negative patients for each unit increase in max adverse event experienced.
+
+```{r}
+#| label: tbl-hosp-days-comparison
+#| tbl-cap: "Length of stay among hospitalized cycles: unadjusted vs adjusted"
+
+tbl_hosp_simple <- model_hosp_days_simple |>
+  tbl_regression(
+    exponentiate = FALSE,
+    label = list(hiv_status ~ "HIV Status"),
+    add_estimate_to_reference_rows = TRUE
+  )
+
+tbl_hosp_adjusted <- model_hosp_days_adjusted |>
+  tbl_regression(
+    exponentiate = FALSE,
+    label = list(
+      hiv_status   ~ "HIV Status",
+      cancer_stage ~ "Cancer Stage",
+      chemo_type   ~ "Chemotherapy Regimen",
+      age          ~ "Age (years)",
+      sex          ~ "Sex"
+    ),
+    add_estimate_to_reference_rows = TRUE
+  )
+
+tbl_hosp_days_comparison <- tbl_merge(
+  list(tbl_hosp_simple, tbl_hosp_adjusted),
+  tab_spanner = c("**Unadjusted Analysis**", "**Adjusted Analysis**"),
+  quiet = TRUE
+) |>
+  modify_header(
+    estimate_1 ~ "**Beta (Days)**",
+    ci_1       ~ "**95% CI**",
+    estimate_2 ~ "**Beta (Days)**",
+    ci_2       ~ "**95% CI**"
+  ) |>
+  bold_labels() |>
+  italicize_levels()
+
+tbl_hosp_days_comparison
+
+obj <- save_table(slug = "tbl_hosp_days_comparison", gtsum = tbl_hosp_days_comparison)
+pub_objects_analysis$tbl_hosp_days_comparison <- obj
+```
+
+::: {.callout-note collapse="true" title="Model diagnostics: model_hosp_days_adjusted"}
+```{r}
+#| label: chk-hosp-days-adjusted-vif
+
+check_vif(model_hosp_days_adjusted)
+```
+:::
 
 
 # Early Treatment Dropout
@@ -1030,13 +1185,29 @@ univariate_results <- map_df(ae_types, function(at) {
     family = binomial
   )
 
+  max_gvif <- check_vif(mod) |> pull(gvif) |> max(na.rm = TRUE)
+
   tidy(mod, conf.int = TRUE, exponentiate = TRUE) |>
     filter(str_detect(term, fixed(at))) |>
-    mutate(ae_type = at)
+    mutate(ae_type = at, max_gvif = max_gvif)
 }) |>
   filter(!is.na(estimate)) |>
   mutate(p_adj = p.adjust(p.value, method = "BH"))
 ```
+
+::: {.callout-note collapse="true" title="Model diagnostics: univariate early-dropout AE models"}
+Multicollinearity check across all univariate AE models (one GVIF per model, between the AE type's grade and HIV status, rather than a separate diagnostic block per AE type).
+```{r}
+#| label: chk-univariate-ae-vif
+#| tbl-cap: "Multicollinearity check: max GVIF per univariate early-dropout model"
+
+univariate_results |>
+  select(`Adverse event` = ae_type, `Max GVIF` = max_gvif) |>
+  mutate(Flag = if_else(`Max GVIF` > 5, "Check", "OK")) |>
+  kbl(booktabs = TRUE, digits = 2) |>
+  kable_styling(full_width = FALSE, position = "left")
+```
+:::
 
 ```{r}
 #| label: tbl-univariate-ae-results
@@ -1084,6 +1255,76 @@ univariate_results |>
     locations = cells_column_labels(columns = `p (adj)`)
   ) |>
   opt_footnote_marks(marks = "extended")
+```
+
+Publication version: descriptive breakdown by dropout status merged with the HIV-adjusted univariate associations, for the AE types that passed the sparsity check above.
+```{r}
+#| label: tbl-early-dropout-final
+#| tbl-cap: "Early dropout: descriptive breakdown and HIV-adjusted univariate associations"
+
+final_ae_columns <- setdiff(ae_types, sparse_ae)
+
+tbl_dropout_descriptive <- ae_early_wide |>
+  select(early_dropout, hiv_status, all_of(final_ae_columns)) |>
+  mutate(early_dropout = factor(early_dropout, labels = c("Completed Treatment", "Early Dropout"))) |>
+  tbl_summary(
+    by = early_dropout,
+    missing = "no",
+    label = list(hiv_status ~ "HIV Status")
+  )
+
+tbl_dropout_regression <- ae_early_wide |>
+  select(early_dropout, hiv_status, all_of(final_ae_columns)) |>
+  tbl_uvregression(
+    method = glm,
+    y = early_dropout,
+    method.args = list(family = binomial),
+    exponentiate = TRUE,
+    include = all_of(final_ae_columns),
+    formula = "{y} ~ {x} + hiv_status",
+    label = map(final_ae_columns, ~ as.formula(paste0(".x ~ '", .x, " Max Grade'")))
+  ) |>
+  add_q(method = "BH")
+
+table_early_dropout_final <- tbl_merge(
+  list(tbl_dropout_descriptive, tbl_dropout_regression),
+  tab_spanner = c("**Descriptive Breakdown**", "**Univariate Association**")
+) |>
+  bold_labels()
+
+table_early_dropout_final
+
+obj <- save_table(slug = "table_early_dropout_final", gtsum = table_early_dropout_final)
+pub_objects_analysis$table_early_dropout_final <- obj
+```
+
+Forest plot of the same univariate associations (max grade in cycles 1–`r early_dropout_cycles`, adjusted for HIV status).
+```{r}
+#| label: plt-early-dropout-forest
+#| fig-cap: "Impact of early-cycle toxicities on early treatment dropout"
+
+plt_early_dropout_forest <- univariate_results |>
+  filter(ae_type %in% final_ae_columns) |>
+  ggplot(aes(x = estimate, y = reorder(ae_type, estimate))) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray50") +
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "midnightblue", linewidth = 0.7) +
+  geom_point(color = "firebrick", size = 3) +
+  scale_x_log10(breaks = c(0.5, 1, 2, 5, 10)) +
+  labs(
+    x = "Odds Ratio (95% CI) on Log Scale\n[Adjusted for HIV Status]",
+    y = "Adverse Event Type (Max Grade Cycles 1-4)",
+    title = "Impact of Early Cycle Toxicities on Early Treatment Dropout",
+    subtitle = "Odds of dropping out per 1-unit increase in toxicity grade"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold")
+  )
+
+plt_early_dropout_forest
+
+pub_objects_analysis$plt_early_dropout_forest <- save_figure(plt_early_dropout_forest, "plt_early_dropout_forest")
 ```
 
 
@@ -1174,9 +1415,17 @@ tbl_merge(
   list(tbl_unadj, tbl_adj),
   tab_spanner = c("**Unadjusted**", "**Adjusted**")
 ) |>
-  bold_labels() |>
-  bold_p()
+  bold_labels()
 ```
+
+::: {.callout-note collapse="true" title="Model diagnostics: model_tx_grade2"}
+```{r}
+#| label: chk-tx-grade2-vif
+
+check_vif(model_tx_grade2)
+```
+Fit on the anemia-grade-2-only subset (`mgmt_grade2`), which is small — a "VIF not computable" result above most likely reflects separation/rank-deficiency from sparse `chemo_type`/`cancer_site` cells in that subset rather than a coding error.
+:::
 
 ```{r}
 #| label: model-transfusion-given-withoutanemia
@@ -1232,6 +1481,14 @@ model_tx_units |>
   bold_p()
 ```
 
+::: {.callout-note collapse="true" title="Model diagnostics: model_tx_units"}
+```{r}
+#| label: chk-tx-units-vif
+
+check_vif(model_tx_units)
+```
+:::
+
 ## G-CSF Administration
 
 Looking at whether HIV status influences likelihood of having G-CSF administration after adjusting for degree of myelosuppression
@@ -1260,4 +1517,17 @@ model_gcsf_given |>
   bold_p()
 ```
 
+::: {.callout-note collapse="true" title="Model diagnostics: model_gcsf_given"}
+```{r}
+#| label: chk-gcsf-given-vif
+
+check_vif(model_gcsf_given)
+```
+:::
+
+```{r}
+#| label: save-pub-objects-analysis
+
+save_rds_safe(pub_objects_analysis, here("data", "processed", "pub_objects_analysis.rds"))
+```
 

@@ -9,126 +9,15 @@ bibliography: references.bib
 
 source("R/setup.R")
 
-# Toggle: set to TRUE to save figures and tables to disk
-save_outputs <- FALSE
-
-output_dir <- here("output", "figures")
-if (save_outputs && !dir.exists(output_dir)) dir.create(output_dir, recursive = TRUE)
-
-# Load processed data
-gic_descriptive <- readRDS(here("data", "processed", "gic_descriptive.rds"))
-gic_models <- gic_descriptive$gic_models
-ae_long <- gic_descriptive$ae_long
-ae_long_grouped <- gic_descriptive$ae_long_grouped
-ae_cycle_long <- gic_descriptive$ae_cycle_long
-ae_cycle_measured <- gic_descriptive$ae_cycle_measured
-cycle_summary <- gic_descriptive$cycle_summary
-cycle_summary_grouped <- gic_descriptive$cycle_summary_grouped
-grade_cols <- gic_descriptive$grade_cols
-rm(gic_descriptive)
+# Finalized tables/figures saved incrementally by 03 and 04. This document
+# only loads, applies light final formatting, and displays/exports — it
+# performs no statistical computation of its own.
+pub_objects_desc <- readRDS(here("data", "processed", "pub_objects_desc.rds"))
+pub_objects_analysis <- readRDS(here("data", "processed", "pub_objects_analysis.rds"))
 ```
 
 
 # Comprehensive Descriptive Table
-
-```{r}
-#| label: prep-tbl-desc
-#| include: false
-
-show_p <- TRUE
-
-# Patient-level "any event" flag per collapsed AE category (MET-007)
-ae_group_pt <- ae_long_grouped |>
-  group_by(record_id, ae_group) |>
-  summarize(any_event = as.integer(max(grade) > 0), .groups = "drop") |>
-  pivot_wider(
-    names_from   = ae_group,
-    values_from  = any_event,
-    values_fill  = 0,
-    names_prefix = "aegrp_"
-  )
-
-aegrp_cols <- names(ae_group_pt)[startsWith(names(ae_group_pt), "aegrp_")]
-
-# Single source data frame with all factor conversions
-tbl_desc_dat <- gic_models |>
-  left_join(ae_group_pt, by = "record_id") |>
-  mutate(
-    across(all_of(aegrp_cols), ~ factor(.x, levels = c(0, 1), labels = c("No", "Yes"))),
-    ae_any_pt        = factor(ae_any_pt, levels = c(0, 1), labels = c("No", "Yes")),
-    ae_severe_any_pt = factor(ae_severe_any_pt, levels = c(0, 1), labels = c("No", "Yes"))
-  )
-
-tbl_opts <- list(
-  by           = "hiv_status",
-  statistic    = list(all_continuous() ~ "{median} ({p25}–{p75})",
-                      all_categorical() ~ "{n} ({p}%)"),
-  digits       = all_continuous() ~ 1,
-  missing      = "ifany",
-  missing_text = "Missing"
-)
-
-mk_block <- function(vars, labels, types = NULL, with_p = show_p) {
-  args <- c(
-    list(data = tbl_desc_dat |> select(hiv_status, all_of(vars)),
-         include = all_of(vars), label = labels),
-    tbl_opts
-  )
-  if (!is.null(types)) args$type <- types
-
-  tbl <- do.call(tbl_summary, args) |>
-    add_overall(last = FALSE) |>
-    add_stat_label(
-      label = list(
-        all_categorical() ~ "n (% of group)",
-        all_continuous()  ~ "Median (IQR)"
-      )
-    )
-
-  if (with_p) {
-    tbl <- tbl |>
-      add_p(
-        test = list(all_continuous() ~ "wilcox.test",
-                    all_categorical() ~ "fisher.test"),
-        pvalue_fun = ~ map_chr(.x, format_p)
-      )
-  }
-  tbl
-}
-
-t_patient <- mk_block(
-  c("age", "sex"),
-  list(age ~ "Age, years", sex ~ "Sex"),
-  types = list(age ~ "continuous")
-)
-
-t_disease <- mk_block(
-  c("cancer_site", "histology", "cancer_stage"),
-  list(cancer_site ~ "Cancer site", histology ~ "Histology", cancer_stage ~ "Cancer stage")
-)
-
-t_treatment <- mk_block(
-  c("tx_intent", "tx_concurrent_rtx", "chemo_type", "cycles_prescribed", "cycles_given"),
-  list(tx_intent ~ "Treatment intent", tx_concurrent_rtx ~ "Concurrent radiotherapy",
-       chemo_type ~ "Chemotherapy type", cycles_prescribed ~ "Cycles prescribed",
-       cycles_given ~ "Cycles received"),
-  types = list(cycles_prescribed ~ "continuous", cycles_given ~ "continuous")
-)
-
-t_comorbid <- mk_block(
-  c("comorbid_htn", "comorbid_dm", "comorbid_tb", "comorbid_asthma",
-    "comorbid_chd", "comorbid_none"),
-  list(comorbid_htn ~ "Hypertension", comorbid_dm ~ "Diabetes",
-       comorbid_tb ~ "Tuberculosis", comorbid_asthma ~ "Asthma",
-       comorbid_chd ~ "Coronary heart disease", comorbid_none ~ "No comorbidities")
-)
-
-t_history <- mk_block(
-  c("hx_etoh", "hx_tobacco", "hx_cancer", "residence"),
-  list(hx_etoh ~ "Alcohol history", hx_tobacco ~ "Tobacco history",
-       hx_cancer ~ "Prior cancer", residence ~ "Residence")
-)
-```
 
 ```{r}
 #| label: tbl-desc
@@ -136,29 +25,7 @@ t_history <- mk_block(
 #| results: asis
 #| echo: false
 
-tbl_main_gts <- tbl_stack(
-  list(t_patient, t_disease, t_treatment, t_comorbid, t_history)
-) |>
-  modify_header(
-    label  ~ "**Variable**",
-    stat_0 ~ "**Total** \nN = {N}",
-    stat_1 ~ "**HIV Negative** \nN = {n}",
-    stat_2 ~ "**HIV Positive** \nN = {n}"
-  ) |>
-  modify_spanning_header(c("stat_1", "stat_2") ~ "**HIV Status**")
-
-ft_main <- tbl_main_gts |>
-  as_flex_table() |>
-  flextable::add_footer_lines(
-    "p-values: Wilcoxon rank-sum (continuous), Fisher's exact (categorical)."
-  )
-
-obj <- make_downloadable(
-  df = as_tibble(tbl_main_gts),
-  slug = "table1_descriptive",
-  ft = ft_main
-)
-
+obj <- pub_objects_desc$table1_descriptive
 obj$ft
 emit_buttons(obj)
 ```
@@ -169,40 +36,7 @@ emit_buttons(obj)
 #| results: asis
 #| echo: false
 
-t_ae <- mk_block(
-  aegrp_cols,
-  list(
-    `aegrp_Anemia`               ~ "Anemia",
-    `aegrp_Myelosuppression`     ~ "Myelosuppression",
-    `aegrp_Raised transaminases` ~ "Raised transaminases",
-    `aegrp_Hyponatremia`   ~ "Hyponatremia",
-    `aegrp_Hypernatremia`   ~ "Hypernatremia",
-    `aegrp_Hypokalemia`   ~ "Hypokalemia",
-    `aegrp_Hyperkalemia`   ~ "Hyperkalemia",
-    `aegrp_Hypoalbuminemia`      ~ "Hypoalbuminemia",
-    `aegrp_Hyperbilirubinemia`   ~ "Hyperbilirubinemia"
-  )
-)
-
-tbl_ae_gts <- tbl_stack(list(t_ae)) |>
-  modify_header(
-    label  ~ "**Adverse event category**",
-    stat_0 ~ "**Total** \nN = {N}",
-    stat_1 ~ "**HIV Negative** \nN = {n}",
-    stat_2 ~ "**HIV Positive** \nN = {n}"
-  )
-
-ft_ae <- tbl_ae_gts |>
-  as_flex_table() |>
-  flextable::add_footer_lines(
-    "Cells show patients with any ADE in each category. P-values: Fisher's exact."
-  )
-
-obj <- make_downloadable(
-  df = as_tibble(tbl_ae_gts),
-  slug = "table_ae_by_category",
-  ft = ft_ae
-)
+obj <- pub_objects_desc$table_ae_by_category
 obj$ft
 emit_buttons(obj)
 ```
@@ -213,441 +47,52 @@ Proportion of patients who completed treatment cycle $k$ from the population of 
 ```{r}
 #| label: plt-cycle-completion
 
-survival_data <- gic_models |>
-  # for each patient, create a row for each cycle they were prescribed
-  rowwise() |>
-  mutate(cycle = list(1:cycles_prescribed)) |>
-  unnest(cycle) |>
-  # mark whether they actually received each cycle
-  mutate(received = cycle <= cycles_given) |>
-  # for each HIV status and cycle number, get the proportion who received it
-  group_by(hiv_status, cycle) |>
-  summarise(
-    n_prescribed = n(),
-    prop_received = mean(received),
-    .groups = "drop"
-  )
-
-# main plot (store it)
-p_main <- ggplot(survival_data, aes(x = cycle, y = prop_received, color = hiv_status)) +
-  geom_line(linewidth = 0.8) +
-  geom_point(size = 2) +
-  scale_x_continuous(breaks = 1:12) +
-  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
-  labs(
-    title = "Chemotherapy Cycle Completion by HIV Status",
-    x = NULL,
-    y = "Proportion receiving cycle\n(among those prescribed at least that many)",
-    color = "HIV status"
-  ) +
-  theme(plot.margin = margin(5, 5, 0, 5))
-
-# table underneath
-p_table <- ggplot(survival_data, aes(x = cycle, y = hiv_status, label = n_prescribed)) +
-  geom_text(size = 3) +
-  scale_x_continuous(breaks = 1:12, limits = range(survival_data$cycle)) +
-  labs(x = NULL, y = NULL, subtitle = "Patients prescribed at least k cycles") +
-  theme_minimal() +
-  theme(
-    panel.grid = element_blank(),
-    axis.text.y = element_text(face = "bold"),
-    axis.text.x = element_blank(),
-    plot.margin = margin(0, 5, 5, 5)
-  )
-
-# combine
-p_main / p_table + plot_layout(heights = c(4, 1))
+pub_objects_desc$plt_cycle_completion$plot
 ```
 
 
+# Severe Adverse Events
 ```{r}
-#| label: model-severe
+#| label: tbl-severe-or-comparison
+#| tbl-cap: "Association between HIV status and severe adverse events: unadjusted vs adjusted"
 
-model_severe_simple <- glm(ae_severe_any_pt ~ hiv_status, data = gic_models, family = binomial)
-
-model_severe_basic <- glm(ae_severe_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent + age + sex,
-                       data = gic_models, family = binomial)
+pub_objects_analysis$tbl_severe_or_comparison$ft
 ```
 
-```{r}
-tbl_simple <- model_severe_simple |>
-  tbl_regression(
-    exponentiate = TRUE,
-    label = list(
-      hiv_status ~ "HIV Status"
-    ),
-    pvalue_fun = label_style_pvalue(digits = 3),
-    add_estimate_to_reference_rows = TRUE
-  ) |> 
-  bold_p()
-
-tbl_adjusted <- model_severe_basic |>
-  tbl_regression(
-    exponentiate = TRUE,
-    label = list(
-      hiv_status   ~ "HIV Status",
-      cancer_stage ~ "Cancer Stage",
-      chemo_type   ~ "Chemotherapy Regimen",
-      tx_intent    ~ "Treatment Intent",
-      age          ~ "Age (years)",
-      sex          ~ "Sex"
-    ),
-    pvalue_fun = label_style_pvalue(digits = 3),
-    add_estimate_to_reference_rows = TRUE
-  ) |> 
-  bold_p()
-
-tbl_merge(
-  list(tbl_simple, tbl_adjusted),
-  tab_spanner = c("**Unadjusted OR**", "**Adjusted OR**"),
-  quiet = TRUE
-) |>
-  bold_labels() |>
-  italicize_levels()
-```
 
 # Hospitalization
+
+OR table looking at whether a patient was hospitalized at all in a given cycle.
 ```{r}
-#| label: prep-hosp-days
-#| include: false
+#| label: table-any-hosp
 
-hosp_cols <- names(gic_models)[str_detect(names(gic_models), "^hosp_days_([1-9]|1[0-2])$")]
-
-hosp_long <- gic_models |> 
-  select(record_id, hiv_status, cycles_given, age, sex, cancer_stage, chemo_type, all_of(hosp_cols)) |> 
-  pivot_longer(
-    cols = all_of(hosp_cols),
-    names_to = "cycle_var",
-    values_to = "hosp_days"
-  ) |> 
-  mutate(
-    cycle = as.integer(str_extract(cycle_var, "\\d+"))
-  )
-
-# Patient-level summaries
-hosp_pt <- hosp_long |> 
-  group_by(record_id, hiv_status, cycles_given) |> 
-  summarize(
-    hosp_days_total = sum(hosp_days, na.rm = TRUE),
-    .groups = "drop"
-  ) |> 
-  mutate(
-    hosp_days_per_cycle_given = if_else(is.na(cycles_given) | cycles_given <= 0,
-                                        NA_real_,
-                                        hosp_days_total / cycles_given)
-  )
-
+pub_objects_analysis$tbl_any_hosp$ft
 ```
-
-```{r}
-#| label: prep-hosp-cycle-data
-
-# Identify cycle-level column groups needed for hospitalization analysis
-severe_cols <- names(gic_models)[str_detect(names(gic_models), "^ae_n_severe_([1-9]|1[0-2])$")]
-max_grade_cols <- names(gic_models)[str_detect(names(gic_models), "^ae_max_grade_([1-9]|1[0-2])$")]
-measured_cols <- names(gic_models)[str_detect(names(gic_models), "^ae_n_markers_measured_([1-9]|1[0-2])$")]
-
-# Pivot each set of cycle cols to long
-pivot_cycle_cols <- function(df, cols, value_name) {
-  df |>
-    select(record_id, all_of(cols)) |>
-    pivot_longer(cols = all_of(cols), names_to = "cycle_var", values_to = value_name) |>
-    mutate(cycle = as.integer(str_extract(cycle_var, "\\d+$"))) |>
-    select(-cycle_var)
-}
-
-severe_long <- pivot_cycle_cols(gic_models, severe_cols,    "ae_n_severe")
-max_grade_long <- pivot_cycle_cols(gic_models, max_grade_cols, "ae_max_grade")
-measured_long <- pivot_cycle_cols(gic_models, measured_cols,  "ae_n_markers_measured")
-
-# Join AE variables to hospitalization data
-hosp_severe_cycle <- hosp_long |>
-  left_join(severe_long,   by = c("record_id", "cycle")) |>
-  left_join(measured_long, by = c("record_id", "cycle")) |>
-  mutate(ae_measured = ae_n_markers_measured > 0)
-
-hosp_maxgrade_cycle <- hosp_long |>
-  left_join(max_grade_long, by = c("record_id", "cycle")) |>
-  left_join(measured_long,  by = c("record_id", "cycle")) |>
-  mutate(ae_measured = ae_n_markers_measured > 0)
-```
-
 
 ```{r}
 #| label: plt-hosp-vs-max-grade
 #| fig-cap: "Mean hospital days vs max AE grade in cycle, by HIV status (among measured cycles)"
 
-hosp_maxgrade_summ <- hosp_maxgrade_cycle |>
-  filter(ae_measured) |>
-  group_by(hiv_status, ae_max_grade) |>
-  summarize(
-    mean_hosp_days = mean(hosp_days, na.rm = TRUE),
-    .groups = "drop"
-  )
-```
-
-
-
-
-```{r}
-#| label: prep-hosp-regression
-
-
-hosp_ae_cycle <- hosp_long |>
-  left_join(
-    ae_cycle_long |> select(record_id, cycle, ae_n_severe, ae_max_grade, ae_n_markers_measured),
-    by = c("record_id", "cycle")
-  ) |>
-  mutate(ae_measured = ae_n_markers_measured > 0)
-
-
-hosp_model_data <- hosp_ae_cycle |>
-  filter(ae_measured)
-
-hosp_model_data <- hosp_model_data |>
-  mutate(any_hosp = as.integer(hosp_days > 0))
-```
-
-```{r}
-#| label: model-hosp-any
-
-# Any hospitalization this cycle (logistic)
-model_any_hosp <- glmer(
-  any_hosp ~ ae_max_grade + hiv_status + age + sex + + (1 | record_id),
-  data = hosp_model_data,
-  family = binomial
-)
-```
-
-
-OR Table looking at if a patient was hospitalized at all or not
-
-```{r}
-#| label: table-any-hosp
-
-tbl_any_hosp <- model_any_hosp |>
-  tbl_regression(
-    exponentiate = TRUE,  # This turns log-odds into Odds Ratios (OR)
-    label = list(
-      ae_max_grade ~ "Max AE Grade in Cycle",
-      hiv_status   ~ "HIV Status",
-      age          ~ "Age (years)",
-      sex ~ "Sex"
-    ),
-    pvalue_fun = label_style_pvalue(digits = 3),
-    add_estimate_to_reference_rows = TRUE
-  ) |> 
-  bold_p() |>
-  bold_labels() |>
-  italicize_levels()
-
-tbl_any_hosp
-```
-
-
-
-```{r}
-#| include: false
-
-
-hosp_ae_cycle <- hosp_long |>
-  left_join(
-    ae_cycle_long |> select(record_id, cycle, ae_n_severe, ae_max_grade, ae_n_markers_measured),
-    by = c("record_id", "cycle")
-  ) |>
-  mutate(ae_measured = ae_n_markers_measured > 0)
-
-
-hosp_model_data <- hosp_ae_cycle |>
-  filter(ae_measured)
-
-hosp_model_data <- hosp_model_data |>
-  mutate(any_hosp = as.integer(hosp_days > 0))
-```
-
-
-
-
-```{r}
-# Unadjusted
-model_hosp_days_simple <- lmer(
-  hosp_days ~ hiv_status + (1 | record_id),
-  data = hosp_model_data |> filter(hosp_days > 0)
-)
-
-# Adjusted
-model_hosp_days_adjusted <- lmer(
-  hosp_days ~ hiv_status + age + sex + chemo_type + cancer_stage +
-    (1 | record_id),
-  data = hosp_model_data |> filter(hosp_days > 0)
-)
+pub_objects_analysis$plt_hosp_vs_max_grade$plot
 ```
 
 ```{r}
 #| label: table-hosp-days
 
-tbl_hosp_simple <- model_hosp_days_simple |>
-  tbl_regression(
-    exponentiate = FALSE,
-    label = list(hiv_status ~ "HIV Status"),
-    add_estimate_to_reference_rows = TRUE
-  )
-
-tbl_hosp_adjusted <- model_hosp_days_adjusted |>
-  tbl_regression(
-    exponentiate = FALSE,
-    label = list(
-      hiv_status   ~ "HIV Status",
-      cancer_stage ~ "Cancer Stage",
-      chemo_type   ~ "Chemotherapy Regimen",
-      age          ~ "Age (years)",
-      sex          ~ "Sex"
-    ),
-    add_estimate_to_reference_rows = TRUE
-  )
-
-tbl_merge(
-  list(tbl_hosp_simple, tbl_hosp_adjusted),
-  tab_spanner = c("**Unadjusted Analysis**", "**Adjusted Analysis**"),
-  quiet = TRUE
-) |>
-  # This renames the estimate column to explicitly mention Days and CIs
-  modify_header(
-    estimate_1 ~ "**Beta (Days)**",
-    ci_1       ~ "**95% CI**",
-    estimate_2 ~ "**Beta (Days)**",
-    ci_2       ~ "**95% CI**"
-  ) |>
-  bold_labels() |>
-  italicize_levels()
+pub_objects_analysis$tbl_hosp_days_comparison$ft
 ```
 
 # Early Dropout
 
 ```{r}
-#| include: false
-library(tidyverse)
-library(gtsummary)
+#| label: table-early-dropout-final
 
-# ==========================================
-# 1. DATA RE-PREPARATION (Fresh Document)
-# ==========================================
-
-# Variables defined in your global environment or constants
-early_dropout_cycles <- 4 
-
-# Recreate patient-level early dropout flags
-gic_dropout_base <- gic_models |>
-  mutate(
-    early_dropout = as.integer(
-      cycles_given <= early_dropout_cycles & cycles_prescribed > early_dropout_cycles
-    )
-  ) |>
-  filter(!is.na(early_dropout), !is.na(hiv_status))
-
-# Recreate the wide max-grade per AE type dataframe (imputing missing to 0)
-ae_wide_fresh <- ae_long_grouped |>
-  filter(cycle <= early_dropout_cycles, !is.na(grade)) |>
-  group_by(record_id, ae_group) |>
-  summarize(max_grade_early = max(grade, na.rm = TRUE), .groups = "drop") |>
-  pivot_wider(names_from = ae_group, values_from = max_grade_early, values_fill = 0)
-
-# Merge back to baseline patient details
-dropout_model_data <- gic_dropout_base |>
-  select(record_id, hiv_status, early_dropout) |>
-  left_join(ae_wide_fresh, by = "record_id") |>
-  # Replace any remaining missing values for patients missing completely from ae_long
-  mutate(across(where(is.numeric), ~ replace_na(.x, 0)))
-
-# Identify the AE columns dynamically for the loop
-ae_columns <- setdiff(names(ae_wide_fresh), "record_id")
-
-# Identify sparse columns (fewer than 5 occurrences with grade > 0 in an HIV branch)
-sparse_ae <- dropout_model_data |>
-  pivot_longer(cols = all_of(ae_columns), names_to = "ae_type", values_to = "grade") |>
-  group_by(ae_type, hiv_status) |>
-  summarize(n_any = sum(grade > 0), .groups = "drop") |>
-  filter(n_any < 5) |>
-  pull(ae_type) |>
-  unique()
-
-# Drop sparse variables from modeling consideration
-final_ae_columns <- setdiff(ae_columns, sparse_ae)
-
-
-# ==========================================
-# 2. GENERATE CONDENSED GT SUMMARY TABLE
-# ==========================================
-
-# Part A: Sample Counts and Descriptive Rates
-tbl_descriptive <- dropout_model_data |>
-  select(early_dropout, hiv_status, all_of(final_ae_columns)) |>
-  mutate(early_dropout = factor(early_dropout, labels = c("Completed Treatment", "Early Dropout"))) |>
-  tbl_summary(
-    by = early_dropout,
-    missing = "no",
-    label = list(hiv_status ~ "HIV Status")
-  )
-
-# Part B: HIV-Adjusted Univariate Regressions
-tbl_regression_mix <- dropout_model_data |>
-  select(early_dropout, hiv_status, all_of(final_ae_columns)) |>
-  tbl_uvregression(
-    method = glm,
-    y = early_dropout,
-    method.args = list(family = binomial),
-    exponentiate = TRUE,
-    include = all_of(final_ae_columns),
-    # This formula forces every individual AE model to adjust for HIV status
-    formula = "{y} ~ {x} + hiv_status", 
-    label = map(final_ae_columns, ~ as.formula(paste0(".x ~ '", .x, " Max Grade'")))
-  ) |>
-  # Apply Benjamini-Hochberg adjustment to p-values across all models
-  add_q(method = "BH")
-
-# Combine descriptive data and statistical models side-by-side
-table_early_dropout_final <- tbl_merge(
-  list(tbl_descriptive, tbl_regression_mix),
-  tab_spanner = c("**Descriptive Breakdown**", "**Univariate Association**")
-) |>
-  bold_labels()
+pub_objects_analysis$table_early_dropout_final$ft
 ```
-
 
 ```{r}
-library(broom)
-library(ggplot2)
+#| label: plt-early-dropout-forest
+#| fig-cap: "Impact of early-cycle toxicities on early treatment dropout"
 
-# Run univariate adjustments in a clean tibble stream
-univariate_plot_data <- map_dfr(final_ae_columns, function(at) {
-  mod <- glm(
-    as.formula(paste0("early_dropout ~ `", at, "` + hiv_status")),
-    data   = dropout_model_data,
-    family = binomial
-  )
-  tidy(mod, conf.int = TRUE, exponentiate = TRUE) |>
-    filter(str_detect(term, fixed(at))) |>
-    mutate(ae_type = at)
-})
-
-# Draw the modern Forest Plot
-ggplot(univariate_plot_data, aes(x = estimate, y = reorder(ae_type, estimate))) +
-  geom_vline(xintercept = 1, linetype = "dashed", color = "gray50") +
-  # Using the updated geom_errorbar() with xmin/xmax handles horizontal layout automatically
-  geom_errorbar(aes(xmin = conf.low, xmax = conf.high), height = 0.2, color = "midnightblue", linewidth = 0.7) +
-  geom_point(color = "firebrick", size = 3) +
-  scale_x_log10(breaks = c(0.5, 1, 2, 5, 10)) +
-  labs(
-    x = "Odds Ratio (95% CI) on Log Scale\n[Adjusted for HIV Status]",
-    y = "Adverse Event Type (Max Grade Cycles 1-4)",
-    title = "Impact of Early Cycle Toxicities on Early Treatment Dropout",
-    subtitle = "Odds of dropping out per 1-unit increase in toxicity grade"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    panel.grid.minor = element_blank(),
-    plot.title = element_text(face = "bold")
-  )
+pub_objects_analysis$plt_early_dropout_forest$plot
 ```
-
-

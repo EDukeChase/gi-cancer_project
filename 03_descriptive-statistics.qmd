@@ -18,6 +18,10 @@ ae_graded_long <- readRDS(here("data", "processed", "ae_graded_long.rds"))
 
 # Load Libraries
 library(ggcorrplot)
+
+# Finalized tables/figures destined for the publication doc (05), keyed by slug.
+# Each save_table()/save_figure() call below also appends its result here.
+pub_objects_desc <- list()
 ```
 
 
@@ -156,6 +160,26 @@ ae_summary_pt <- ae_long |>
 gic_models <- gic_validated |>
   left_join(ae_summary_pt, by = "record_id") |>
   left_join(ae_cycle_wide, by = c("record_id", "cycles_prescribed", "cycles_given"))
+```
+
+```{r}
+#| label: build-patient-static
+
+# General-purpose one-row-per-patient reference table: every variable that
+# does not vary by treatment cycle. Meant to be joined onto any cycle-level
+# long dataframe by record_id, regardless of what that dataframe already
+# carries (duplicate columns from a join should be reconciled at the join
+# site, not avoided by leaving variables out of this table).
+patient_static <- gic_models |>
+  select(
+    record_id, pgh_number, hiv_status, age, sex, residence,
+    cancer_site, histology, cancer_stage,
+    tx_intent, tx_concurrent_rtx, chemo_seq, chemo_type,
+    cycles_prescribed, cycles_given, completion_rate, death_date,
+    starts_with("comorbid_"), starts_with("hx_")
+  )
+
+save_rds_safe(patient_static, here("data", "processed", "patient_static.rds"))
 ```
 
 
@@ -846,7 +870,10 @@ p_table <- ggplot(survival_data, aes(x = cycle, y = hiv_status, label = n_prescr
   )
 
 # combine
-p_main / p_table + plot_layout(heights = c(4, 1))
+plt_cycle_completion <- p_main / p_table + plot_layout(heights = c(4, 1))
+plt_cycle_completion
+
+pub_objects_desc$plt_cycle_completion <- save_figure(plt_cycle_completion, "plt_cycle_completion")
 ```
 
 
@@ -1384,11 +1411,8 @@ ft_main <- tbl_main_gts |>
     "p-values: Wilcoxon rank-sum (continuous), Fisher's exact (categorical); unadjusted, descriptive only."
   )
 
-obj <- make_downloadable(
-  df = as_tibble(tbl_main_gts),
-  slug = "table1_descriptive",
-  ft = ft_main
-)
+obj <- save_table(slug = "table1_descriptive", df = as_tibble(tbl_main_gts), ft = ft_main)
+pub_objects_desc$table1_descriptive <- obj
 
 obj$ft
 emit_buttons(obj)
@@ -1429,11 +1453,9 @@ ft_ae <- tbl_ae_gts |>
     "Cells show patients with any-grade event in each collapsed category. p-values: Fisher's exact; unadjusted, descriptive only."
   )
 
-obj <- make_downloadable(
-  df = as_tibble(tbl_ae_gts),
-  slug = "table_ae_by_category",
-  ft = ft_ae
-)
+obj <- save_table(slug = "table_ae_by_category", df = as_tibble(tbl_ae_gts), ft = ft_ae)
+pub_objects_desc$table_ae_by_category <- obj
+
 obj$ft
 emit_buttons(obj)
 ```
@@ -1475,9 +1497,19 @@ anc_by_cycle <- ae_long |>
   filter(ae_type == "anc") |>
   select(record_id, cycle, anc_grade = grade)
 
+# mgmt_long already carries hiv_status (from gic_models); patient_static has
+# it too. Confirm they agree before dropping the duplicate from patient_static
+# rather than letting the join silently produce hiv_status.x/.y.
+hiv_status_check <- mgmt_long |>
+  distinct(record_id, hiv_status) |>
+  left_join(patient_static |> select(record_id, hiv_status), by = "record_id", suffix = c("_mgmt", "_static"))
+
+stopifnot(all(hiv_status_check$hiv_status_mgmt == hiv_status_check$hiv_status_static))
+
 mgmt_cycle <- mgmt_long |>
   left_join(grade_by_cycle, by = c("record_id", "cycle")) |>
   left_join(anc_by_cycle, by = c("record_id", "cycle")) |>
+  left_join(patient_static |> select(-hiv_status), by = "record_id") |>
   filter(!is.na(transfusion_given) | !is.na(csfg_indicated))
 ```
 
@@ -1508,7 +1540,9 @@ ft <- transfusion_rate |>
   align(j = 1, align = "left", part = "all") |>
   autofit()
 
-obj <- make_downloadable(transfusion_rate, "transfusion_rate_by_anemia_hiv", ft = ft)
+obj <- save_table(slug = "transfusion_rate_by_anemia_hiv", df = transfusion_rate, ft = ft)
+pub_objects_desc$transfusion_rate_by_anemia_hiv <- obj
+
 obj$ft
 emit_buttons(obj)
 ```
@@ -1537,7 +1571,9 @@ ft <- transfusion_units_tbl |>
   align(j = 1, align = "left", part = "all") |>
   autofit()
 
-obj <- make_downloadable(transfusion_units_tbl, "transfusion_units_by_anemia_hiv", ft = ft)
+obj <- save_table(slug = "transfusion_units_by_anemia_hiv", df = transfusion_units_tbl, ft = ft)
+pub_objects_desc$transfusion_units_by_anemia_hiv <- obj
+
 obj$ft
 emit_buttons(obj)
 ```
@@ -1559,7 +1595,9 @@ gcsf_myelo <- mgmt_cycle |>
   rename(`HIV status` = hiv_status, `Myelosuppression grade` = myelo_grade,
          `Cycles` = n_cycles, `G-CSF given` = n_gcsf, `% G-CSF` = pct_gcsf)
 
-obj <- make_downloadable(gcsf_myelo, "gcsf_rate_by_myelo_hiv")
+obj <- save_table(slug = "gcsf_rate_by_myelo_hiv", df = gcsf_myelo)
+pub_objects_desc$gcsf_rate_by_myelo_hiv <- obj
+
 obj$ft
 emit_buttons(obj)
 ```
@@ -1581,7 +1619,9 @@ gcsf_anc <- mgmt_cycle |>
   rename(`HIV status` = hiv_status, `Neutropenia grade` = anc_grade,
          `Cycles` = n_cycles, `G-CSF given` = n_gcsf, `% G-CSF` = pct_gcsf)
 
-obj <- make_downloadable(gcsf_anc, "gcsf_rate_by_anc_hiv")
+obj <- save_table(slug = "gcsf_rate_by_anc_hiv", df = gcsf_anc)
+pub_objects_desc$gcsf_rate_by_anc_hiv <- obj
+
 obj$ft
 emit_buttons(obj)
 ```
@@ -1606,4 +1646,5 @@ gic_descriptive <- list(
 )
 
 save_rds_safe(gic_descriptive, here("data", "processed", "gic_descriptive.rds"))
+save_rds_safe(pub_objects_desc, here("data", "processed", "pub_objects_desc.rds"))
 ```
