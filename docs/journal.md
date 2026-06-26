@@ -1,3 +1,14 @@
+2026-Jun-23
+  - [ ] Evaluate CSF-G model to determine if there's extreme separation like the transfusion model
+  - [ ] Review notes from last two meetings, especially meeting with Tinashe regarding adjustments to tables and figures
+  - [x] Check for multicollinearity in existing models
+  - [ ] Add explanations to publication figures document
+  - [ ] Read Summix paper
+  - [ ] Begin reading relevant textbook sections on DAGs and how to handle different things in regression models
+  - [ ] Begin migration to using GitHub issues instead of the research log
+  - [ ] Modify data prep blocks to incorporate new `patient_static` dataframe
+  - [ ] Add transcription capabilities to laptop
+
 2026 Jun-19
   - [x] Update transfusion model to only look at grade 2 anemia
   - [ ] Evaluate CSF-G model to determine if there's extreme separation like the transfusion model

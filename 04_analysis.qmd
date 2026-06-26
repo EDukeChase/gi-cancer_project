@@ -1,6 +1,11 @@
 ---
 title: "GI Cancer: Analysis"
 bibliography: references.bib
+execute:
+  echo: false
+format:
+  html:
+    toc-depth: 4
 ---
 ```{r}
 #| label: setup
@@ -47,8 +52,6 @@ Invalid model due to having a 100% adverse event rate in the HIV-positive group.
 
 model_severe_simple <- glm(ae_severe_any_pt ~ hiv_status,
                            data = gic_models, family = binomial)
-
-summary(model_severe_simple)
 ```
 
 ```{r}
@@ -99,8 +102,6 @@ Invalid model due to having a 100% adverse event rate in the HIV-positive group.
 
 model_severe_basic <- glm(ae_severe_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_intent + age + sex,
                        data = gic_models, family = binomial)
-
-summary(model_severe_basic)
 ```
 
 ```{r}
@@ -130,7 +131,8 @@ model_severe_basic |>
   add_glance_source_note(include = c(nobs, AIC))
 ```
 
-::: {.callout-note collapse="true" title="Model diagnostics: model_severe_basic"}
+#### Validation: model_severe_basic
+::: {.callout-note collapse="true" title="Validation: model_severe_basic"}
 ```{r}
 #| label: chk-severe-basic-vif
 
@@ -220,8 +222,6 @@ table_any_early |>
 
 model_hiv_simple <- glm(hiv_status ~ ae_max_grade_pt, data = gic_models, family = binomial)
 
-summary(model_hiv_simple)
-
 model_hiv_simple |>
   tbl_regression(
     exponentiate = TRUE,
@@ -274,8 +274,6 @@ model_hiv_basic <- glm(
   data = gic_models,
   family = binomial
 )
-
-summary(model_hiv_basic)
 ```
 
 <!-- ```{r} -->
@@ -334,9 +332,9 @@ tbl_merge(
 
 **Summary:** Both the unadjusted and adjusted models with HIV status as outcome indicate that each one unit increase in max AE grade across all treatment cycles is associated with between 28-34% higher odds of the patient being HIV positive. In the adjusted model, higher cancer stages were not reliably associated with being HIV positive. For chemo type there does seem to be a pretty clear difference in treatment options associated with HIV positive status. There does not appear to be any association between treatment intent and HIV status.
 
-### Assumption checks
+### Validation: model_hiv_basic
 
-::: {.callout-note collapse="true" title="Model diagnostics: model_hiv_basic"}
+::: {.callout-note collapse="true" title="Validation: model_hiv_basic"}
 ```{r}
 #| label: chk-hiv-assumptions
 
@@ -697,9 +695,6 @@ model_any_hosp <- glmer(
   data = hosp_model_data,
   family = binomial
 )
-summary(model_any_hosp)
-fixef(model_any_hosp) |> exp()
-confint(model_any_hosp, method = "Wald") |> exp()
 ```
 
 OR table for whether a patient was hospitalized at all in a given cycle.
@@ -729,7 +724,8 @@ obj <- save_table(slug = "tbl_any_hosp", gtsum = tbl_any_hosp)
 pub_objects_analysis$tbl_any_hosp <- obj
 ```
 
-::: {.callout-note collapse="true" title="Model diagnostics: model_any_hosp"}
+#### Validation: model_any_hosp
+::: {.callout-note collapse="true" title="Validation: model_any_hosp"}
 ```{r}
 #| label: chk-any-hosp-vif
 
@@ -750,9 +746,6 @@ model_hosp_days_adjusted <- lmer(
   hosp_days ~ hiv_status + age + sex + chemo_type + cancer_stage + (1 | record_id),
   data = hosp_model_data |> filter(hosp_days > 0)
 )
-
-summary(model_hosp_days_simple)
-summary(model_hosp_days_adjusted)
 ```
 AE severity has minimal impact on length of stay for either group once someone is already hospitalized, although HIV positive patients are expected to spend slightly longer in the hospital than HIV negative patients for each unit increase in max adverse event experienced.
 
@@ -800,7 +793,8 @@ obj <- save_table(slug = "tbl_hosp_days_comparison", gtsum = tbl_hosp_days_compa
 pub_objects_analysis$tbl_hosp_days_comparison <- obj
 ```
 
-::: {.callout-note collapse="true" title="Model diagnostics: model_hosp_days_adjusted"}
+#### Validation: model_hosp_days_adjusted
+::: {.callout-note collapse="true" title="Validation: model_hosp_days_adjusted"}
 ```{r}
 #| label: chk-hosp-days-adjusted-vif
 
@@ -1195,7 +1189,8 @@ univariate_results <- map_df(ae_types, function(at) {
   mutate(p_adj = p.adjust(p.value, method = "BH"))
 ```
 
-::: {.callout-note collapse="true" title="Model diagnostics: univariate early-dropout AE models"}
+#### Validation: univariate early-dropout AE models
+::: {.callout-note collapse="true" title="Validation: univariate early-dropout AE models"}
 Multicollinearity check across all univariate AE models (one GVIF per model, between the AE type's grade and HIV status, rather than a separate diagnostic block per AE type).
 ```{r}
 #| label: chk-univariate-ae-vif
@@ -1392,9 +1387,6 @@ model_tx_grade2 <- glmer(
   data = mgmt_grade2, family = binomial
 )
 
-summary(model_tx_unadj)
-summary(model_tx_grade2)
-
 tbl_unadj <- model_tx_unadj |>
   tbl_regression(
     exponentiate = TRUE,
@@ -1418,7 +1410,8 @@ tbl_merge(
   bold_labels()
 ```
 
-::: {.callout-note collapse="true" title="Model diagnostics: model_tx_grade2"}
+#### Validation: model_tx_grade2
+::: {.callout-note collapse="true" title="Validation: model_tx_grade2"}
 ```{r}
 #| label: chk-tx-grade2-vif
 
@@ -1436,8 +1429,6 @@ model_tx_given <- glmer(
   data = mgmt_cycle |> filter(!is.na(anemia_grade)),
   family = binomial
 )
-
-summary(model_tx_given)
 
 model_tx_given |>
   tbl_regression(
@@ -1468,8 +1459,6 @@ model_tx_units <- lmer(
   data = mgmt_cycle |> filter(transfusion_given == 1, !is.na(anemia_grade))
 )
 
-summary(model_tx_units)
-
 model_tx_units |>
   tbl_regression(
     label = list(
@@ -1481,7 +1470,8 @@ model_tx_units |>
   bold_p()
 ```
 
-::: {.callout-note collapse="true" title="Model diagnostics: model_tx_units"}
+#### Validation: model_tx_units
+::: {.callout-note collapse="true" title="Validation: model_tx_units"}
 ```{r}
 #| label: chk-tx-units-vif
 
@@ -1503,8 +1493,6 @@ model_gcsf_given <- glmer(
   family = binomial
 )
 
-summary(model_gcsf_given)
-
 model_gcsf_given |>
   tbl_regression(
     exponentiate = TRUE,
@@ -1517,7 +1505,8 @@ model_gcsf_given |>
   bold_p()
 ```
 
-::: {.callout-note collapse="true" title="Model diagnostics: model_gcsf_given"}
+#### Validation: model_gcsf_given
+::: {.callout-note collapse="true" title="Validation: model_gcsf_given"}
 ```{r}
 #| label: chk-gcsf-given-vif
 
