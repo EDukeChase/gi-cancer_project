@@ -1,10 +1,19 @@
 ---
-title: "DAGs"
+title: "Causal Diagrams (DAGs)"
+format:
+  html:
+    code-links:
+      - text: GitHub Repo
+        icon: github
+        href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/6%20-%20Causal%20Diagrams%20%28DAGs%29.qmd"
 ---
 
 ```{r}
 #| label: setup
 #| include: false
+
+library(here)
+source(here::here("R", "setup.R"))
 
 library(dagitty)
 library(ggdag)
@@ -57,8 +66,7 @@ p_transfusion_dag <- ggplot(transfusion_dag_tidy, aes(x = x, y = y, xend = xend,
 
 p_transfusion_dag
 
-ggsave(here("output", "figures", "dag_transfusion.png"),
-       p_transfusion_dag, width = 8, height = 5, dpi = 300)
+save_figure(p_transfusion_dag, "dag_transfusion", width = 8, height = 5, dpi = 300)
 ```
 ## G-CSF DAG
 ```{r}
@@ -105,8 +113,7 @@ p_gcsf_dag <- ggplot(gcsf_dag_tidy, aes(x = x, y = y, xend = xend, yend = yend))
 
 p_gcsf_dag
 
-ggsave(here("output", "figures", "dag_gcsf.png"),
-       p_gcsf_dag, width = 8, height = 5, dpi = 300)
+save_figure(p_gcsf_dag, "dag_gcsf", width = 8, height = 5, dpi = 300)
 ```
 
 

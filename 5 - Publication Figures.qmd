@@ -1,6 +1,12 @@
 ---
 title: "GI Cancer: Publication Figures & Tables"
 bibliography: references.bib
+format:
+  html:
+    code-links:
+      - text: GitHub Repo
+        icon: github
+        href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/5%20-%20Publication%20Figures.qmd"
 ---
 
 ```{r}
@@ -12,8 +18,8 @@ source("R/setup.R")
 # Finalized tables/figures saved incrementally by 03 and 04. This document
 # only loads, applies light final formatting, and displays/exports — it
 # performs no statistical computation of its own.
-pub_objects_desc <- readRDS(here("data", "processed", "pub_objects_desc.rds"))
-pub_objects_analysis <- readRDS(here("data", "processed", "pub_objects_analysis.rds"))
+pub_objects_desc <- readRDS(onedrive_data_path("processed", "pub_objects_desc.rds"))
+pub_objects_analysis <- readRDS(onedrive_data_path("processed", "pub_objects_analysis.rds"))
 ```
 
 

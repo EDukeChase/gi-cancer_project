@@ -1,6 +1,12 @@
 ---
 title: "GI Cancer: Data Validation"
 bibliography: references.bib
+format:
+  html:
+    code-links:
+      - text: GitHub Repo
+        icon: github
+        href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/2%20-%20Data%20Validation.qmd"
 ---
 # Load Data and Libraries
 ```{r}
@@ -13,7 +19,7 @@ source("R/setup.R")
 ```{r}
 #| label: load-data
 
-gic_encoded <- readRDS(here("data", "processed", "gic_encoded.rds"))
+gic_encoded <- readRDS(onedrive_data_path("processed", "gic_encoded.rds"))
 ```
 
 # Logic & Consistency Validation
@@ -573,7 +579,7 @@ gic_validated |>
 ```{r}
 #| label: save-validated-data
 
-save_rds_safe(gic_validated, here("data", "processed", "gic_validated.rds"))
-save_rds_safe(ae_graded_long, here("data", "processed", "ae_graded_long.rds"))
+save_rds_safe(gic_validated, onedrive_data_path("processed", "gic_validated.rds"))
+save_rds_safe(ae_graded_long, onedrive_data_path("processed", "ae_graded_long.rds"))
 ```
 

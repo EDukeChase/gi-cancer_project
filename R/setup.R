@@ -23,6 +23,30 @@ library(scales)             # Simplify palette visualization
 library(tidyverse)          # Essential R packages (Can pare down later)
 
 
+# --- OneDrive root --- #
+# All data, tables, figures, and rendered docs live on OneDrive rather than
+# in the local repo. Configure this machine's path via `.Renviron` (copy
+# `.Renviron.example`, fill in GIC_ONEDRIVE_ROOT, restart R).
+onedrive_root <- Sys.getenv("GIC_ONEDRIVE_ROOT", unset = NA)
+
+if (is.na(onedrive_root) || onedrive_root == "") {
+  stop(
+    "GIC_ONEDRIVE_ROOT is not set. Copy .Renviron.example to .Renviron, ",
+    "fill in this machine's OneDrive path, and restart R."
+  )
+}
+if (!dir.exists(onedrive_root)) {
+  stop(
+    "GIC_ONEDRIVE_ROOT is set to '", onedrive_root, "', but that folder ",
+    "doesn't exist. Check that OneDrive is running/synced and that the ",
+    "path in .Renviron is correct for this machine."
+  )
+}
+
+onedrive_path      <- function(...) file.path(onedrive_root, ...)
+onedrive_data_path <- function(...) onedrive_path("data", ...)
+
+
 # --- Reproducibility --- #
 set.seed(4534174)
 
@@ -241,7 +265,7 @@ check_vif <- function(model, threshold = 5) {
 # derived automatically if not supplied), or `df`/`ft` directly for anything
 # else (e.g. a plain data frame with a hand-built flextable).
 save_table <- function(slug, gtsum = NULL, df = NULL, ft = NULL) {
-  tables_dir <- here("output", "tables")
+  tables_dir <- onedrive_path("tables")
   if (!dir.exists(tables_dir)) dir.create(tables_dir, recursive = TRUE)
 
   if (is.null(ft) && !is.null(gtsum)) ft <- as_flex_table(gtsum)
@@ -257,13 +281,13 @@ save_table <- function(slug, gtsum = NULL, df = NULL, ft = NULL) {
   list(ft = ft, csv = csv_path, docx = docx_path, slug = slug)
 }
 
-# Save a ggplot/patchwork figure as PNG (output/figures/) and SVG
-# (output/figures/svgs/), creating directories as needed.
+# Save a ggplot/patchwork figure as PNG (OneDrive figures/) and SVG
+# (OneDrive figures/svgs/), creating directories as needed.
 save_figure <- function(plot, slug, width = 8, height = NULL, dpi = 300) {
   if (is.null(height)) height <- width * 0.618
 
-  png_dir <- here("output", "figures")
-  svg_dir <- here("output", "figures", "svgs")
+  png_dir <- onedrive_path("figures")
+  svg_dir <- onedrive_path("figures", "svgs")
   if (!dir.exists(png_dir)) dir.create(png_dir, recursive = TRUE)
   if (!dir.exists(svg_dir)) dir.create(svg_dir, recursive = TRUE)
 

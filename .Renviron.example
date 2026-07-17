@@ -1,0 +1,11 @@
+# Copy this file to `.Renviron` (same folder, untracked) and edit both values
+# below for this specific machine, then restart R (Session > Restart R).
+#
+# GIC_ONEDRIVE_ROOT: this machine's local sync path for
+#   Hendricks Lab - Documents/Research Projects/Tinashe Collaborations/gi-cancer_project
+# QUARTO_PROFILE: "laptop" or "desktop" -- must match one of the
+#   _quarto-<profile>.yml files at the repo root, so Quarto renders
+#   straight to this machine's OneDrive path.
+#
+GIC_ONEDRIVE_ROOT=C:/path/to/your/OneDrive/Hendricks Lab - Documents/Research Projects/Tinashe Collaborations/gi-cancer_project
+QUARTO_PROFILE=laptop

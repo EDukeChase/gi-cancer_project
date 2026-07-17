@@ -1,6 +1,12 @@
 ---
 title: "GI Cancer: Data Cleaning"
 bibliography: references.bib
+format:
+  html:
+    code-links:
+      - text: GitHub Repo
+        icon: github
+        href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/1%20-%20Data%20Cleaning.qmd"
 ---
 # Load Data and Libraries
 ```{r}
@@ -17,14 +23,14 @@ library(lubridate)  # Handle date data
 ```{r}
 #| label: load-data
 
-gic_raw <- read_xlsx(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx"))
+gic_raw <- read_xlsx(onedrive_data_path("IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx"))
 ```
 
 ```{r}
 #| label: apply-manual-patches
 
 # [DAT-025] Incorporate age data
-age_data <- read_csv(here("data", "IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET-Age_added.csv")) |> 
+age_data <- read_csv(onedrive_data_path("IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET-Age_added.csv")) |>
   select(record_id, `Age (years)`)
 
 gic_raw <- gic_raw |> 
@@ -657,24 +663,9 @@ The renaming audit confirmed that data integrity was preserved during variable n
 #| label: save-renamed-data
 
 # Define path to file
-gic_renamed_path <- here("data", "processed", "gic_renamed.rds")
+gic_renamed_path <- onedrive_data_path("processed", "gic_renamed.rds")
 
-# Save if file doesn't exist, or check if overwrite is intended if it does.
-if (file.exists(gic_renamed_path) && interactive()) {
-  # If file exists and this is being run manually in RStudio ask before overwriting
-  response <- readline(prompt = paste("Warning:", basename(gic_renamed_path), "already exists. Overwrite? (y/n):"))
-  
-  if (tolower(substr(response, 1, 1)) == "y") {
-    saveRDS(gic_renamed, gic_renamed_path)
-    message("File overwritten: ", basename(gic_renamed_path))
-  } else {
-    message("Save operation cancelled.")
-  }
-} else {
-  # If the file doesn't exist or document is being rendered, just save it
-  saveRDS(gic_renamed, gic_renamed_path)
-  message("File saved: ", basename(gic_renamed_path))
-}
+save_rds_safe(gic_renamed, gic_renamed_path)
 ```
 
 # Data Type Standardization
@@ -736,15 +727,15 @@ type_report |>
 * **Factors Encoded as Numeric:**
 	* *Issue:* Categorical variables were imported as numeric.
 	* *Resolved:* [2025-11-30] Converted to factors with explicit labels based on variable names from `IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx`.
-		* *Location:* `01_data-cleaning.qmd` (Chunk: `encode-types`).
+		* *Location:* `1 - Data Cleaning.qmd` (Chunk: `encode-types`).
 * **Empty Columns as Logical:**
 	* *Issue:* `cr_clear_0`, `albi_score_0`, and `dbil_12` are stored as `logical` because they contain only `NA`.
 	* *Resolved:* [2025-11-30] Coerced to `numeric`.
-		* *Location:* `01_data-cleaning.qmd` (Chunk: `encode-types`).
+		* *Location:* `1 - Data Cleaning.qmd` (Chunk: `encode-types`).
 * **Date Precision:**
 	* *Issue:* `death_date` is stored as `POSIXct` (DateTime).
 	* *Resolved:* [2025-11-30] Converted to `Date` class.
-		* *Location:* `01_data-cleaning.qmd` (Chunk: `encode-types`).
+		* *Location:* `1 - Data Cleaning.qmd` (Chunk: `encode-types`).
 :::
 
 ## Apply Type Coercion
@@ -1135,24 +1126,7 @@ The encoding audit confirmed that data integrity was preserved during type conve
 #| label: save-clean-data
 
 # Define path to file
-gic_encoded_path <- here("data", "processed", "gic_encoded.rds")
+gic_encoded_path <- onedrive_data_path("processed", "gic_encoded.rds")
 
-# Save if file doesn't exist, or check if overwrite is intended if it does.
-if (file.exists(gic_encoded_path) && interactive()) {
-  # If file exists and this is being run manually in RStudio ask before overwriting
-  response <- readline(prompt = paste("Warning:", basename(gic_encoded_path), "already exists. Overwrite? (y/n):"))
-  
-  if (tolower(substr(response, 1, 1)) == "y") {
-    saveRDS(gic_encoded, gic_encoded_path)
-    message("File overwritten: ", basename(gic_encoded_path))
-  } else {
-    message("Save operation cancelled.")
-  }
-} else {
-  # If the file doesn't exist or document is being rendered, just save it
-  saveRDS(gic_encoded, gic_encoded_path)
-  message("File saved: ", basename(gic_encoded_path))
-}
-
-saveRDS(gic_encoded, here("data", "processed", "gic_encoded.rds"))
+save_rds_safe(gic_encoded, gic_encoded_path)
 ```

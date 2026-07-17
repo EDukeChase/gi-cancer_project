@@ -4,6 +4,12 @@ bibliography: references.bib
 execute:
   warning: true
   message: true
+format:
+  html:
+    code-links:
+      - text: GitHub Repo
+        icon: github
+        href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/3%20-%20Descriptive%20Statistics.qmd"
 ---
 
 ```{r}
@@ -13,8 +19,8 @@ execute:
 source("R/setup.R")
 
 # Load Data
-gic_validated <- readRDS(here("data", "processed", "gic_validated.rds"))
-ae_graded_long <- readRDS(here("data", "processed", "ae_graded_long.rds"))
+gic_validated <- readRDS(onedrive_data_path("processed", "gic_validated.rds"))
+ae_graded_long <- readRDS(onedrive_data_path("processed", "ae_graded_long.rds"))
 
 # Load Libraries
 library(ggcorrplot)
@@ -179,7 +185,7 @@ patient_static <- gic_models |>
     starts_with("comorbid_"), starts_with("hx_")
   )
 
-save_rds_safe(patient_static, here("data", "processed", "patient_static.rds"))
+save_rds_safe(patient_static, onedrive_data_path("processed", "patient_static.rds"))
 ```
 
 
@@ -1645,6 +1651,6 @@ gic_descriptive <- list(
   mgmt_cycle = mgmt_cycle
 )
 
-save_rds_safe(gic_descriptive, here("data", "processed", "gic_descriptive.rds"))
-save_rds_safe(pub_objects_desc, here("data", "processed", "pub_objects_desc.rds"))
+save_rds_safe(gic_descriptive, onedrive_data_path("processed", "gic_descriptive.rds"))
+save_rds_safe(pub_objects_desc, onedrive_data_path("processed", "pub_objects_desc.rds"))
 ```

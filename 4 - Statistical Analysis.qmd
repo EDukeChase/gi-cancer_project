@@ -6,6 +6,10 @@ execute:
 format:
   html:
     toc-depth: 4
+    code-links:
+      - text: GitHub Repo
+        icon: github
+        href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/4%20-%20Statistical%20Analysis.qmd"
 ---
 ```{r}
 #| label: setup
@@ -14,7 +18,7 @@ format:
 source("R/setup.R")
 
 # Load Data
-gic_descriptive <- readRDS(here("data", "processed", "gic_descriptive.rds"))
+gic_descriptive <- readRDS(onedrive_data_path("processed", "gic_descriptive.rds"))
 gic_models <- gic_descriptive$gic_models
 ae_long <- gic_descriptive$ae_long
 ae_long_grouped <- gic_descriptive$ae_long_grouped
@@ -1517,6 +1521,6 @@ check_vif(model_gcsf_given)
 ```{r}
 #| label: save-pub-objects-analysis
 
-save_rds_safe(pub_objects_analysis, here("data", "processed", "pub_objects_analysis.rds"))
+save_rds_safe(pub_objects_analysis, onedrive_data_path("processed", "pub_objects_analysis.rds"))
 ```
 

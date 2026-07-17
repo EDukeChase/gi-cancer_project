@@ -12,17 +12,18 @@ Comparing real world gastrointestinal cancer chemotherapy treatment related adve
 
 This project is structured as a reproducible R environment using `renv` and Quarto.
 
--   `01_data-cleaning.qmd`: The main Quarto document containing initial exploratory analyses, data cleaning, and validation.
--   `R/setup.R`: The R script that loads packages and sets global options.
--   `_quarto.yml`: The project configuration file, which sets the HTML theme and other rendering options.
--   `data/`: **(Ignored by Git)** Directory for raw data files.
--   `docs/`: **(Ignored by Git)** Reference materials.
--   `output/`: **(Ignored by Git)** Directory for saved results and exported plots.
+-   `1 - Data Cleaning.qmd` through `5 - Publication Figures.qmd`: The numbered Quarto pipeline (data cleaning, validation, descriptive stats, analysis, publication figures/tables), rendered in order.
+-   `6 - Causal Diagrams (DAGs).qmd`: Supplementary causal diagrams.
+-   `R/setup.R`: The R script that loads packages, sets global options, and resolves the OneDrive path/helpers.
+-   `R/README.md`: Describes `setup.R`'s helpers in more detail.
+-   `_quarto.yml` / `_quarto-laptop.yml` / `_quarto-desktop.yml`: Project configuration; the `_quarto-<profile>.yml` files set each machine's rendered-output destination (see below).
+-   `data/`: Holds only the two files that are tracked in git (`README.md`, `grading_rules.csv`) — all raw and processed data lives on OneDrive, not in this repo.
+-   `docs/`: Reference materials and documentation (partially tracked — see `docs/README.md`).
 -   `renv.lock` / `.Rprofile`: Files that ensure the R environment is fully reproducible.
 
-## Data Availability
+## Data & Output Location
 
-The raw data for this project involves patient medical records and is not included in this repository to protect patient privacy.
+Raw data, processed `.rds` files, tables, figures, and rendered `.html` docs all live on a shared OneDrive folder rather than in this repository, both to protect patient privacy and so a non-programmer collaborator has one place to look for results. Each machine that works on this project needs a `.Renviron` file (copy `.Renviron.example`, fill in `GIC_ONEDRIVE_ROOT` and `QUARTO_PROFILE` for that machine, restart R) — see `R/setup.R` for how these are used.
 
 ## System Details
 
@@ -33,5 +34,5 @@ The raw data for this project involves patient medical records and is not includ
 
 1.  **Clone the Repository**: `git clone <repository-url>`
 2.  **Open the Project**: Open the `.Rproj` file in RStudio.
-3.  **Add Data**: Ensure raw data files are present in the `data/` directory.
+3.  **Configure OneDrive access**: Copy `.Renviron.example` to `.Renviron` and fill in `GIC_ONEDRIVE_ROOT` and `QUARTO_PROFILE` for this machine, then restart R.
 4.  **Restore the Environment**: Run `renv::restore()` in the R console to install the exact package versions used.

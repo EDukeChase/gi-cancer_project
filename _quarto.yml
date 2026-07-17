@@ -1,7 +1,11 @@
 # --- Project Configuration ---
+# output-dir here is only a local fallback used if QUARTO_PROFILE isn't
+# set/active (see _quarto-laptop.yml / _quarto-desktop.yml, selected via
+# the QUARTO_PROFILE env var in .Renviron) -- normally renders go straight
+# to this machine's OneDrive folder instead.
 project:
   type: default
-  output-dir: output
+  output-dir: _render_fallback
 
 # --- Execution Settings ---
 execute:
@@ -24,10 +28,6 @@ format:
     toc-location: right
     embed-resources: true
     css: style.css
-    code-links:
-      - text: GitHub Repo
-        icon: github
-        href: https://github.com/EDukeChase/gi-cancer_project
 
 # --- Document Language
 lang: en

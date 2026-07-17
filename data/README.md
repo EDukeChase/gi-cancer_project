@@ -1,20 +1,8 @@
 # Data Directory
 
-This folder contains all raw, intermediate, and processed data used in the analysis.
+Raw and processed data now live on OneDrive rather than in this folder (see the root `README.md` for how each machine is configured). This local `data/` folder only holds two files that are intentionally tracked in git:
 
-**Note:** The contents of this folder are intentionally ignored by git (as specified in the project's `.gitignore` file).
+-   `README.md`: this file.
+-   `grading_rules.csv`: adverse-event grading criteria (not patient data), versioned here so changes to grading logic are tracked in commit history.
 
-## Raw Data
-
-The original, unmodified data files from the source. These files have non-standard naming and may require cleaning before use.
-
--   `different_administered.csv`
--   `IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.csv`
--   `IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx`
--   `NOrmal ranges and Adverse Events grading system.xlsx`
-
-## Processed Data
-
-Cleaned, merged, or otherwise processed datasets that are ready for analysis. The analysis scripts should ideally read from these files.
-
--   `gi-cancer_data.csv`
+Everything else — the raw source files (`IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET*`, `different_administered.csv`) and `processed/*.rds` — lives under `<OneDrive project root>/data/` and `<OneDrive project root>/data/processed/`, resolved in code via `onedrive_data_path()` (defined in `R/setup.R`).

@@ -8,8 +8,9 @@
 /docs/.obsidian/
 /docs/manuscript/
 /docs/original_contents/
-/output/*
-!/output/README.md
+/_render_fallback/*
+!/_render_fallback/README.md
+/output/
 
 # --- RStudio and R ---
 .httr-oauth
