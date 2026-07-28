@@ -52,8 +52,12 @@ set.seed(4534174)
 
 
 # --- Rendering options --- #
+# NOTE: echo is deliberately NOT set here. opts_chunk$set() runs when this file
+# is sourced, i.e. after the YAML has been applied, so setting echo here would
+# silently override each document's `execute: echo:` setting. That is exactly
+# what used to happen: "4 - Statistical Analysis.qmd" asks for echo: false and
+# got echo: true anyway. Control echo per document in its YAML header.
 knitr::opts_chunk$set(
-  echo = TRUE,
   fig.width = 8,
   fig.asp = 0.618,
   fig.align = 'center'
@@ -125,7 +129,7 @@ ae_labels <- c(
   ast           = "Elevated AST"
 )
 
-# Combined AE categories per MET-007
+# Combined ADE categories per MET-007
 ae_group_map <- c(
   hb            = "Anemia",
   plt           = "Myelosuppression",
@@ -378,48 +382,123 @@ drop_separated_levels <- function(data, outcome, vars, max_passes = 5,
 }
 
 # Render the dropped_levels attribute as a sentence for a table footnote.
+# Attach a note beneath a gtsummary table. Wrapped so that a gtsummary build
+# without modify_source_note() degrades to a warning rather than failing the
+# whole render.
+add_source_note <- function(tbl, text) {
+  out <- tryCatch(gtsummary::modify_source_note(tbl, text),
+                  error = function(e) NULL)
+  if (is.null(out)) {
+    warning("Could not attach source note: ", text, call. = FALSE)
+    return(tbl)
+  }
+  out
+}
+
+# lme4 reports convergence trouble as console warnings, which are suppressed in
+# the rendered analysis document. This surfaces the same information as a value,
+# so it appears deliberately inside the validation callouts instead of as noise
+# the collaborators have to scroll past.
+check_convergence <- function(model) {
+  if (!inherits(model, "merMod")) {
+    return(tibble(singular_fit = NA, converged = NA, messages = "not a mixed model"))
+  }
+  msgs <- tryCatch(model@optinfo$conv$lme4$messages, error = function(e) NULL)
+  tibble(
+    singular_fit = tryCatch(lme4::isSingular(model), error = function(e) NA),
+    converged    = length(msgs) == 0,
+    messages     = if (length(msgs)) paste(msgs, collapse = " | ") else "none"
+  )
+}
+
+# Model formula as a single tidy line, for stating plainly above a summary
+# table rather than making the reader open the code.
+fmt_formula <- function(model) {
+  f <- paste(deparse(stats::formula(model)), collapse = " ")
+  gsub("[[:space:]]+", " ", f)
+}
+
+show_formula <- function(model, label = "Model") {
+  cat("*", label, ":* `", fmt_formula(model), "`\n\n", sep = "")
+  invisible(NULL)
+}
+
 # Drop reference-level rows from a gtsummary regression table (20-Apr-2026 and
-# 5-Jun-2026: they consume a lot of vertical space for no information), while
-# still telling the reader what the reference level was by appending it to the
-# variable's label row: "Cancer Stage (ref: I)".
+# 5-Jun-2026: they consume a lot of vertical space for no information), and
+# record what the reference levels were in a note beneath the table.
 #
-# Uses gtsummary's public modify_table_body() / remove_row_type() rather than
-# editing $table_body in place, so it survives gtsummary internals changing.
+# The note is deliberately *not* appended to the variable label. That was the
+# first implementation and it forced labels like "Chemotherapy Type (ref:
+# Platinum/Paclitaxel)" to wrap over several lines, which looked worse than the
+# rows it replaced.
 tbl_drop_ref_rows <- function(tbl) {
   if (!"reference_row" %in% names(tbl$table_body)) return(tbl)
 
   refs <- tbl$table_body |>
     filter(!is.na(reference_row), reference_row) |>
-    select(variable, .ref_label = label) |>
+    select(variable, ref_label = label) |>
     distinct(variable, .keep_all = TRUE)
 
   if (nrow(refs) == 0) return(tbl)
 
+  # Use the variable's display label in the note, not its raw column name.
+  var_labels <- tbl$table_body |>
+    filter(row_type == "label") |>
+    select(variable, var_label = label) |>
+    distinct(variable, .keep_all = TRUE)
+
+  note <- refs |>
+    left_join(var_labels, by = "variable") |>
+    mutate(txt = paste0(coalesce(var_label, variable), " = ", ref_label)) |>
+    pull(txt) |>
+    paste(collapse = "; ")
+
   tbl |>
-    gtsummary::modify_table_body(
-      \(tb) tb |>
-        left_join(refs, by = "variable") |>
-        mutate(label = if_else(
-          row_type == "label" & !is.na(.ref_label),
-          paste0(label, " (ref: ", .ref_label, ")"),
-          label
-        )) |>
-        select(-.ref_label)
-    ) |>
-    gtsummary::remove_row_type(variables = everything(), type = "reference")
+    gtsummary::remove_row_type(variables = everything(), type = "reference") |>
+    add_source_note(paste0("Reference levels: ", note, "."))
 }
 
+# Display names for model variables, so tables show "Anemia grade" rather than
+# "anemia_grade_f". Anything not listed falls through unchanged.
+var_labels <- c(
+  hiv_status     = "HIV status",
+  anemia_grade_f = "Anemia grade",
+  anemia_grade   = "Anemia grade",
+  gcsf_grade     = "Max neutropenia/leukopenia grade",
+  cancer_stage   = "Cancer stage",
+  chemo_type     = "Chemotherapy type",
+  cancer_site    = "Cancer site",
+  age            = "Age (years)",
+  sex            = "Sex",
+  tx_intent      = "Treatment intent"
+)
+
+pretty_var <- function(x) {
+  out <- unname(var_labels[x])
+  ifelse(is.na(out), x, out)
+}
+
+# Just the levels. The explanation of *why* they were excluded belongs in the
+# table caption, said once, not repeated verbatim in every row.
 describe_dropped_levels <- function(data) {
   d <- attr(data, "dropped_levels")
-  if (is.null(d) || !length(d)) {
-    return("No levels required exclusion for separation.")
-  }
-  paste0(
-    "Excluded from this model due to complete separation (no variation in the ",
-    "outcome within the level): ",
-    paste(names(d), vapply(d, paste, character(1), collapse = ", "),
-          sep = " = ", collapse = "; "), "."
-  )
+  if (is.null(d) || !length(d)) return("None")
+  paste(pretty_var(names(d)),
+        vapply(d, paste, character(1), collapse = ", "),
+        sep = " = ", collapse = "; ")
+}
+
+# Attach the exclusions to the model table itself, so a reader looking at an
+# odd-looking factor (e.g. anemia grade showing only levels 1 and 2) can see
+# immediately that the other levels were removed rather than absent from the
+# data.
+add_exclusion_note <- function(tbl, data) {
+  d <- attr(data, "dropped_levels")
+  if (is.null(d) || !length(d)) return(tbl)
+  add_source_note(tbl, paste0(
+    "Levels excluded because the outcome did not vary within them, so no ",
+    "estimate is possible: ", describe_dropped_levels(data), "."
+  ))
 }
 
 
@@ -487,6 +566,15 @@ output_names <- c(
   transfusion_units_by_anemia_hiv = "Table - Transfusion units by anemia grade and HIV status",
   gcsf_rate_by_myelo_hiv         = "Table - G-CSF rate by myelosuppression grade and HIV status",
   gcsf_rate_by_anc_hiv           = "Table - G-CSF rate by neutropenia grade and HIV status",
+  gcsf_rate_by_indication_hiv    = "Table - G-CSF rate by neutropenia-leukopenia grade and HIV status",
+  transfusion_rate_by_grade_hiv  = "Table - Transfusion rate by anemia grade and HIV status (analysis)",
+  gcsf_rate_by_grade_hiv         = "Table - G-CSF rate by severity grade and HIV status (analysis)",
+  hosp_days_by_pt_hiv            = "Table - Hospital days per patient by HIV status",
+  hosp_days_by_severe_hiv        = "Table - Hospital days by severe ADE count and HIV status",
+  hosp_days_by_max_grade_hiv     = "Table - Hospital days by max ADE grade and HIV status",
+  tx_hiv_comparison_by_stratum   = "Table - HIV and transfusion odds across strata",
+  gcsf_hiv_comparison_by_stratum = "Table - HIV and G-CSF odds across strata",
+  table_early_dropout_descriptive = "Table - Early dropout, descriptive breakdown",
 
   # Figures
   plt_cycle_completion           = "Figure - Cycle completion by HIV status (pooled)",
@@ -516,6 +604,133 @@ output_filename <- function(slug) {
 }
 
 
+# Three of the four tables in this section have the same shape: a binary
+# management outcome summarised as n/N (%) per treatment cycle, broken down by
+# a severity grade (rows) and HIV status (columns). Built through one helper so
+# they cannot drift apart again -- the two G-CSF tables had been left in long
+# form, producing one row per HIV group per grade instead of one row per grade
+# with a column for each group.
+#
+# Denominator: cycles where the outcome was actually recorded. Cycles carrying
+# a severity grade but no record of whether the intervention was given are
+# excluded rather than counted as "not given" -- mgmt_cycle keeps any cycle
+# with *either* a transfusion or a G-CSF record, so a cycle can easily have one
+# and not the other. Counting those as non-events understated both rates.
+mgmt_rate_table <- function(data, grade_var, outcome_var, grade_label) {
+  data |>
+    filter(!is.na(.data[[grade_var]]), !is.na(.data[[outcome_var]])) |>
+    group_by(hiv_status, grade_value = .data[[grade_var]]) |>
+    summarise(
+      n_cycles = n(),
+      n_event  = sum(.data[[outcome_var]] == 1, na.rm = TRUE),
+      .groups  = "drop"
+    ) |>
+    mutate(
+      cell = paste0(n_event, "/", n_cycles, " (",
+                    round(100 * n_event / n_cycles, 1), "%)")
+    ) |>
+    select(grade_value, hiv_status, cell) |>
+    pivot_wider(names_from = hiv_status, values_from = cell,
+                # An em dash, not "0/0" -- these cells mean "no cycles observed
+                # at this grade in this group", which is not the same as "no
+                # events out of no cycles".
+                values_fill = "—") |>
+    arrange(grade_value) |>
+    rename(!!grade_label := grade_value)
+}
+
+# Shared flextable styling, so all four tables in the section match.
+mgmt_rate_flextable <- function(df, spanner, footnote = NULL) {
+  ft <- df |>
+    flextable() |>
+    add_header_row(values = c("", spanner), colwidths = c(1, ncol(df) - 1)) |>
+    theme_booktabs() |>
+    align(align = "center", part = "all") |>
+    align(j = 1, align = "left", part = "all")
+
+  if (!is.null(footnote)) ft <- ft |> flextable::add_footer_lines(footnote)
+
+  autofit(ft)
+}
+
+
+# Run a test on a contingency table and return a tidy one-row summary rather
+# than a raw htest print-out.
+#
+# Defaults to Fisher's exact for *every* table, matching the MET-006 decision
+# to use one test throughout rather than switching on expected cell counts.
+# Fisher is exact and valid at any cell count, so it is the safe common choice;
+# mixing tests across tables invites questions about why each was picked.
+test_contingency <- function(tbl, comparison, test = c("fisher", "chisq")) {
+  test <- match.arg(test)
+
+  res <- if (test == "fisher") {
+    stats::fisher.test(tbl)
+  } else {
+    stats::chisq.test(tbl, correct = FALSE)
+  }
+
+  # Minimum expected count is reported rather than used to switch tests, so a
+  # reader can see whether a chi-squared approximation would have been valid
+  # without the choice of test varying from table to table.
+  min_expected <- suppressWarnings(min(stats::chisq.test(tbl)$expected))
+
+  tibble(
+    Comparison = comparison,
+    Test       = if (test == "fisher") "Fisher's exact" else "Chi-squared",
+    Statistic  = if (test == "fisher") "—" else sprintf("%.2f", unname(res$statistic)),
+    df         = if (test == "fisher") "—" else as.character(unname(res$parameter)),
+    `p-value`  = format_p(res$p.value),
+    `Min expected count` = sprintf("%.1f", min_expected)
+  )
+}
+
+# Compact one-line effect summary for the HIV term, for quoting a model's
+# result in prose or a table caption without tabulating the whole model.
+# Handles both glm and merMod.
+hiv_effect_text <- function(model) {
+  est <- if (inherits(model, "merMod")) lme4::fixef(model) else stats::coef(model)
+  se  <- sqrt(diag(as.matrix(stats::vcov(model))))[names(est)]
+  i   <- grep("^hiv_status", names(est))
+
+  sprintf("OR %.2f (95%% CI %.2f-%.2f), p = %s",
+          exp(est[i]),
+          exp(est[i] - 1.96 * se[i]),
+          exp(est[i] + 1.96 * se[i]),
+          format_p(2 * stats::pnorm(-abs(est[i] / se[i]))))
+}
+
+# Pull just the HIV row out of a fitted mixed model, for comparing one exposure
+# estimate across analysis strata.
+#
+# Used instead of tbl_merge() where the strata legitimately carry different
+# covariate levels: merging tables whose row sets differ silently misaligns
+# rows and warns that the row counts do not match. Only the HIV row is
+# comparable across strata, so only that is compared.
+hiv_estimate <- function(model, stratum) {
+  est <- lme4::fixef(model)
+  se  <- sqrt(diag(as.matrix(stats::vcov(model))))[names(est)]
+  i   <- grep("^hiv_status", names(est))
+
+  # Derive the comparison from the fitted model rather than assuming it, so the
+  # label cannot drift out of step with the factor coding. levels()[1] is the
+  # reference level by construction.
+  ref  <- levels(stats::model.frame(model)$hiv_status)[1]
+  comp <- sub("^hiv_status", "", names(est)[i])
+
+  tibble(
+    Stratum      = stratum,
+    Comparison   = paste0("HIV ", comp, " vs HIV ", ref),
+    `Cycles (n)` = as.character(stats::nobs(model)),
+    OR           = sprintf("%.2f", exp(est[i])),
+    `95% CI`     = sprintf("%.2f, %.2f",
+                           exp(est[i] - 1.96 * se[i]),
+                           exp(est[i] + 1.96 * se[i])),
+    `p-value`    = format_p(2 * stats::pnorm(-abs(est[i] / se[i])))
+  )
+}
+
+
 # Save a table (gtsummary object and/or data frame) to csv + docx and
 # return a flextable for display. Pass `gtsum` for gtsummary objects (df/ft
 # derived automatically if not supplied), or `df`/`ft` directly for anything
@@ -534,7 +749,11 @@ save_table <- function(slug, gtsum = NULL, df = NULL, ft = NULL) {
   if (!is.null(df)) write.csv(df, csv_path, row.names = FALSE)
   save_as_docx(ft, path = docx_path)
 
-  list(ft = ft, csv = csv_path, docx = docx_path, slug = slug, name = fname)
+  # Invisible: a bare save_table() call at the top level of a chunk would
+  # otherwise print the whole return list -- file paths, slug and all -- and
+  # re-render the object underneath it.
+  invisible(list(ft = ft, csv = csv_path, docx = docx_path, slug = slug,
+                 name = fname))
 }
 
 save_figure <- function(plot, slug, width = 8, height = NULL, dpi = 300) {
@@ -549,7 +768,8 @@ save_figure <- function(plot, slug, width = 8, height = NULL, dpi = 300) {
   ggsave(png_path, plot = plot, width = width, height = height, dpi = dpi)
   ggsave(svg_path, plot = plot, width = width, height = height)
 
-  list(plot = plot, png = png_path, svg = svg_path, slug = slug, name = fname)
+  invisible(list(plot = plot, png = png_path, svg = svg_path, slug = slug,
+                 name = fname))
 }
 
 emit_buttons <- function(obj) {

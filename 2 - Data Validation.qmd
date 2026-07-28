@@ -472,6 +472,39 @@ gic_encoded |>
 ## Biomarker Range Checks
 Scan laboratory values for biologically impossible values (e.g., negative counts, values 10x above physiological max, etc.).
 ```{r}
+#| label: assess-age
+
+# [DAT-025] Age arrived separately from the main Excel export and so was never
+# range-checked in this document. Limits are deliberately wide, matching the
+# body-measurement check above: the goal is to catch data-entry errors, not to
+# flag clinical outliers.
+age_limits <- list(min = 18, max = 100)
+
+age_problems <- gic_encoded |>
+  select(record_id, age) |>
+  filter(is.na(age) | age < age_limits$min | age > age_limits$max) |>
+  mutate(
+    issue = case_when(
+      is.na(age)           ~ "Missing",
+      age < age_limits$min ~ "Below plausible minimum",
+      TRUE                 ~ "Above plausible maximum"
+    )
+  ) |>
+  arrange(issue, age)
+
+if (nrow(age_problems) > 0) {
+  warning("Found ", nrow(age_problems),
+          " records with missing or implausible age.")
+
+  age_problems |>
+    kbl(caption = "Age: missing or out-of-range values", digits = 0) |>
+    kable_styling(full_width = FALSE)
+} else {
+  message("Age Check Passed.")
+}
+```
+
+```{r}
 #| label: assess-biomarker-ranges
 
 # Generate summary stats for longitudinal variables

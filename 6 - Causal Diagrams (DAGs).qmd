@@ -23,7 +23,8 @@ library(ggplot2)
 ## Blood Transfusion DAG
 
 ```{r}
-#| label: transfusion-dag
+#| label: fig-transfusion-dag
+#| fig-cap: "Draft causal diagram for HIV status and blood transfusion."
 #| echo: false
 
 transfusion_dag <- dagify(
@@ -66,11 +67,14 @@ p_transfusion_dag <- ggplot(transfusion_dag_tidy, aes(x = x, y = y, xend = xend,
 
 p_transfusion_dag
 
+# save_figure() returns invisibly, so this writes the files without printing
+# its return list (paths, slug) or re-rendering the plot underneath.
 save_figure(p_transfusion_dag, "dag_transfusion", width = 8, height = 5, dpi = 300)
 ```
 ## G-CSF DAG
 ```{r}
-#| label: gcsf-dag
+#| label: fig-gcsf-dag
+#| fig-cap: "Draft causal diagram for HIV status and G-CSF indication."
 #| echo: false
 
 gcsf_dag <- dagify(

@@ -18,7 +18,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 ---
 
 ## Project Status & Workflow
-- [ ] **Data Cleaning (`01_data-cleaning.qmd`)**
+- [ ] **Data Cleaning (`1 - Data Cleaning.qmd`)**
 	- [ ] **Apply manual data patch (DAT-018).**
 	- [x] [2025-11-16] **Duplicate Names:** Identified and resolved raw columns with identical names in the excel file.
 		- *Resolved Tasks:* DAT-001.
@@ -39,7 +39,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- [ ] **Encoding Audit:** Verified integrity of type conversion.
 		- *Resolved Tasks:* DAT-017.
 		- [ ] DAT-016 [P2]: Numeric Column as Character
-- [ ] **Data Validation (`02_data-validation.qmd`):**
+- [ ] **Data Validation (`2 - Data Validation.qmd`):**
     - [ ] **Logic Check:** Verify `cycles_given` matches actual data presence.
         - [ ] DAT-019 [P1]: Extraneous cycle data
     - [x] [2025-12-01] **Logic Check:** Verify `cycles_given` <= `cycles_prescribed`.
@@ -48,6 +48,8 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- Complete, but need to reincorporate missing patient data.
     - [x] **Range Check:** Identify and handle impossible body measurement values.
 		- *Resolved Tasks:* DAT-020
+    - [x] [2026-07-27] **Range Check:** Age plausibility and missingness (chunk: `assess-age`).
+		- *Resolved Tasks:* DAT-025
     - [ ] **Range Check:** Scan for clinically impossible lab values.
     - [ ] **Missingness:** Examine missingness patterns (Random vs. Systematic/Attrition).
     - [ ] **Feature Engineering:** Generate graded adverse event columns using `grading_rules.csv`.
@@ -61,7 +63,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
   - **Status:** Open
   - **Created:** 2026-01-12
   - **Last updated:** 2026-01-12
-  - **Location:** `03_exploratory-data-analysis.qmd` (chunks: `engineer-ae-variables`, `tbl-ae-by-pt`, `tbl-ae-by-cycle`)
+  - **Location:** `3 - Descriptive Statistics.qmd` (chunks: `engineer-ae-variables`, `tbl-ae-by-pt`, `tbl-ae-by-cycle`)
   - **Summary:** Add cycle-level derived variables summarizing adverse events from existing per-cycle grade columns, and incorporate them into the analysis dataset used for modeling/reporting.
   - **Impact:** Enable per-cycle adverse event summaries/models and prevent having to rely only on whole-treatment summaries.
   - **Scope:** All patients in `gic_validated`; cycles 1–12; uses existing `*_grade_#` columns.
@@ -85,7 +87,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Status:** In Progress
 	- **Created:** 2025-11-16
 	- **Last updated:** 2025-12-05
-	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`)
+	- **Location:** `1 - Data Cleaning.qmd` (Chunk: `assess_duplicate-content`)
 	- **Summary:** `albi_score_0` and `cr_clear_0` variables are both empty.
 	- **Scope:** `albi_score_0` and `cr_clear_0`.
 	- **Impact:** Empty variables can't be used for analysis.
@@ -95,14 +97,14 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Timeline:**
 		- 2025-12-05: Received email from Dr. Mazhindhu containing DOI links for definitive formulas for both ALBI score and Creatinine Clearance.
 		- 2025-12-02: Learned during Zoom meeting that these are derived variables that can be calculated from other variables in our data.
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-content`) during initial data import and inspection.
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (chunk: `assess-duplicate-content`) during initial data import and inspection.
 - [ ] **DAT-008 [P2]: Transfusion Data Inconsistency**
     - **Status:** In progress
 	- **Created:** 2025-11-16
 	- **Last updated:** 2026-01-22
-	- **Location:** `01_data-cleaning.qmd`, `apply-manual-patches`; audit in `02_data-validation.qmd` (chunks: `assess-transfusions`, `investigate-transfusion-records`)
+	- **Location:** `1 - Data Cleaning.qmd`, `apply-manual-patches`; audit in `2 - Data Validation.qmd` (chunks: `assess-transfusions`, `investigate-transfusion-records`)
     - **Summary:** Columns `transfusion_given` and `transfusion_units` show both redundant data entry and active inconsistencies.
-	- **Scope:** Transfusion variables across cycles. Affected record_ids include the 6 patched records, as well as 5 other records as seen in the output of `02_data-validation.qmd` (chunk: `investigate-transfusion-records`).
+	- **Scope:** Transfusion variables across cycles. Affected record_ids include the 6 patched records, as well as 5 other records as seen in the output of `2 - Data Validation.qmd` (chunk: `investigate-transfusion-records`).
 	- **Impact:** Can bias transfusion relatedsummaries and any downstream safety/treatment-tolerance analyses if inconsistencies are not resolved.
 	- **Actions:**
 		- [x] Fix/extend mismatch detection logic to catch the overlooked case(s).
@@ -110,15 +112,15 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Determine whether additional manual patches are needed.
 	- **Timeline:**
 		- 2026-01-22: Reopened entry due to finding oversight in transfusion/units mismatch logic relating to NA handling and use of `identical()`. Discovered 5 new records with inconsistencies, but all are of the type where either `transfusion_given == NA` and `transfusion_units == 0` or `transfusion_given == "No"` and `transfusion_units == NA`). Will leave entry open, but assume these are all patients who did not receive a transfusion.
-		- 2025-12-18: Applied manual patches for 6 records in `01_data-cleaning.qmd`) (chunk: `apply-manual-patches`) using corrected values.
+		- 2025-12-18: Applied manual patches for 6 records in `1 - Data Cleaning.qmd`) (chunk: `apply-manual-patches`) using corrected values.
 		- 2025-12-05: Received table of corrected values in email from Dr. Mazhindu.
-		- 2025-12-02: Audit in `02_data-validation.qmd` (chunk: `assess-transfusions`) revealed active data mismatches (missing or unexpected blood units) in cycles outside the initial duplication list (email to Dr. Mazhindu on 2025-12-02 contains detailed list so you don't have to go restore an older version of the repo to see everything).
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-content`) that `transfusion_given` and `transfusion_units` variables were mathematically identical (implied 1 unit) in cycles 4, 7, 8, 9, and 11. For not, assume data are correct until this is clarified.
+		- 2025-12-02: Audit in `2 - Data Validation.qmd` (chunk: `assess-transfusions`) revealed active data mismatches (missing or unexpected blood units) in cycles outside the initial duplication list (email to Dr. Mazhindu on 2025-12-02 contains detailed list so you don't have to go restore an older version of the repo to see everything).
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (chunk: `assess-duplicate-content`) that `transfusion_given` and `transfusion_units` variables were mathematically identical (implied 1 unit) in cycles 4, 7, 8, 9, and 11. For not, assume data are correct until this is clarified.
 - [ ] **DAT-009 [P2]: Cycle 10 hospitalization variable**
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+	- *Observed:* [2025-11-16] in `1 - Data Cleaning.qmd` (Chunk: `assess_duplicate-content`).
 		- **Current location:** 
 	- *Summary:* `Hospitalization.required...10` is identical to `Was.the.cycle.delayed...10`.
-	- *Temporary Resolution:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `fix_duplicate-content`)
+	- *Temporary Resolution:* [2025-11-16] in `1 - Data Cleaning.qmd` (Chunk: `fix_duplicate-content`)
 		- *No Action:* Assume data are correct.
 	- *Task:* Compare with other cycles to see if this correlation is plausible or a data entry mistake.
 - [ ] **DAT-018 [P1]: Chemotherapy Data Discrepancy**
@@ -127,28 +129,28 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- *Observed:* [2025-12-01] via email from Dr. Mazhindu [2025-10-08].
 	- *Summary:* `different_administered.csv` contains corrected administration counts for 6 patients.
 - [ ] **DAT-019 [P2]: Extraneous cycle data**
-	- *Update:* [2025-12-18] Removed cycle 12 data for record_id 146, updated cycles given data for record_id 27, 498, and 766 to reflect data presence in `01_data-cleaning.qmd` (Chunk: `apply_manual-patches`). For record_id 498, they don't have any bloodwork data.
+	- *Update:* [2025-12-18] Removed cycle 12 data for record_id 146, updated cycles given data for record_id 27, 498, and 766 to reflect data presence in `1 - Data Cleaning.qmd` (Chunk: `apply_manual-patches`). For record_id 498, they don't have any bloodwork data.
 		- **Current location:** 
 	- *Update:* [2025-12-05] (Email from Dr. Mazhindu) Confirmed that for record_id 146, only cycle 1 was administered and cycle 12 values should be disregarded.
 	- *Update:* [2025-12-02] (Zoom meeting) Dr. Mazhindu stated that for patients where there is a mismatch between recorded number of cycles given, and the number of cycles which actually contain data, the latter should be considered more accurate barring other irregularities.
-    - *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `assess_extraneous-data`).
+    - *Observed:* [2025-12-01] in `2 - Data Validation.qmd` (Chunk: `assess_extraneous-data`).
 		- **Current location:** 
     - *Summary:* 4 patients (Record IDs: 27, 146, 498, 766) have data recorded for cycles beyond their `cycles_given` count.
 		- *Investigation:* The patients with record IDs 27, 498, and 766 had some amount of data for one more cycle than prescribed. The patient with record ID 146 had expected data for cycle 1, but also had data for cycle 12.
-	- *Temporary Resolution*: [2025-12-01] in `02_data-validation.qmd` (Chunk: `fix_extraneous-data`).
+	- *Temporary Resolution*: [2025-12-01] in `2 - Data Validation.qmd` (Chunk: `fix_extraneous-data`).
 		- *Excluded Patients:* Excluded these 4 records from analysis.
     - *Task:* Check if that should count as a cycle completed or not.
 - [ ] **DAT-023 [P3]: Plotting warning (Body measurements)**
-	- *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `assess_body-measurements`).
+	- *Observed:* [2025-12-01] in `2 - Data Validation.qmd` (Chunk: `assess_body-measurements`).
 		- **Current location:** 
     - *Summary:* `ggplot` warning: "Removed 21 rows containing non-finite values".
     - *Task:* Verify if these correspond exactly to the known `NA`s in Height, Weight, and BMI, or if valid data is being excluded.
-- [ ] **DAT-025 [P2]: Incorporate age and sex into analysis**
-	- **Status:** In Progress
+- [x] **DAT-025 [P2]: Incorporate age and sex into analysis**
+	- **Status:** Resolved
 	- **Type:** Data
 	- **Created:** 2026-04-20
-	- **Last updated:** 2026-04-20
-	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `03_exploratory-data-analysis.qmd`
+	- **Last updated:** 2026-07-27
+	- **Location:** `1 - Data Cleaning.qmd`, `2 - Data Validation.qmd`, `3 - Descriptive Statistics.qmd`, `4 - Statistical Analysis.qmd`
 	- **Summary:** Age column was missing from the original Excel data export and was provided separately as a CSV. Sex data was already present but unused. Both variables need to be carried through the full pipeline.
 	- **Clinical context (2026-04-20 meeting):**
 		- HIV+ patients tend to get esophageal and anal cancer at younger ages due to faster progression
@@ -158,29 +160,39 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Actions:**
 		- [x] Import age column from supplementary CSV and join to existing data
 		- [x] Add age to data cleaning steps (type checks, range validation, missing values)
-		- [ ] Add age to data validation
-		- [ ] Incorporate age and sex into descriptive statistics
-		- [ ] Include age and sex as covariates in relevant models
-		- [ ] Explore age as a threshold variable at 70 in addition to continuous
+		- [x] Add age to data validation
+		- [x] Incorporate age and sex into descriptive statistics
+		- [x] Include age and sex as covariates in relevant models
+		- [x] Explore age as a threshold variable at 70 in addition to continuous
+	- **Resolution:**
+		- *Validation:* `2 - Data Validation.qmd` (chunk: `assess-age`) range-checks age against wide plausibility limits (18–100) and reports missing values, matching the pattern used for body measurements.
+		- *Descriptive statistics:* `3 - Descriptive Statistics.qmd` chunks `tbl-demographics`, `plt-age-by-hiv`, `tbl-age-by-sex`, `tbl-age-by-cancer-site`, `plt-age-vs-cycles`, `tbl-sex-by-cancer-site`.
+		- *Models:* age and/or sex appear as covariates in `model_severe_basic`, `model_hiv_basic`, `model_cycles_full`/`model_cycles_no_site`, `model_hosp_any`, `model_hosp_days_adjusted`, and (as of 2026-07-27) `model_gcsf_given`.
+		- *Threshold:* `tbl-age-threshold-sensitivity` examines multiple cutoffs (50, 55, 60, 65, 70) stratified by HIV status rather than committing to 70 alone.
 	- **Timeline:**
+		- 2026-07-27: Added the missing validation step; confirmed the remaining actions were already implemented. Entry closed.
 		- 2026-04-20: Age data received. Imported and joined to existing data. Added to data cleaning pipeline.
 - [ ] **DAT-026 [P2]: Restructure adverse event grading to structured long format**
 	- **Status:** In Progress
 	- **Type:** Data
 	- **Created:** 2026-06-04
 	- **Last updated:** 2026-06-04
-	- **Location:** `data/grading_rules.csv`; `02_data-validation.qmd` (chunk: `derive-adverse-events`); `03_descriptive-statistics.qmd` (chunk: `engineer-ae-variables`); `R/setup.R`
+	- **Location:** `data/grading_rules.csv`; `2 - Data Validation.qmd` (chunk: `derive-adverse-events`); `3 - Descriptive Statistics.qmd` (chunk: `engineer-ae-variables`); `R/setup.R`
 	- **Summary:** Reworked the grading pipeline to output a long-format table (`ae_graded_long`) with numeric grade and a condition column, replacing the previous approach of storing text labels and regex-parsing the grade back out. Sodium and potassium are now graded as separate hypo/hyper conditions and treated as four distinct adverse event types (hyponatremia, hypernatremia, hypokalemia, hyperkalemia) rather than collapsing direction into a single variable.
 	- **Rationale:** The regex parsing existed only because the grading step discarded the structured grade and condition. Outputting structured data removes all downstream regex and resolves the directional collapse documented in DAT-024 — hypo and hyper are clinically distinct adverse events per CTCAE and are now scored independently, including grade-0 (normal) assessments for each direction.
 	- **Actions:**
 		- [x] Rewrite grading_rules.csv sodium/potassium values
 		- [x] Rewrite derive-adverse-events to output ae_graded_long
 		- [x] Save ae_graded_long.rds
-		- [ ] Update engineer-ae-variables to load structured data
-		- [ ] Update ae_labels and ae_group_map
+		- [x] Update engineer-ae-variables to load structured data
+		- [x] Update ae_labels and ae_group_map
 		- [ ] Restructure grading verification/audit for directional columns
-		- [ ] Re-render full pipeline and verify outputs
-	- **Supersedes:** Resolves the directional limitation noted in DAT-024.
+		- [x] Re-render full pipeline and verify outputs
+	- **Supersedes:** Resolves the directional limitation noted in DAT-024, and the "hyper/hypo electrolyte collapse" limitation recorded under MET-005.
+	- **Remaining:** Only the grading verification/audit restructure is outstanding, which is the same work as TEC-007. Track it there rather than in two places.
+	- **Timeline:**
+		- 2026-07-27: Confirmed `ae_graded_long` is written by `2 - Data Validation.qmd` and read by `3 - Descriptive Statistics.qmd`; `ae_group_map` in `R/setup.R` carries the four directional electrolyte categories. Full pipeline rendered clean.
+		- 2026-06-04: Entry created.
 
 ## Methodology (MET)
 *Methodological and analytical decisions affecting the statistical plan.*
@@ -190,7 +202,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Type:** Inquiry
 	- **Created:** 2025-11-29
 	- **Last updated:** 2025-12-02
-	- **Location:** `02_data-validation.qmd` (chunk: `derive-adverse-events`); `data/grading_rules.csv`
+	- **Location:** `2 - Data Validation.qmd` (chunk: `derive-adverse-events`); `data/grading_rules.csv`
 	- **Summary:** Edge case ambiguity in adverse event grading criteria require a definitive reference standard.
 	- **Decision:** NCI-CTCAE v5 will be used as the primary reference standard per Dr. Mazhindu (2025-12-02). For lower limit of normal (LLN) values, and in cases where the CTCAE specifies clinical consequences for a grade rather than numeric threshold, `NOrmal ranges and Adverse Events grading system.xlsx` will be referenced.
 	- **Actions:**
@@ -205,7 +217,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Type:** Decision
 	- **Created:** 2026-03-31
 	- **Last updated:** 2026-03-31
-	- **Location:** `01_data-cleaning.qmd` (chunk: `collapse-chemo-type`)
+	- **Location:** `1 - Data Cleaning.qmd` (chunk: `collapse-chemo-type`)
 	- **Summary:** `chemo_type` originally had 8 levels. Three clinically similar levels were collapsed into a single group, and two empty levels were dropped, leaving four levels in the variable for analysis.
 	- **Question:** How should we handle only having 2-4 HIV-positive patients in three of the chemotherapy type levels? What about empty levels?
 	- **Decision:** Collapsed CapeOX, FOLFOX4, and Capecitabine into a single "Oxaliplatin/Fluoropyrimidine" group, and empty levels (Irinotecan and Other) were dropped from the variable.
@@ -215,25 +227,26 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Timeline:**
 		- 2026-05-14: Added validation step after collapsing the categories.
 		- 2026-04-20: Confirmed with Dr. Mazhindu that the correct chemotherapy types were combined.
-		- 2026-03-31: Implemented collapse of chemotherapy types in `01_data-cleaning.qmd` (chunk: `collapse-chemo-type`).
+		- 2026-03-31: Implemented collapse of chemotherapy types in `1 - Data Cleaning.qmd` (chunk: `collapse-chemo-type`).
 		- 2026-03-04: Low quantity of certain types of chemotherapy noted and possibility of combining several discussed in meeting.
 - **MET-005 [P3]: Early Treatment Discontinuation Analysis**
 	- **Status:** In Progress
 	- **Type:** Decision
 	- **Created:** 2026-03-31
 	- **Last updated:** 2026-05-14
-	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `prep-early-dropout`, `prep-ae-early-dropout`, `tst-early-dropout-hiv`, `tst-dropout-by-ae-type`, `fit-univariate-ae-models`)
+	- **Location:** `4 - Statistical Analysis.qmd` (chunks: `prep-early-dropout`, `prep-ae-early-dropout`, `tst-early-dropout-hiv`, `tst-dropout-by-ae-type`, `fit-univariate-ae-models`)
 	- **Summary:** Several analytical decisions were made regarding the definition of early dropout, predictor construction, handling of missing AE grades, and choice of statistical methods for identifying AE types associated with early treatment discontinuation.
 	- **Question:** Which patients constitute early dropouts, how should AE predictors be constructed, and what statistical approach best identifies which AE types are associated with early discontinuation and whether that association differs by HIV status?
 	- **Decision:**
 		- **Early dropout definition:** Patients who completed ≤4 cycles among those prescribed >4 cycles (`cycles_given ≤ 4 & cycles_prescribed > 4`). Cutoff of 4 was chosen over 2 to increase outcome events (72 vs 53), improving model stability, mostly with a focus on trying to account for the small HIV-positive subgroup (15 vs 12 early dropouts).
 		- **Predictor construction:** Max CTCAE grade across cycles 1–4 per AE type. Patients with no recorded grade for a given AE type were imputed to 0 rather than excluded, to retain the full sample for LASSO. This decision was driven by sample size constraints, because otherwise complete case analysis yielded only 97 patients and 26 early dropouts. Imputation is least defensible for CBC markers (e.g., hemoglobin, platelets) where missingness may not reflect absence of abnormality. Revisit when time permits.
-		- **Sparse predictor exclusion:** AE types with fewer than 5 patients with any non-zero grade in either HIV status group were excluded from LASSO and univariate models. Elevated ALT and Elevated AST were dropped on this basis.
-		- **Zero-variance exclusion:** Columns with no variation after imputation (sd = 0) were dropped before scaling, as these produce NaN during standardization and are uninformative for LASSO. Thrombocytopenia, and Hyperbilirubinemia were dropped based on this criteria.
-		- **Statistical approach:** Two complementary methods were used to try to get a better picture of the relationships with our sample size limitations. LASSO logistic regression with bootstrap stability selection (1000 resamples, lambda.1se), which includes all retained AE type main effects, HIV status, and AE × HIV interaction terms, addresses "which AE types jointly predict early dropout." Second, univariate logistic regression with AE grade × HIV status interaction per AE type, BH-adjusted across all tests — addresses "does each AE type's association with early dropout differ by HIV status" with interpretable ORs.
-		- **Hyper/hypo electrolyte collapse:** Sodium and potassium each capture both high and low abnormalities in a single grade variable (direction lost during grade parsing in `ae_long`). This is a known limitation as, e.g., hyperkalemia and hypokalemia have different clinical presentations and may have different relationships with early dropout. Flagged for future revisions, see also DAT-024.
+		- **Sparse predictor exclusion:** AE types with fewer than 5 patients with any non-zero grade in either HIV status group were excluded from the univariate models. Elevated ALT and Elevated AST were dropped on this basis.
+		- **Zero-variance exclusion:** *(Superseded — this step existed only to support LASSO standardisation and was removed with it.)* Columns with no variation after imputation (sd = 0) were dropped before scaling, as these produce NaN during standardization. Thrombocytopenia and Hyperbilirubinemia were dropped on this basis.
+		- **Statistical approach:** *(Revised 2026-04-20; current state as of 2026-07-27.)* The LASSO arm has been **removed** — Dr. Hendricks' position was that LASSO suits prediction rather than inference, and inference is the goal here. No LASSO code remains in the pipeline. What remains is univariate logistic regression per AE type (max grade in cycles 1–4, adjusted for HIV status), Benjamini-Hochberg adjusted across AE types, reported as ORs with a forest plot. As of 2026-07-27 this is accompanied by a **stratified** version fitting each association separately within each HIV group, with strata that cannot be estimated reported explicitly rather than dropped silently.
+		- **Hyper/hypo electrolyte collapse:** ~~Sodium and potassium each capture both high and low abnormalities in a single grade variable.~~ **Resolved by DAT-026.** Sodium and potassium are now graded as four distinct adverse events (hyponatremia, hypernatremia, hypokalemia, hyperkalemia) and carried through as separate categories.
 	- **Rationale:** Cutoff of 4 cycles aligns with Dr. Mazhindu's framing of "early" treatment cycles as a clinically meaningful window. LASSO was chosen over standard logistic regression due to the high predictor-to-outcome-event ratio. Bootstrap stability selection was used in place of standard inference since LASSO coefficients are penalized and classical confidence intervals do not apply. Univariate models complement the LASSO by providing interpretable effect sizes and formal tests for the HIV interaction. Discussed with Dr. Hendricks and Dr. Mazhindu, 2026-03-04.
 	- **Timeline:**
+		- 2026-07-27: Reconciled entry against the code. LASSO fully removed; per-AE-type stratification by HIV status implemented as a separate figure; electrolyte directional collapse resolved. Remaining open question is unchanged: whether the impute-to-0 or complete-case treatment of missing early-window grades is the primary analysis.
 		- 2026-04-20: Discussed with collaborators. LASSO section removed (better suited for prediction than inference). Per-AE-type dropout tests should also be stratified by HIV status where sample size permits. AE categories will be combined where clinically appropriate (see MET-007).
 		- 2026-04-01: Preliminary analysis completed and decisions documented.
 		- 2026-03-31: Preliminary analysis started
@@ -242,7 +255,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Type:** Decision
 	- **Created:** 2026-04-20
 	- **Last updated:** 2026-05-14
-	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `tbl-cancer-site-hiv`, `tbl-cancer-site-hiv-expected`, `tst-cancer-site-hiv-global`, `tbl-cancer-site-hiv-expected-ovr`, `tbl-cancer-site-hiv-posthoc`)
+	- **Location:** `3 - Descriptive Statistics.qmd` (chunks: `tbl-cancer-site-hiv`, `tbl-cancer-site-hiv-expected`, `tst-cancer-site-hiv-global`, `tbl-cancer-site-hiv-expected-ovr`, `tbl-cancer-site-hiv-posthoc`)
 	- **Summary:** Established a two-stage testing strategy for assessing the relationship between cancer site and HIV status: a global test for any association, followed by one-vs-rest post-hoc comparisons per cancer site.
 	- **Question:** Is HIV status distributed differently across cancer sites, and if so, which specific sites are driving the association?
 	- **Decision:**
@@ -256,33 +269,94 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Timeline:**
 		- 2026-04-20: Implemented global Fisher's exact test, expected count tables, and one-vs-rest post-hoc tests with test selection based on expected cell counts.
 		- 2026-04-06: Discussed testing strategy with Dr. Hendricks during Zoom meeting. Original one-sample proportion approach was replaced with one-vs-rest contingency tables.
-- [ ] **MET-007 [P2]: Combine adverse event categories**
-	- **Status:** Open
+- [x] **MET-007 [P2]: Combine adverse event categories**
+	- **Status:** Resolved
 	- **Type:** Decision
 	- **Created:** 2026-04-20
 	- **Last updated:** 2026-05-14
-	- **Location:** `03_exploratory-data-analysis.qmd` (affects `engineer-ae-variables`, `prep-ae-early-dropout`, and downstream tables/models)
+	- **Location:** `3 - Descriptive Statistics.qmd` (`engineer-ae-variables`) and `4 - Statistical Analysis.qmd` (`prep-ae-early-dropout`, downstream tables/models)
 	- **Summary:** Several AE types are clinically similar enough to be combined to reduce the number of comparisons and improve statistical power. Groupings are clinically motivated — myelosuppression captures bone marrow suppression broadly, and the three liver enzymes reflect the same underlying hepatotoxicity.
 	- **Decision:** Confirmed per clinical input (2026-04-20 meeting):
 		- Neutropenia + lymphopenia + leukopenia + thrombocytopenia → "Myelosuppression" (thrombocytopenia has no events but belongs conceptually)
 		- Elevated ALP + elevated ALT + elevated AST → "Raised transaminases/enzymes"
 		- Anemia, sodium, potassium, hypoalbuminemia, hyperbilirubinemia → each standalone
 	- **Actions:**
-		- [ ] Implement combined categories in AE variable engineering
-		- [ ] Decide how to combine (max grade across component types? any grade > 0?)
-		- [ ] Re-run early dropout analyses with combined categories
-		- [ ] Update AE correlation heatmap
+		- [x] Implement combined categories in AE variable engineering
+		- [x] Decide how to combine (max grade across component types? any grade > 0?)
+		- [x] Re-run early dropout analyses with combined categories
+		- [x] Update AE correlation heatmap
+	- **Resolution:** Implemented as `ae_group_map` in `R/setup.R`, which maps each raw AE type to its collapsed category exactly as confirmed on 2026-04-20. Combination rule: **maximum grade across component types within each patient-cycle**, applied in `ae_long_grouped` (`3 - Descriptive Statistics.qmd`, chunk `engineer-ae-variables`) — not "any grade > 0", so severity is preserved rather than dichotomised. The early-dropout analysis and the heatmap (`plt-ae-early-dropout-heatmap`) both consume the grouped categories.
 	- **Timeline:**
+		- 2026-07-27: Verified implemented end to end; display order changed from alphabetical to lab-panel order (haematologic, electrolyte, hepatic) via `ae_group_order`. Entry closed.
 		- 2026-04-20: Groupings confirmed during meeting.
+
+- [ ] **MET-008 [P1]: Handling of complete and quasi-complete separation**
+	- **Status:** In Progress
+	- **Type:** Decision
+	- **Created:** 2026-07-27
+	- **Last updated:** 2026-07-27
+	- **Location:** `R/setup.R` (`check_separation()`, `drop_separated_levels()`, `describe_dropped_levels()`); `4 - Statistical Analysis.qmd` (chunks: `prep-tx-strata`, `chk-tx-strata-separation`, `chk-gcsf-separation`, `chk-gcsf-given-separation`)
+	- **Summary:** Several binomial models in this analysis are separated — some covariate levels contain no variation in the outcome, producing odds ratios of 0 or infinity. Previously handled by hard-coding the offending levels out of a single model; now detected from the data and handled uniformly.
+	- **Question:** How should covariate levels that perfectly predict the outcome be handled, and how should that handling be reported?
+	- **Decision:**
+		- **Detection:** Every binomial model is screened twice — before fitting, by cross-tabulating the outcome against each level of each categorical predictor; and after fitting, by flagging coefficients with implausible magnitude or standard error. The pre-fit screen matters because adding covariates to an already-separated model makes the fit worse, not better.
+		- **Handling:** Separated levels are excluded from the affected model only. Descriptive tables retain all levels.
+		- **Per-stratum detection:** Exclusions are derived from the data *for each analysis stratum* rather than carried between them. The levels that separate in the anemia-grade-2-only subset are not necessarily the ones that separate elsewhere, so the previous hard-coded exclusion of LCV/5-FU and Gallbladder/Biliary/Pancreas was not valid for the new strata.
+		- **Reporting:** What was excluded, and from which model, is reported in a table alongside the results rather than left in a code comment.
+	- **Open items:**
+		- [ ] Decide whether to adopt Firth's penalised likelihood (`logistf`) or a weakly-informative Bayesian fit instead of level exclusion. This is the more principled approach and has been noted as an option since June, but it has not been discussed with Dr. Hendricks.
+	- **Rationale:** Level exclusion is transparent and keeps the models interpretable, but it discards data and changes the estimand slightly. It is a pragmatic choice, not a defensible-by-default one, which is why the open item above matters.
+	- **Timeline:**
+		- 2026-07-27: Generalised from an ad-hoc fix in the transfusion model to a documented, data-driven procedure applied to the transfusion and G-CSF models.
+		- 2026-06-19: Separation first encountered in the transfusion model; handled by restricting to anemia grade 2.
+- [ ] **MET-009 [P1]: Transfusion analysis stratification**
+	- **Status:** Blocked
+	- **Type:** Decision
+	- **Created:** 2026-07-27
+	- **Last updated:** 2026-07-27
+	- **Location:** `3 - Descriptive Statistics.qmd` (chunk: `prep-mgmt-analysis`); `4 - Statistical Analysis.qmd` (chunks: `prep-tx-strata`, `fit-tx-strata`, `tbl-tx-strata-comparison`)
+	- **Summary:** Transfusion receipt is near-universal at high anemia grades and near-absent at low ones, so a single pooled model is uninformative. Per the 2026-07-13 meeting the analysis is now run on two strata and the estimates compared for consistency.
+	- **Decision:**
+		- **Stratum 1:** cycles with anemia grade ≥2 — patients with a clinical indication.
+		- **Stratum 2:** cycles belonging to patients transfused at least once — patients for whom transfusion was demonstrably available.
+		- **Sensitivity:** the previous grade-2-exactly model is retained so new results can be checked against what the team has already seen.
+		- **Estimand:** consistency of the HIV estimate *across* strata, not either estimate alone.
+	- **Interpretation caveat:** Grade ≥2 patients are indicated for transfusion, but blood supply constraints mean many do not receive one. Stratum 1 therefore means "had an indication", not "was eligible and able to receive". A null HIV effect is consistent with either equitable treatment or with supply constraints dominating clinical decisions, and the paper must not claim the former.
+	- **Open items:**
+		- [ ] **Blocking:** confirm the reading of stratum 2 with Dr. Hendricks. The meeting note said "all patients who received a transfusion". Read literally as *cycles* where a transfusion occurred, the outcome is constant and unmodellable, so it was implemented at the **patient** level. That conditions on a consequence of the exposure, which may not be acceptable.
+	- **Timeline:**
+		- 2026-07-27: Implemented both strata with a side-by-side comparison table.
+		- 2026-07-13: Two-stratum approach agreed in team meeting.
+
+- [ ] **MET-010 [P2]: Which severity definition indicates G-CSF?**
+	- **Status:** Blocked
+	- **Type:** Decision
+	- **Created:** 2026-07-27
+	- **Last updated:** 2026-07-27
+	- **Location:** `3 - Descriptive Statistics.qmd` (chunks: `tbl-gcsf-rate-indication`, `tbl-gcsf-rate-myelo`, `tbl-gcsf-rate-anc`); `4 - Statistical Analysis.qmd` (chunk: `prep-mgmt-analysis`, variable `gcsf_grade`)
+	- **Summary:** The descriptive document reports G-CSF administration against three different severity definitions, and the one the analysis document actually models was missing from it until now.
+	- **Question:** Which severity definition should the paper use to describe G-CSF indication, and which of the three tables survive to publication?
+	- **Context:** Tinashe (2026-07-13) stated that grade 2 or higher in **either neutropenia or leukopenia** constitutes an indication for G-CSF, neutropenia being a component of leukopenia. Measured against that:
+		- *Max neutropenia/leukopenia grade* — matches the stated indication and matches `gcsf_grade` in the analysis document. Added 2026-07-27; had been absent from the descriptive document.
+		- *Myelosuppression grade* — too broad. The collapsed category (MET-007) also contains thrombocytopenia and lymphopenia, neither of which indicates G-CSF, so a high grade can be driven by something irrelevant to the decision.
+		- *Neutropenia grade alone* — too narrow, and predates the myelosuppression collapse. Misses leukopenia. Most likely a leftover.
+	- **Actions:**
+		- [x] Add the max-of-both table so the three definitions can be compared side by side.
+		- [ ] **Blocking:** confirm with Tinashe which definition the paper should report.
+		- [ ] Drop the definitions not chosen, or demote them to supplementary.
+	- **Related technical debt:** the ANC/WBC join is currently performed twice — locally in `tbl-gcsf-rate-indication` and again in `4 - Statistical Analysis.qmd`'s `prep-mgmt-analysis`. It was not consolidated into `mgmt_cycle` because doing so would make the analysis document's chunk join `wbc_grade` a second time and produce `wbc_grade.x` / `wbc_grade.y`. Worth consolidating once the definition above is settled.
+	- **Timeline:**
+		- 2026-07-27: Discrepancy noticed while restructuring the management tables. Interim table added; question logged.
+		- 2026-07-13: Tinashe stated the grade 2+ neutropenia-or-leukopenia indication.
 
 ## Technical Tasks (TEC)
 *Action items for coding, refactoring, data cleaning, and validation scripts.*
 
 - [ ] **TEC-001 [P4]: Standardize Audit Functions**
-	- *Location:* `01_data-cleaning.qmd`.
+	- *Location:* `1 - Data Cleaning.qmd`.
     - *Task:* Modify `format_audit_table()` to be a single, universal function that handles all audit types (duplicates, cycles, static vars) to reduce code duplication.
 - [ ] **TEC-002 [P4]: Fix ToC Issue**
-	- *Location:* `01_data-cleaning.qmd`.
+	- *Location:* `1 - Data Cleaning.qmd`.
 	- *Issue:* Table of contents on right side of rendered HTML pages is no longer dynamic aside from acting as links; it only shows top level headers and the first one is always highlighted, regardless of what link was last clicked. Links do work. Suspect this might have something to do with the `kableExtra::scroll_box()` function used throughout.
 - [ ] **TEC-003 [P3]: Update Research Log Format**
 	- **Status:** In progress
@@ -295,6 +369,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Update existing entries to the standardized structure as they are touched.
 		- [ ] Ensure timelines use YYYY-MM-DD date formating and that newest entries are listed first.
 	- **Timeline:**
+		- 2026-07-27: Reformatted TEC-005 to the standard structure. Added Resolution and Timeline blocks to TEC-011, MET-007, DAT-025 and DAT-026 while closing them.
 		- 2026-03-31: Reformatted MET-002
 		- 2026-01-22: Reformatted DAT-008 and TEC-004.
 		- 2026-01-21: Reformatted DAT-005, DAT-006, DAT-007, and TEC-003.
@@ -304,7 +379,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Status:** In progress
 	- **Created:** 2025-12-02
 	- **Last updated:** 2026-01-16
-	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `03_exploratory-data-analysis.qmd`, `research_log.md`
+	- **Location:** `1 - Data Cleaning.qmd`, `2 - Data Validation.qmd`, `3 - Descriptive Statistics.qmd`, `4 - Statistical Analysis.qmd`, `research_log.md`
 	- **Summary:** Add bidirectional traceability between code and log entries (code/comments reference log IDs, and log entries point to file + chunk labels where fixes/decisions are implemented).
 	- **Impact:** Improves traceability and reduces duplicated effort when revisiting decisions or debugging.
 	- **Actions:**
@@ -314,50 +389,66 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- [ ] Remove callout notes, replace with narrative explanations where appropriate.
 		- [ ] Evaluate callout warnings for relevance.
 	- **Timeline:**
-		- 2026-01-16: Updated code comments in `01_data-cleaning.qmd` to reference DAT-002 (chunk: `fix-duplicate-content`) and DAT-003 (chunk: `fix-longitudinal-consistency`).
-		- 2025-12-02: Add code comments to reference DAT-001, DAT-021, and DAT-022 in `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`).
-- [ ] **TEC-005 [P4]: Create custom save function**
-    - *Location:* `R/setup.R`
-    - *Goal:* Reduce code duplication by replacing verbose save chunks in `01_data-cleaning.qmd` and `02_data-validation.qmd` with a single function call.
-    - *Task:* Define a wrapper function (e.g., `safe_save_rds`) to handle the interactive overwrite prompt logic.
+		- 2026-01-16: Updated code comments in `1 - Data Cleaning.qmd` to reference DAT-002 (chunk: `fix-duplicate-content`) and DAT-003 (chunk: `fix-longitudinal-consistency`).
+		- 2025-12-02: Add code comments to reference DAT-001, DAT-021, and DAT-022 in `1 - Data Cleaning.qmd` (chunk: `fix-duplicate-names`).
+- [x] **TEC-005 [P4]: Create custom save function**
+	- **Status:** Resolved
+	- **Last updated:** 2026-07-27
+	- **Location:** `R/setup.R`
+	- **Goal:* Reduce code duplication by replacing verbose save chunks in `1 - Data Cleaning.qmd` and `2 - Data Validation.qmd` with a single function call.
+	- **Resolution:** Implemented as `save_rds_safe()` (not `safe_save_rds` as originally sketched) and used throughout the pipeline. Paired with `save_table()` and `save_figure()`, which cover the same problem for tables and figures.
+	- **Timeline:**
+		- 2026-07-27: Confirmed implemented; entry closed.
 - [ ] **TEC-007 [P1]: Audit adverse event grading**
-    - *Location:* `02_data-validation.qmd` (Chunk: `derive_adverse-events`).
+    - *Location:* `2 - Data Validation.qmd` (Chunk: `derive_adverse-events`).
 		- **Current location:** 
     - *Task:* Verify that the adverse event grading logic correctly assigned values (e.g., check that `ast_5` values map to the correct `ast_grade_5` labels) and ensure missing values (`NA`) were handled correctly.
 - **TEC-008 [P4] Adjust chunk naming**
 	- **Status:** In progress
-	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `research_log.md`
+	- **Location:** `1 - Data Cleaning.qmd`, `2 - Data Validation.qmd`, `research_log.md`
 	- **Summary:** Rename chunk labels to use dashes to comply with Quarto best practices and update all references in `research_log.md` so chunk pointers remain navigable.
 	- **Actions:**
-		- [ ] Update chunk references in active log entries to match current chunk labels.
+		- [x] Update chunk references in active log entries to match current chunk labels.
 		- [ ] For archived entries, keep original chunk labels and add a dated `Current location:` line only when the original chunk label no longer exists.
+		- [ ] A handful of archived entries still use the old `assess_duplicate-content` / `apply_type-coercion` underscore style. Harmless, but they will not match a search against the current code.
 	- **Timeline (newest first):**
-		- 2026-01-09 — Renamed chunk labels in `01_data-cleaning.qmd` and `02_data-validation.qmd` (replaced underscores with dashes). Research log references still need to be updated.
-		- 2025-12-12 — Observed inconsistent/noncompliant chunk naming in `01_data-cleaning.qmd`, `02_data-validation.qmd`.
+		- 2026-07-27 — Updated all *filename* references across the log to the renamed pipeline (`1 - Data Cleaning.qmd` … `5 - Publication Figures.qmd`). References to the split `03_exploratory-data-analysis.qmd` were resolved per entry by checking which document each named chunk now lives in.
+		- 2026-01-09 — Renamed chunk labels in `1 - Data Cleaning.qmd` and `2 - Data Validation.qmd` (replaced underscores with dashes). Research log references still need to be updated.
+		- 2025-12-12 — Observed inconsistent/noncompliant chunk naming in `1 - Data Cleaning.qmd`, `2 - Data Validation.qmd`.
 - [ ] **TEC-009 [P3] Fine-grained lab missingness audit**
 	- *Task:* Develop secondary audit to check for internal lab panel completeness (e.g., cases where LFT is present but CBC is missing within a cycle)
 - [ ] **TEC-010 [P4]: Switch table rendering from kableExtra to gt**
 	- **Status:** In Progress
 	- **Created:** 2026-03-31
-	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`, `03_exploratory-data-analysis.qmd`
+	- **Location:** `1 - Data Cleaning.qmd`, `2 - Data Validation.qmd`, `3 - Descriptive Statistics.qmd`, `4 - Statistical Analysis.qmd`
 	- **Summary:** Tables are currently rendered using `kableExtra` and `kbl()`. Switching to `gt` (and `gtsummary` where already in use) for cleaner HTML output and more maintainable syntax, particularly for complex tables with multi-level headers and grouped rows.
 	- **Actions:**
-		- [ ] Rewrite remaining `kbl()`-based tables in `03_exploratory-data-analysis.qmd` using `gt`.
-		- [ ] Rewrite `kbl()`-based tables in `02_data-validation.qmd` using `gt`.
-		- [ ] Rewrite `kbl()`-based tables in `01_data-cleaning.qmd` using `gt`.
+		- [ ] Rewrite remaining `kbl()`-based tables in `3 - Descriptive Statistics.qmd` and `4 - Statistical Analysis.qmd` using `gt`.
+		- [ ] Rewrite `kbl()`-based tables in `2 - Data Validation.qmd` using `gt`.
+		- [ ] Rewrite `kbl()`-based tables in `1 - Data Cleaning.qmd` using `gt`.
+	- **Progress (2026-07-27 count of remaining `kbl()` calls):**
+		- `1 - Data Cleaning.qmd`: 9 remaining, 0 converted
+		- `2 - Data Validation.qmd`: 10 remaining, 1 converted
+		- `3 - Descriptive Statistics.qmd`: 4 remaining, 15 converted — nearly done
+		- `4 - Statistical Analysis.qmd`: 10 remaining, 5 converted
+		- Note: many of the remaining `kbl()` calls are in diagnostic/audit output that only the analyst reads, so converting them is genuinely low value. Consider closing this entry as "done where it matters" once docs 3 and 4 are clean.
 	- **Timeline:**
+		- 2026-07-27: Counted remaining conversions; scope note added.
 		- 2026-03-31: Converted `tbl-chemo-type-by-hiv`, `tbl-hiv-or-comparison`, and `tbl-severe-multivariate-or` as part of descriptive statistics update work.
-- [ ] **TEC-011 [P4]: Split EDA document into descriptive statistics and exploratory analysis**
-	- **Status:** Open
+- [x] **TEC-011 [P4]: Split EDA document into descriptive statistics and exploratory analysis**
+	- **Status:** Resolved
 	- **Created:** 2026-05-14
-	- **Last updated:** 2026-05-14
-	- **Location:** `03_exploratory-data-analysis.qmd`
-	- **Summary:** The EDA document has grown to cover variable engineering, descriptive statistics, and exploratory modeling. Splitting into `03_descriptive-statistics.qmd` and `04_exploratory-analysis.qmd` would improve navigability and render times. Variable engineering would stay in the descriptive stats doc with `gic_models` saved as an RDS for the analysis doc to load.
+	- **Last updated:** 2026-07-27
+	- **Location:** was `03_exploratory-data-analysis.qmd`; now `3 - Descriptive Statistics.qmd` and `4 - Statistical Analysis.qmd`
+	- **Summary:** The EDA document has grown to cover variable engineering, descriptive statistics, and exploratory modeling. Splitting into `3 - Descriptive Statistics.qmd` and `4 - Statistical Analysis.qmd` would improve navigability and render times. Variable engineering would stay in the descriptive stats doc with `gic_models` saved as an RDS for the analysis doc to load.
 	- **Actions:**
-		- [ ] Split document contents into descriptive vs modeling sections
-		- [ ] Save `gic_models` as an RDS at the end of variable engineering for the analysis doc to load
-		- [ ] Update `_quarto.yml` if document order matters
-		- [ ] Update all research log references to reflect new filenames and chunk locations
+		- [x] Split document contents into descriptive vs modeling sections
+		- [x] Save `gic_models` as an RDS at the end of variable engineering for the analysis doc to load
+		- [x] Update `_quarto.yml` if document order matters
+		- [x] Update all research log references to reflect new filenames and chunk locations
+	- **Resolution:** The document was split and the whole pipeline renamed to `1 - Data Cleaning.qmd` through `6 - Causal Diagrams (DAGs).qmd`. `gic_models` is saved inside the `gic_descriptive` bundle (`gic_descriptive.rds`) rather than on its own, along with `ae_long`, `ae_long_grouped`, `mgmt_cycle` and others; `4 - Statistical Analysis.qmd` unpacks that bundle in its setup chunk. `_quarto.yml` needs no explicit render list because the numeric filename prefixes sort correctly. Log references updated 2026-07-27.
+	- **Timeline:**
+		- 2026-07-27: Verified complete against the code; log references updated.
 	- **Note:** Renaming will introduce a significant overhead of tracking down references across the research log, code comments, and any cross-document references. Planning on doing both renames simultaneously to avoid an intermediate state where references are half-updated.
 
 ## Project Management & Admin (ADM)
@@ -372,112 +463,112 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2026-12-02
-	- **Location:** `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`)
+	- **Location:** `1 - Data Cleaning.qmd` (chunk: `fix-duplicate-names`)
 	- **Summary:** Data contained two identical columns named "ANC.3", resulting in duplicate variables on import.
 	- **Scope:** Cycle 3; `ANC.3` only.
 	- **Impact:** Avoids duplicate ANC variable. No value changes.
 	- **Timeline:**
 		- 2025-12-02: Split original DAT-001 entry into DAT-001, DAT-021, and DAT-022.
 		- 2025-11-19: Confirmed during Zoom meeting that the second copy was an accidental duplicate, and that the temporary fix was sufficient.
-		- 2025-11-16: Implemented temporary fix in `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`).
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
+		- 2025-11-16: Implemented temporary fix in `1 - Data Cleaning.qmd` (chunk: `fix-duplicate-names`).
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
 	- **Resolution:** Renamed `ANC.3...108` to `ANC.3` and dropped `ANC.3...109`.
 - [x] **DAT-021: Cycle 3 Potassium Naming**
 	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2026-12-02
-	- **Location:** `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`)
+	- **Location:** `1 - Data Cleaning.qmd` (chunk: `fix-duplicate-names`)
 	- **Summary:** Data contained two columns named `HyperK+.3` resulting in duplicate variables on import.
 	- **Scope:** Cycle 3; potassium hypo/hyper variables.
 	- **Impact:** Fixes mislabeled variable name, prevents incorrect interpretation. No value changes.
 	- **Timeline:**
 		- 2025-12-02: Split original DAT-001 entry into DAT-001, DAT-021, and DAT-022.
 		- 2025-11-19: Confirmed during Zoom meeting that one copy should have been "HypoK+.3", and that the temporary fix was sufficient.
-		- 2025-11-16: Implemented temporary fix in `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`).
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
+		- 2025-11-16: Implemented temporary fix in `1 - Data Cleaning.qmd` (chunk: `fix-duplicate-names`).
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
 	- **Resolution:** Renamed `HyperK+.3...114` to `HypoK+.3`, and retained `HyperK+.3...115` as `HyperK+.3` (based on naming conventions and the variables having identical values).
 - [x] **DAT-022: Cycle 7 Mislabeling**
 	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2025-12-02
-	- **Location:** `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`)
+	- **Location:** `1 - Data Cleaning.qmd` (chunk: `fix-duplicate-names`)
 	- **Summary:** Febrile neutropenia and electrolyte variables in cycle 7 were mislabeled with a `.6` suffix (e.g., the cycle 7 variable for febrile neutropenia was labeled `Febrile.Neutropenia.6`)
 	- **Scope:** Cycle 7, febrile neutropenia and electrolyte variables with incorrect suffix.
 	- **Impact:** Prevents cycle misalignment in analysis. No value changes.
 	- **Timeline:**
 		- 2025-12-02: Split original DAT-001 entry into DAT-001, DAT-021, and DAT-022.
 		- 2025-11-19: Confirmed during Zoom meeting that the columns with the ".6" suffix located in the cycle 7 data block did belong to cycle 7, and that the temporary fix was sufficient.
-		- 2025-11-16: Implemented temporary fix in `01_data-cleaning.qmd` (chunk: `fix-duplicate-names`).
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
+		- 2025-11-16: Implemented temporary fix in `1 - Data Cleaning.qmd` (chunk: `fix-duplicate-names`).
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (chunk: `assess-duplicate-names`) during initial data import and inspection.
 	- **Resolution:** Renamed affected variables so cycle 7 columns use the `.7` suffix, and the correct cycle 6 columns retain the `.6` suffix.
 - [x] **DAT-002: Redundant data columns**
 	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2025-11-19
-	- **Location:** `01_data-cleaning.qmd` (chunk: `fix-duplicate-content`)
+	- **Location:** `1 - Data Cleaning.qmd` (chunk: `fix-duplicate-content`)
 	- **Summary:** Febrile neutropenia and ANC columns were identical within each cycle. Hypo/hyperkalemia columns were identical within each cycle. Cycle 3 contained a hypernatremia variable, which is nonexistent in all other cycles. Empty cycle label columns (e.g., `Cycle 10`) were present.
 	- **Scope:** All cycles; febrile neutropenia, hyperkalemia, and Cycle # variables. Cycle 3, `Hypernatramia.Na+.3`.
 	- **Impact:** Removed duplicate/redundant variables, prevents incorrect interpretation. No value changes.
 	- **Timeline:**
 		- 2025-11-19: Confirmed during Zoom meeting that the identical columns were due to an incomplete implementation of graded adverse events, and that the fix was sufficient.
-		- 2025-11-16: Implemented fix in `01_data-cleaning.qmd` (Chunk: `fix-duplicate-content`).
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (chunk: `assess-duplicate-content`) during initial data import and inspection.
+		- 2025-11-16: Implemented fix in `1 - Data Cleaning.qmd` (Chunk: `fix-duplicate-content`).
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (chunk: `assess-duplicate-content`) during initial data import and inspection.
 	- **Resolution:** Removed febrile neutropenia, hyperkalemia and cycle label variables from all cycles. Removed `Hypernatramia.Na+.3`.
 - [x] **DAT-003: Inconsistent Longitudinal Variable Naming**
 	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2026-11-28
-	- **Location:** `01_data-cleaning.qmd` (Chunk: `fix-longitudinal-consistency`)
+	- **Location:** `1 - Data Cleaning.qmd` (Chunk: `fix-longitudinal-consistency`)
 	- **Summary:** `DBIL`, `HB`, and `TBIL` variables had inconsistent capitalization across cycles. Some cycles used `HypoNatramia.Na+` while others used `HypoNa+`. Typo in `Hospitalization.required.due.to.toxicity?` variable in cycles 2 – 12. `Hospitalization.days.2` mislabeled as `Hospitalization.days`.
 	- **Scope:** All cycles, `DBIL`, `HB`, `TBIL`, `HypoNa+`, and `Hospitalization.required.due.to.toxicity?` variables. Cycle 2, `Hospitalization.days.2`
 	- **Impact:** Consistent variable naming for longitudinal data is very helpful during analysis.
 	- **Timeline:**
-		- 2025-11-28: Implemented final fix in `01_data-cleaning.qmd` (Chunk: `fix-longitudinal-consistency`).
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-longitudinal-consistency`) during initial data import and inspection.
+		- 2025-11-28: Implemented final fix in `1 - Data Cleaning.qmd` (Chunk: `fix-longitudinal-consistency`).
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (Chunk: `assess-longitudinal-consistency`) during initial data import and inspection.
 	- **Resolution:** Standardized capitalization of `DBIL`, `HB`, and `TBIL` variables. Renamed all `HypoNatramia.Na+.#` variables to `HypoNa+.#`. Fixed typo ("dur" instead of "due") in `Hospitalization.required.due.to.toxicity?` variables. Added appropriate `.2` suffix to `Hospitalization.days` in cycle 2.
 - [x] **DAT-011: General Variable Renaming**
-	- *Resolved:* [2025-11-29] in `01_data-cleaning.qmd` (Chunk: `apply_standard-names`).
+	- *Resolved:* [2025-11-29] in `1 - Data Cleaning.qmd` (Chunk: `apply_standard-names`).
 		- **Current location:** 
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-names`).
+	- *Observed:* [2025-11-16] in `1 - Data Cleaning.qmd` (Chunk: `assess_duplicate-names`).
 		- **Current location:** 
 	- *Summary:* Raw variable names contained factor levels and long strings.
 	- *Details:* 
 		- *Standardized:* Simplified names and converted all to snake case. Baseline measurements denoted with `_0` suffix. Longitudinal measurements denoted with `_#` suffix for appropriate cycle number.
 - [x] **DAT-012: Factors Encoded as Numeric**
-	- *Resolved:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
+	- *Resolved:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `apply_type-coercion`).
 		- **Current location:** 
-	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
+	- *Observed:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `assess_data-types`).
 		- **Current location:** 
 	- *Summary:* Categorical variables were imported as numeric. 
 	- *Details:* 
 	  - *Coerced Data Types:* Converted to factors with explicit labels based on variable names from `IPROTECTARetrospecti_DATA_2025-08-19_2157 FINAL SHEET.xlsx`.
 - [x] **DAT-013: Empty Columns as Logical**
-	- *Resolved:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
+	- *Resolved:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `apply_type-coercion`).
 		- **Current location:** 
-	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
+	- *Observed:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `assess_data-types`).
 		- **Current location:** 
 	- *Summary:* `cr_clear_0`, `albi_score_0`, and `dbil_12` are stored as `logical` because they contain only `NA`.
 	- *Details:*
 	  - *Coerced Data Types:* Converted all to `numeric`.
 - [x] **DAT-014: Date Precision**
-	- *Resolved:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
+	- *Resolved:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `apply_type-coercion`).
 		- **Current location:** 
-	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
+	- *Observed:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `assess_data-types`).
 		- **Current location:** 
 	- *Summary:* `death_date` is stored as `POSIXct` (DateTime).
 	- *Details:* 
 		- *Coerced Data Type:* Converted to `Date` class.
 - [x] **DAT-017: Invalid `sex` Level** 
-	- *Resolved:* [2025-12-01] in `01_data-cleaning.qmd` (Chunk: `fix_dat-017_sex-error`).
+	- *Resolved:* [2025-12-01] in `1 - Data Cleaning.qmd` (Chunk: `fix_dat-017_sex-error`).
 		- **Current location:** 
-	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `audit_encoding_static-factor`).
+	- *Observed:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `audit_encoding_static-factor`).
 		- **Current location:** 
 	- *Summary:* The variable `sex` contained the raw value `3`.
     - *Details:*
 		- *Patched Data Error:* Corrected raw value of `3` to `1` (Male) per confirmation from Dr. Mazhindu [2025-10-08].
 - [x] **MET-001 [P3]: Febrile Neutropenia vs. ANC**
 	- *Resolved:* [2025-12-01] Definition confirmed by Dr. Mazhindu in email.
-	- *Observed:* [2025-11-16] in `01_data-cleaning.qmd` (Chunk: `assess_duplicate-content`).
+	- *Observed:* [2025-11-16] in `1 - Data Cleaning.qmd` (Chunk: `assess_duplicate-content`).
 		- **Current location:** 
 	- *Summary:* Raw data had `ANC` and `Febrile.Neutropenia` as identical columns.
 	- *Details:*
@@ -486,71 +577,71 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2025-12-02
-	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`)
+	- **Location:** `1 - Data Cleaning.qmd` (Chunk: `assess-duplicate-content`)
 	- **Summary:** `HyperK+.1` and `HypoK+.1` are both identical to `Baseline.K+`, and `HypoNa+.1` is identical to `Baseline.Na+`. No other biomarkers exhibit this pattern.
 	- **Scope:** `HyperK+.1`, `HypoK+.1`, `Baseline.K+`, `HypoNa+.1`, `Baseline.Na+`
 	- **Impact:** Prevents double-counting baseline electrolytes and avoids misinterpreting pre-cycle-1 labs as cycle 1 measurements. No value changes.
 	- **Timeline:**
 		- 2025-12-02: Confirmed during Zoom meeting that this is likely due to these labs having been done before cycle 1 commenced, so were logged as both the baseline and the cycle 1 values. 
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-longitudinal-consistency`) during initial data import and inspection.
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (Chunk: `assess-longitudinal-consistency`) during initial data import and inspection.
 	- **Resolution:** Treat baseline and cycle 1 sodium/potassium as redundant measures, and do not include both baseline and cycle 1 versions in the same analysis.
 - [x] **DAT-010 [P1]: Cancer stage encoding ambiguity**
-	- *Resolved:* [2025-12-02] Updated encoding in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`)
+	- *Resolved:* [2025-12-02] Updated encoding in `1 - Data Cleaning.qmd` (Chunk: `apply_type-coercion`)
 		- **Current location:** 
 	- *Update:* [2025-12-01](Email from Dr. Maxhindu) Confirmed `4` indicates "Stage IV", as treatment implies known stage.
-	- *Observed:* [2025-11-28] in `01_data-cleaning.qmd` (Chunk: `apply_standard-names`).
+	- *Observed:* [2025-11-28] in `1 - Data Cleaning.qmd` (Chunk: `apply_standard-names`).
 		- **Current location:** 
 	- *Summary:* The column name implies `4` could mean either "Stage IV" or "Unknown/Undocumented".
-	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`)
+	- *Temporary Resolution:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk `apply_type-coercion`)
 		- **Current location:** 
 		- *Use Ambiguous Label:* Map a value of `4` as "Stage IV / Unknown".
 - [x] **DAT-015 [P2]: Residence factor level mismatch**
 	- *Resolved:* [2025-12-05] (Zoom meeting) Dr. Mazhindu confirmed the temporary resolution was the right correction.
-	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `apply_type-coercion`).
+	- *Observed:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `apply_type-coercion`).
 		- **Current location:** 
 	- *Summary:* The documented encoding for `residence` is "1 = urban; 2 = rural; 3 = peri-urban", but observed levels are 0, 1, and 2.
-	- *Temporary Resolution:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
+	- *Temporary Resolution:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk `apply_type-coercion`).
 		- **Current location:** 
 		- *Alternate Encoding:* Will assume 0 = urban, 1 = rural, 2 = peri-urban.
 - [x] **DAT-020 [P2]: Body measurement outlier**
-	- *Resolved:* [2025-12-18] Moved definitive fix to `01_data-cleaning.qmd` (Chunk: `apply-manual-patches`). BMI recalculated to maintain data integrity.
+	- *Resolved:* [2025-12-18] Moved definitive fix to `1 - Data Cleaning.qmd` (Chunk: `apply-manual-patches`). BMI recalculated to maintain data integrity.
 	- *Update:* [2025-12-02] (Zoom meeting) Dr. Mazhindu confirmed that 1498 was a decimal entry error, correct value is 149.8 cm.
-	- *Observed:* [2025-12-01] in `02_data-validation.qmd` (Chunk: `asses_body-measurements`).
+	- *Observed:* [2025-12-01] in `2 - Data Validation.qmd` (Chunk: `asses_body-measurements`).
 	- *Summary:* One patient record (record ID 614) contains physically impossible values for height/bmi.
-	- *Temporary Resolution*: [2025-12-01] in `02_data-validation.qmd` (Chunk: `fix_body-measurements`).
+	- *Temporary Resolution*: [2025-12-01] in `2 - Data Validation.qmd` (Chunk: `fix_body-measurements`).
 		- *Data Correction:* Replace value of 1498 with 149.8 and recalculate BMI.
 	- *Task:* Determine correct value for `height_0` for this patient. Current value is 1498, suspect it should be 149.8.
 - [x] **DAT-004 [P3]: Zero comorbidities**
 	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2025-12-02
-	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`)
+	- **Location:** `1 - Data Cleaning.qmd` (Chunk: `assess-duplicate-content`)
 	- **Summary:** Data indicate that no patients have COPD, Kidney Disease, or Epilepsy recorded.
 	- **Scope:** `comorbid_copd`, `comorbid_ckd`, `comorbid_epilepsy` variables.
 	- **Impact:** Important to have accurate medical history information, and confirm when there's a possible anomaly.
 	- **Timeline:**
 		- 2025-12-02: Confirmed in Zoom meeting that no patients had a history of COPD, kidney disease, or epilepsy.
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`) during initial data import and inspection.
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (Chunk: `assess-duplicate-content`) during initial data import and inspection.
 	- **Resolution:** No action required, data were correct.
 - [x] **DAT-016 [P2]: Numeric Column as Character**
-	- *Resolved:* [2025-12-18] Applied definitive fix in `01_data-cleaning.qmd` (Chunk: `apply-manual-patches`). Removed temporary `if_else` coercion from `02_data-validation.qmd` (Chunk: `apply-type-coercion`).
+	- *Resolved:* [2025-12-18] Applied definitive fix in `1 - Data Cleaning.qmd` (Chunk: `apply-manual-patches`). Removed temporary `if_else` coercion from `2 - Data Validation.qmd` (Chunk: `apply-type-coercion`).
 	- *Update:* [2025-12-02](Email from Dr. Mazhindu) Confirmed "pn" should be `28`.
-	- *Temporary Resolution*: [2025-11-30] in `01_data-cleaning.qmd` (Chunk `apply_type-coercion`).
+	- *Temporary Resolution*: [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk `apply_type-coercion`).
 		- *Coerced Data Types:* Converted `ast_1` to numeric and explicitly coerced "pn" to `NA`.
-	- *Observed:* [2025-11-30] in `01_data-cleaning.qmd` (Chunk: `assess_data-types`).
+	- *Observed:* [2025-11-30] in `1 - Data Cleaning.qmd` (Chunk: `assess_data-types`).
 	- *Summary:* `ast_1` is stored as a character vector.
 		- *Investigation:* `record_id == 64` contains the value "pn" for `ast_1`.
 - [x] **DAT-006 [P2]: Empty `dbil_12`**
 	- **Status:** Resolved
 	- **Created:** 2025-11-16
 	- **Last updated:** 2025-12-02
-	- **Location:** `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`)
+	- **Location:** `1 - Data Cleaning.qmd` (Chunk: `assess-duplicate-content`)
 	- **Summary:** The `dbil_12` column in cycle 12 is entirely empty, however there were other liver panel results for patients in cycle 12.
 	- **Scope:** `dbil_12` variable.
 	- **Impact:** Important to have accurate medical history information, and confirm when there's a possible anomaly.
 	- **Timeline:**
 		- 2025-12-02: Confirmed in Zoom meeting that the missingness is not unusual because liver panels tend to be done only when there are indications of liver damage, and some specific metabolites aren't included in certain panels.
-		- 2025-11-16: Observed in `01_data-cleaning.qmd` (Chunk: `assess-duplicate-content`) during initial data import and inspection.
+		- 2025-11-16: Observed in `1 - Data Cleaning.qmd` (Chunk: `assess-duplicate-content`) during initial data import and inspection.
 	- **Resolution:** No action required.
 - [x] **ADM-002 [P0]: Outstanding Inquiries (for Dr. Mazhindu)**
 	- *Status:* Reply received [2025-12-01]
@@ -563,7 +654,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
     - **Status:** Resolved
 	- **Created:** 2025-12-02
 	- **Last updated:** 2026-01-16
-	- **Location:** `01_data-cleaning.qmd`, `02_data-validation.qmd`
+	- **Location:** `1 - Data Cleaning.qmd`, `2 - Data Validation.qmd`
     - **Summary:** RStudio fails to copy font files to the cache because the OneDrive path exceeds 260 characters.
 	- **Scope:** Project
 	- **Impact:** Extra warning messages, persistent issues with file names being too long could lead to significant issues during analysis.
@@ -571,8 +662,8 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 		- 2026-01-16: Implemented minimal fix.
 		- 2025-12-02: Created Directory Junction from `.Rproj.user` to `C:/R_Cache/gi-cancer/`. (Result: Error persisted, likely due to RStudio accessing the project via the original long path).
 		- 2025-12-02: Set `embed-resources: false` in `_quarto.yml`. (Result: Error persisted during interactive chunk execution).
-		- 2025-12-02: Received similar warning message while working in `02_data-validation.qmd` (chunk: `assess-body-measurements`).
-		- 2025-11-30: Received warning message while working in `01_data-cleaning.qmd` about failing to copy font files to the cache because the OneDrive path exceeds 260 characters.
+		- 2025-12-02: Received similar warning message while working in `2 - Data Validation.qmd` (chunk: `assess-body-measurements`).
+		- 2025-11-30: Received warning message while working in `1 - Data Cleaning.qmd` about failing to copy font files to the cache because the OneDrive path exceeds 260 characters.
 	- **Resolution:** Copied project files to local directory and will need to manually copy updated files to OneDrive folder to avoid issues with OneDrive syncing.
 		- **Optional Task:** Set up automated script to upload any changes overnight, but this is low priority unless manual uploading is too unreliable.
 
@@ -581,8 +672,8 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Type:** Decision
 	- **Created:** 2026-03-31
 	- **Last updated:** 2026-03-31
-	- **Location:** `03_exploratory-data-analysis.qmd` (chunks: `engineer-ae-variables`, `tbl-ae-by-pt`, `tbl-ae-by-cycle`)
-	- **Summary:** Multiple candidate measures were explored for summarizing adverse event severity at both the patient- and cycle-levels. Patient-level candidates included `ae_max_grade_pt` `ae_mean_events`, `ae_mean_max_grade`, and `ae_mean_sum_grade`. Cycle-level candidates included `ae_sum_grade_#`, `ae_max_grade_#`, `ae_n_events_#`, and `ae_n_severe_#`. Unused variables were removed from `03_exploratory-data-analysis.qmd`, but can be found in the git history for full specifications and the original definition table.
+	- **Location:** `3 - Descriptive Statistics.qmd` (chunks: `engineer-ae-variables`, `tbl-ae-by-pt`, `tbl-ae-by-cycle`)
+	- **Summary:** Multiple candidate measures were explored for summarizing adverse event severity at both the patient- and cycle-levels. Patient-level candidates included `ae_max_grade_pt` `ae_mean_events`, `ae_mean_max_grade`, and `ae_mean_sum_grade`. Cycle-level candidates included `ae_sum_grade_#`, `ae_max_grade_#`, `ae_n_events_#`, and `ae_n_severe_#`. Unused variables were removed from what is now `3 - Descriptive Statistics.qmd`, but can be found in the git history for full specifications and the original definition table.
 	- **Question:** Which summary measure best captures per-patient adverse event severity and is most interpretable?
 	- **Decision:** `ae_max_grade_pt` selected as the primary patient-level measure, and `ae_max_grade_#` selected as the primary cycle-level measure. `ae_n_events_#` and `ae_n_severe_#` were retained for possible use in future models, but all other candidates were removed from the analysis document.
 	- **Rationale:** Max grade is standard in the literature, while cumulative burden type measurements (e.g., `ae_mean_sum_grade`) are uncommon and not used frequently in similar analyses. Settled on decision after Zoom meeting with Dr. Hendricks and Dr. Mazhindu on 2026-03-04.
@@ -590,7 +681,7 @@ This document tracks outstanding questions, data anomalies, coding tasks, and ad
 	- **Status:** Closed
 	- **Created:** 2026-03-31
 	- **Last updated:** 2026-03-31
-	- **Location:** `data/grading_rules.csv`; `02_data-validation.qmd` (chunk: `derive-adverse-events`)
+	- **Location:** `data/grading_rules.csv`; `2 - Data Validation.qmd` (chunk: `derive-adverse-events`)
 	- **Summary:** `grading_rules.csv` was missing rules for hypernatremia, and after they were added, Grade 1 had an incorrect upper bound (155 instead of 150) that overlapped with Grade 2, causing 6 observations to receive dual grades and producing list columns in downstream analysis.
 	- **Scope:** `sodium_#` variables across all cycles; all patients with sodium > 145.
 	- **Impact:** Hypernatremia cases are silently excluded from all adverse event analyses, potentially underestimating sodium-related AE burden.

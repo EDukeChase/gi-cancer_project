@@ -1,6 +1,10 @@
 ---
 title: "GI Cancer: Publication Figures & Tables"
 bibliography: references.bib
+execute:
+  echo: false
+  warning: true
+  message: true
 format:
   html:
     code-links:
@@ -87,13 +91,12 @@ pub_objects_desc$plt_cycle_completion$plot
 
 Odds of experiencing a grade 3-4 adverse event at any point during treatment,
 adjusted for cancer stage, chemotherapy regimen, treatment intent, age and sex.
-Reference levels are named in the variable label rather than shown as their own
-rows. Unadjusted estimates were closely consistent with these and are therefore
-not tabulated.
+Reference levels are listed in a note beneath the table. The unadjusted model
+was closely consistent and is quoted in the caption rather than tabulated.
 
 ```{r}
 #| label: tbl-severe-or-comparison
-#| tbl-cap: "Adjusted odds of a severe (grade 3-4) adverse event, by HIV status"
+#| tbl-cap: !expr pub_objects_analysis$severe_caption
 
 pub_objects_analysis$tbl_severe_or_comparison$ft
 ```
@@ -105,7 +108,7 @@ Whether a patient was hospitalized at all in a given cycle, and — among the
 cycles where a hospitalization did occur — how long it lasted.
 
 ```{r}
-#| label: table-any-hosp
+#| label: tbl-any-hosp
 #| tbl-cap: "Odds of any toxicity-related hospitalization within a treatment cycle, adjusted for maximum adverse event grade in that cycle, age and sex"
 
 pub_objects_analysis$tbl_any_hosp$ft
@@ -119,7 +122,7 @@ pub_objects_analysis$plt_hosp_vs_max_grade$plot
 ```
 
 ```{r}
-#| label: table-hosp-days
+#| label: tbl-hosp-days
 #| tbl-cap: "Length of stay among hospitalized cycles: unadjusted vs adjusted linear mixed models. Estimates are differences in hospital days, not odds ratios."
 
 pub_objects_analysis$tbl_hosp_days_comparison$ft
@@ -132,7 +135,14 @@ prescribed more than four. The question is whether toxicity in the first four
 cycles predicts stopping early.
 
 ```{r}
-#| label: table-early-dropout-final
+#| label: tbl-early-dropout-descriptive
+#| tbl-cap: "Adverse event grades in the early treatment window, and HIV status, by whether the patient discontinued early."
+
+pub_objects_analysis$table_early_dropout_descriptive$ft
+```
+
+```{r}
+#| label: tbl-early-dropout-final
 #| tbl-cap: "Association between early-cycle adverse events and early treatment discontinuation. P-values are Benjamini-Hochberg adjusted across adverse event types."
 
 pub_objects_analysis$table_early_dropout_final$ft

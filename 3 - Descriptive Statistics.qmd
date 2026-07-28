@@ -2,6 +2,7 @@
 title: "GI Cancer: Descriptive Statistics"
 bibliography: references.bib
 execute:
+  echo: false
   warning: true
   message: true
 format:
@@ -925,14 +926,29 @@ survival_data_split <- cycle_long |>
   add_wilson_ci() |>
   mutate(rx_group = fct_drop(rx_group))
 
-# Patient counts per stratum, for the facet strip labels.
+# Patient counts per stratum for the facet strip labels, split by HIV status.
+# Taken at cycle 1, where every patient in the stratum still contributes a row,
+# so this is the number of patients prescribed at least that many cycles.
+#
+# NOTE: the previous version used max(n_prescribed) across the whole rx_group,
+# which returns the larger of the two HIV groups rather than their sum. The old
+# "n = 70 patients" strip label was therefore the HIV-negative count, not the
+# panel total. Splitting by status fixes that as a side effect.
+#
+# Levels are not hard-coded, so this keeps working if the factor labels change.
 rx_group_n <- survival_data_split |>
+  filter(cycle == 1) |>
   group_by(rx_group) |>
-  summarise(n_pt = max(n_prescribed), .groups = "drop")
+  summarise(
+    # Stacked, not side by side. Laid out on one line the label was wider than
+    # the narrow 1-6 cycle panel and got clipped at both ends.
+    n_label = paste0("HIV ", hiv_status, ": ", n_prescribed, collapse = "\n"),
+    .groups = "drop"
+  )
 
 survival_data_split <- survival_data_split |>
   left_join(rx_group_n, by = "rx_group") |>
-  mutate(rx_facet = paste0(rx_group, "\n(n = ", n_pt, " patients)"),
+  mutate(rx_facet = paste0(rx_group, "\n", n_label),
          rx_facet = fct_reorder(rx_facet, as.integer(rx_group)))
 ```
 
@@ -949,8 +965,8 @@ avoid that misreading.
 ```{r}
 #| label: plt-cycle-completion-split
 #| fig-cap: "Chemotherapy cycle completion by HIV status, stratified by number of cycles prescribed. Splitting on the prescription avoids the artefact in the pooled curve, where patients prescribed six cycles necessarily stop contributing after cycle 6. Shaded bands are pointwise 95% Wilson intervals."
-#| fig-width: 10
-#| fig-height: 4.5
+#| fig-width: 11
+#| fig-height: 4.8
 
 plt_cycle_completion_split <- ggplot(
   survival_data_split,
@@ -959,7 +975,12 @@ plt_cycle_completion_split <- ggplot(
   geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), alpha = 0.15, color = NA) +
   geom_line(linewidth = 0.8) +
   geom_point(size = 1.8) +
-  facet_wrap(~ rx_facet, scales = "free_x") +
+  # facet_grid rather than facet_wrap so `space = "free_x"` can size each panel
+  # in proportion to its number of cycles. Two benefits: one cycle occupies the
+  # same horizontal distance in every panel (facet_wrap stretched the 6-cycle
+  # panel to the same width as the 12-cycle one, distorting the slopes), and
+  # the differing panel widths make the boundaries between panels obvious.
+  facet_grid(cols = vars(rx_facet), scales = "free_x", space = "free_x") +
   scale_x_continuous(breaks = 1:12) +
   scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
   labs(
@@ -968,13 +989,26 @@ plt_cycle_completion_split <- ggplot(
     y = "Proportion receiving cycle\n(among those prescribed at least that many)",
     color = "HIV status",
     fill  = "HIV status"
+  ) +
+  theme(
+    # Legend below the panels: it was consuming horizontal space the panels
+    # needed, and with only two levels it reads fine as a single row.
+    legend.position = "bottom",
+    # Wider gutters and a light strip background so it is clear where one panel
+    # ends and the next begins.
+    panel.spacing.x  = grid::unit(1.1, "lines"),
+    strip.background = element_rect(fill = "grey92", colour = NA),
+    # Slightly reduced so the longest line ("1-6 cycles prescribed") clears the
+    # narrowest panel, which facet_grid makes narrower than facet_wrap did.
+    strip.text       = element_text(size = rel(0.85),
+                                    margin = margin(4, 4, 4, 4))
   )
 
 plt_cycle_completion_split
 
 pub_objects_desc$plt_cycle_completion_split <-
   save_figure(plt_cycle_completion_split, "plt_cycle_completion_split",
-              width = 10, height = 4.5)
+              width = 11, height = 4.8)
 ```
 
 Pooled version, retained for comparison so the team can choose between the two
@@ -1028,18 +1062,21 @@ pub_objects_desc$plt_cycle_completion <- save_figure(plt_cycle_completion, "plt_
 # Adverse Event Overview
 
 ```{r}
+#| label: tbl-ae-dictionary
+#| tbl-cap: "Adverse event variable dictionary: what each derived patient-level and cycle-level variable means."
+
 ae_dict <- tribble(
   ~Variable, ~Level, ~Meaning,
-  "ae_any_pt", "Patient Level", "Flag: did the patient have any AE (grade > 0) at any point in treatment?",
-  "ae_any_early", "Patient Level", glue("Flag: did the patient have any AE (grade > 0) in cycles 1–{early_dropout_cycles}?"),
-  "ae_severe_any_pt", "Patient Level", "Flag: did the patient have any severe AE (grade >= 3) across all cycles?",
-  "ae_severe_any_early", "Patient Level", glue("Flag: did the patient have any severe AE (grade >= 3) in cycles 1–{early_dropout_cycles}?"),
+  "ae_any_pt", "Patient Level", "Flag: did the patient have any ADE (grade > 0) at any point in treatment?",
+  "ae_any_early", "Patient Level", glue("Flag: did the patient have any ADE (grade > 0) in cycles 1–{early_dropout_cycles}?"),
+  "ae_severe_any_pt", "Patient Level", "Flag: did the patient have any severe ADE (grade >= 3) across all cycles?",
+  "ae_severe_any_early", "Patient Level", glue("Flag: did the patient have any severe ADE (grade >= 3) in cycles 1–{early_dropout_cycles}?"),
   "ae_max_grade_pt", "Patient Level", "Maximum adverse event grade across all treatment cycles",
-  "ae_max_grade_#", "Cycle Level", "For cycle {#}, maximum AE grade across markers (NA if all AE grades are 0).",
-  "ae_n_events_#", "Cycle Level", "For cycle {#}, count of AEs across markers (grade > 0) (NA if all AE grades are 0).",
-  "ae_n_severe_#", "Cycle Level", "For cycle {#}, count of severe AEs across markers (grade >= 3) (NA if all AE grades are 0).",
-  "ae_any_#", "Cycle Level", "For cycle {#}, flag: any AE this cycle (ae_n_events_# > 0) (NA if all AE grades are 0).",
-  "ae_severe_any_#", "Cycle Level", "For cycle {#}, flag: any severe AE this cycle (ae_n_severe_# > 0) (NA if all AE grades are 0)."
+  "ae_max_grade_#", "Cycle Level", "For cycle {#}, maximum ADE grade across markers (NA if all ADE grades are 0).",
+  "ae_n_events_#", "Cycle Level", "For cycle {#}, count of ADEs across markers (grade > 0) (NA if all ADE grades are 0).",
+  "ae_n_severe_#", "Cycle Level", "For cycle {#}, count of severe ADEs across markers (grade >= 3) (NA if all ADE grades are 0).",
+  "ae_any_#", "Cycle Level", "For cycle {#}, flag: any ADE this cycle (ae_n_events_# > 0) (NA if all ADE grades are 0).",
+  "ae_severe_any_#", "Cycle Level", "For cycle {#}, flag: any severe ADE this cycle (ae_n_severe_# > 0) (NA if all ADE grades are 0)."
 )
 
 ae_dict |>
@@ -1066,12 +1103,12 @@ ae_dict |>
   )
 ```
 
-## Patient-Level AE Summaries
+## Patient-Level ADE Summaries
 
 Patient-level adverse event summaries by HIV status
 ```{r}
 #| label: tbl-ae-by-pt
-#| tbl-cap: "Patient-level AE summaries by HIV status."
+#| tbl-cap: "Patient-level ADE summaries by HIV status."
 
 pt_summ <- gic_models |>
   group_by(hiv_status) |>
@@ -1088,17 +1125,17 @@ pt_summ <- gic_models |>
     .groups = "drop"
   )
 
-early_label <- paste0("Any AE in cycles 1–", early_dropout_cycles, " (%, patients)")
-severe_early_label <- paste0("Any severe AE in cycles 1–", early_dropout_cycles, " (%, patients)")
+early_label <- paste0("Any ADE in cycles 1–", early_dropout_cycles, " (%, patients)")
+severe_early_label <- paste0("Any severe ADE in cycles 1–", early_dropout_cycles, " (%, patients)")
 
 pt_wide <- pt_summ |>
   rename(
     "Total patients (N)" = total_pts,
-    "Any AE (%, patients)" = any_ae,
+    "Any ADE (%, patients)" = any_ae,
     !!early_label := any_ae_early,
-    "Any severe AE (%, patients)" = any_severe_ae,
+    "Any severe ADE (%, patients)" = any_severe_ae,
     !!severe_early_label := any_severe_ae_early,
-    "Max AE grade across all cycles, median (IQR)" = max_grade_pt
+    "Max ADE grade across all cycles, median (IQR)" = max_grade_pt
   ) |>
   pivot_longer(-hiv_status, names_to = "Metric", values_to = "value") |>
   pivot_wider(names_from = hiv_status, values_from = value)
@@ -1111,7 +1148,7 @@ pt_wide |>
 Distribution of maximum adverse event grade across all treatment cycles per patient by HIV status
 ```{r}
 #| label: plt-ae-max-grade-pt
-#| fig-cap: "Distribution of maximum AE grade by HIV status."
+#| fig-cap: "Distribution of maximum ADE grade by HIV status."
 
 gic_models |>
   filter(!is.na(ae_max_grade_pt)) |>
@@ -1123,20 +1160,20 @@ gic_models |>
   scale_x_continuous(breaks = 0:5) +
   scale_y_continuous(labels = scales::percent) +
   labs(
-    title = "Maximum AE Grade per Patient by HIV Status",
-    x = "Maximum CTCAE grade",
+    title = "Maximum ADE Grade per Patient by HIV Status",
+    x = "Maximum ADE grade",
     y = "Proportion of patients",
     fill = "HIV status"
   ) +
   theme_minimal()
 ```
 
-## Cycle-Level AE Summaries
+## Cycle-Level ADE Summaries
 
 Cycle-level adverse event summaries by HIV status
 ```{r}
 #| label: tbl-ae-by-cycle
-#| tbl-cap: "Cycle-level AE summaries by HIV status."
+#| tbl-cap: "Cycle-level ADE summaries by HIV status."
 #| results: asis
 
 ae_cycle_long <- gic_models |>
@@ -1166,17 +1203,17 @@ ae_cycle_summ <- ae_cycle_long |>
 
     `Patients (%)` = paste0(measured_n, " (", round(100 * measured_n / total_pts, 1), "%)"),
 
-    `Any AE (%)` = {
+    `Any ADE (%)` = {
       n <- sum(ae_any == TRUE, na.rm = TRUE)
       paste0(n, " (", round(100 * n / measured_n, 1), "%)")
     },
-    `Any severe AE (%)` = {
+    `Any severe ADE (%)` = {
       n <- sum(ae_severe_any == TRUE, na.rm = TRUE)
       paste0(n, " (", round(100 * n / measured_n, 1), "%)")
     },
 
-    `# AEs, median (IQR)` = summ_stats(ae_n_events, mean = FALSE),
-    `# severe AEs, median (IQR)` = summ_stats(ae_n_severe, mean = FALSE),
+    `# ADEs, median (IQR)` = summ_stats(ae_n_events, mean = FALSE),
+    `# severe ADEs, median (IQR)` = summ_stats(ae_n_severe, mean = FALSE),
     `Max grade, median (IQR)` = summ_stats(ae_max_grade, mean = FALSE, digits = 0),
 
     .groups = "drop"
@@ -1244,9 +1281,9 @@ ggplot(ae_events_summ, aes(x = cycle, group = hiv_status, color = hiv_status, fi
   geom_point(aes(y = median), size = 2) +
   scale_x_continuous(breaks = 1:12) +
   labs(title = "Adverse events per cycle",
-       subtitle = "Median (line) with IQR and min–max bands among cycles with any AE grading recorded",
+       subtitle = "Median (line) with IQR and min–max bands among cycles with any ADE grading recorded",
        x = "Treatment cycle",
-       y = "Number of AEs",
+       y = "Number of ADEs",
        color = "HIV status", fill = "HIV status") +
   theme_minimal()
 ```
@@ -1256,7 +1293,7 @@ Maximum adverse event grade per cycle by HIV status (median with IQR band, measu
 
 ```{r}
 #| label: plt-ae-max-grade-cycle
-#| fig-cap: "Median max AE grade per cycle by HIV status among measured cycles."
+#| fig-cap: "Median max ADE grade per cycle by HIV status among measured cycles."
 
 ggplot(ae_maxgrade_summ, aes(x = cycle, group = hiv_status, color = hiv_status, fill = hiv_status)) +
   geom_ribbon(aes(ymin = q25, ymax = q75), alpha = 0.3, color = NA) +
@@ -1265,10 +1302,10 @@ ggplot(ae_maxgrade_summ, aes(x = cycle, group = hiv_status, color = hiv_status, 
   scale_x_continuous(breaks = 1:12) +
   scale_y_continuous(breaks = 0:5, limits = c(0, 5)) +
   labs(
-    title = "Max AE Grade per Cycle",
+    title = "Max ADE Grade per Cycle",
     subtitle = "Median (line) with IQR band among measured cycles",
     x = "Treatment cycle",
-    y = "Max AE grade",
+    y = "Max ADE grade",
     color = "HIV status",
     fill = "HIV status"
   ) +
@@ -1280,7 +1317,7 @@ Proportion of patients with any grade 3+ adverse event per cycle by HIV status (
 
 ```{r}
 #| label: plt-ae-severe-prop-cycle
-#| fig-cap: "Proportion of measured patients experiencing any grade 3+ AE per cycle by HIV status."
+#| fig-cap: "Proportion of measured patients experiencing any grade 3+ ADE per cycle by HIV status."
 
 severe_prop <- ae_cycle_measured |>
   group_by(hiv_status, cycle) |>
@@ -1296,17 +1333,17 @@ ggplot(severe_prop, aes(x = cycle, y = prop_severe, color = hiv_status)) +
   scale_x_continuous(breaks = 1:12) +
   scale_y_continuous(labels = scales::percent, limits = c(0, NA)) +
   labs(
-    title = "Proportion with Severe AE (Grade 3+) per Cycle",
+    title = "Proportion with Severe ADE (Grade 3+) per Cycle",
     x = "Treatment cycle",
-    y = "Proportion with any grade 3+ AE",
+    y = "Proportion with any grade 3+ ADE",
     color = "HIV status"
   ) +
   theme_minimal()
 ```
-Maybe a slightly higher proportion of HIV positive patients have severe AEs than HIV negative, need to do a test to compare over cycles 1-6. As noted before, in cycles 7 and onwards, there is only a single HIV positive patient still receiving treatment.
+Maybe a slightly higher proportion of HIV positive patients have severe ADEs than HIV negative, need to do a test to compare over cycles 1-6. As noted before, in cycles 7 and onwards, there is only a single HIV positive patient still receiving treatment.
 
 
-## Early Severe AEs
+## Early Severe ADEs
 
 Contingency table of severe early adverse events (cycles 1 - `r early_dropout_cycles`)
 ```{r}
@@ -1319,17 +1356,17 @@ table_severe_early |>
   as.data.frame.matrix() |>
   kbl(booktabs = TRUE) |>
   kable_styling(full_width = FALSE, position = "left") |>
-  add_header_above(c("Severe Early AE" = 1, "HIV Status" = 2))
+  add_header_above(c("Severe Early ADE" = 1, "HIV Status" = 2))
 ```
 
 
-## AE Co-occurrence
+## ADE Co-occurrence
 
-Spearman correlation of patient-level max AE grades across AE types. Shows which AE types tend to co-occur at similar severity.
+Spearman correlation of patient-level max ADE grades across ADE types. Shows which ADE types tend to co-occur at similar severity.
 ```{r}
 #| label: prep-ae-correlation
 
-# Patient-level max grade per AE type across all cycles
+# Patient-level max grade per ADE type across all cycles
 ae_cor_data <- ae_long |>
   filter(!is.na(grade)) |>
   group_by(record_id, ae_type) |>
@@ -1355,7 +1392,7 @@ colnames(ae_cor_mat) <- ae_labels[colnames(ae_cor_mat)]
 
 ```{r}
 #| label: plt-ae-correlation-heatmap
-#| fig-cap: "Spearman correlation of max AE grades across all cycles by granular AE type."
+#| fig-cap: "Spearman correlation of max ADE grades across all cycles by granular ADE type."
 #| fig-height: 8
 #| fig-width: 9
 
@@ -1366,7 +1403,7 @@ ggcorrplot(
   lab_size = 2.5,
   colors = c("#2166AC", "white", "#B2182B"),
   tl.cex = 9,
-  title = "AE Co-occurrence (Spearman Correlation of Max Grades)"
+  title = "ADE Co-occurrence (Spearman Correlation of Max Grades)"
 )
 ```
 
@@ -1387,7 +1424,7 @@ ae_cor_mat_grouped <- cor(ae_cor_cols_grouped, use = "pairwise.complete.obs", me
 
 ```{r}
 #| label: plt-ae-correlation-grouped
-#| fig-cap: "Spearman correlation of max AE grades by combined category."
+#| fig-cap: "Spearman correlation of max ADE grades by combined category."
 #| fig-height: 7
 #| fig-width: 8
 
@@ -1398,7 +1435,7 @@ ggcorrplot(
   lab_size = 3,
   colors = c("#2166AC", "white", "#B2182B"),
   tl.cex = 10,
-  title = "AE Co-occurrence by Combined Category"
+  title = "ADE Co-occurrence by Combined Category"
 )
 ```
 
@@ -1406,7 +1443,7 @@ ggcorrplot(
 
 ```{r}
 #| label: tbl-ae-grouped-summary
-#| tbl-cap: "Patient-level AE summaries by combined category and HIV status"
+#| tbl-cap: "Patient-level ADE summaries by combined category and HIV status"
 
 ae_long_grouped |>
   # Factor applied here only, so this table matches the ADE category table.
@@ -1426,12 +1463,12 @@ ae_long_grouped |>
     max_grade = summ_stats(max_grade, mean = FALSE, digits = 0),
     .groups = "drop"
   ) |>
-  rename(`AE Category` = ae_group, `HIV Status` = hiv_status) |>
-  gt(groupname_col = "AE Category") |>
+  rename(`ADE Category` = ae_group, `HIV Status` = hiv_status) |>
+  gt(groupname_col = "ADE Category") |>
   cols_label(
     `HIV Status` = "",
     n = "N",
-    any_ae = "Any AE",
+    any_ae = "Any ADE",
     any_severe = "Any severe",
     max_grade = "Max grade, median (IQR)"
   ) |>
@@ -1447,7 +1484,7 @@ ae_long_grouped |>
 
 show_p <- TRUE
 
-# Patient-level "any event" flag per collapsed AE category (MET-007)
+# Patient-level "any event" flag per collapsed ADE category (MET-007)
 ae_group_pt <- ae_long_grouped |>
   group_by(record_id, ae_group) |>
   summarize(any_event = as.integer(max(grade) > 0), .groups = "drop") |>
@@ -1628,9 +1665,14 @@ emit_buttons(obj)
 ```
 
 
-# Blood Transfusions
+# Management Interventions: Transfusions and G-CSF
+
+Section heading corrected: two of the four tables below are about G-CSF, not
+transfusions. Matches the equivalent heading in `4 - Statistical Analysis.qmd`.
 
 ```{r}
+#| label: prep-mgmt-cycle
+
 # Pull the three management variables to long form
 mgmt_long <- gic_models |>
   select(record_id, hiv_status,
@@ -1682,30 +1724,19 @@ mgmt_cycle <- mgmt_long |>
 
 ```{r}
 #| label: tbl-transfusion-rate
+#| tbl-cap: "Blood transfusion receipt per treatment cycle, by anemia grade and HIV status. Cells are transfused cycles / cycles with a transfusion record (%)."
 #| results: asis
 #| echo: false
 
-transfusion_rate <- mgmt_cycle |>
-  filter(!is.na(anemia_grade)) |>
-  group_by(hiv_status, anemia_grade) |>
-  summarize(
-    n_cycles = n(),
-    n_transfused = sum(transfusion_given == 1, na.rm = TRUE),
-    .groups = "drop"
-  ) |>
-  mutate(cell = paste0(n_transfused, "/", n_cycles, " (",
-                       round(100 * n_transfused / n_cycles, 1), "%)")) |>
-  select(anemia_grade, hiv_status, cell) |>
-  pivot_wider(names_from = hiv_status, values_from = cell, values_fill = "0/0 (—)") |>
-  rename(`Anemia grade` = anemia_grade)
+transfusion_rate <- mgmt_rate_table(
+  mgmt_cycle, "anemia_grade", "transfusion_given", "Anemia grade"
+)
 
-ft <- transfusion_rate |>
-  flextable() |>
-  add_header_row(values = c("", "Transfused / cycles (%)"), colwidths = c(1, 2)) |>
-  theme_booktabs() |>
-  align(align = "center", part = "all") |>
-  align(j = 1, align = "left", part = "all") |>
-  autofit()
+ft <- mgmt_rate_flextable(
+  transfusion_rate,
+  spanner  = "Transfused / cycles (%)",
+  footnote = "Denominator is cycles with a recorded transfusion decision."
+)
 
 obj <- save_table(slug = "transfusion_rate_by_anemia_hiv", df = transfusion_rate, ft = ft)
 pub_objects_desc$transfusion_rate_by_anemia_hiv <- obj
@@ -1716,9 +1747,12 @@ emit_buttons(obj)
 
 ```{r}
 #| label: tbl-transfusion-units
+#| tbl-cap: "Units of blood administered among transfused cycles, by anemia grade and HIV status."
 #| results: asis
 #| echo: false
 
+# Kept separate from the helper above: this one summarises a continuous
+# quantity (units) rather than a rate, so the cell contents differ.
 transfusion_units_tbl <- mgmt_cycle |>
   filter(transfusion_given == 1, !is.na(anemia_grade)) |>
   group_by(hiv_status, anemia_grade) |>
@@ -1728,15 +1762,14 @@ transfusion_units_tbl <- mgmt_cycle |>
   ) |>
   select(anemia_grade, hiv_status, cell) |>
   pivot_wider(names_from = hiv_status, values_from = cell, values_fill = "—") |>
+  arrange(anemia_grade) |>
   rename(`Anemia grade` = anemia_grade)
 
-ft <- transfusion_units_tbl |>
-  flextable() |>
-  add_header_row(values = c("", "Units, median (IQR) [n cycles]"), colwidths = c(1, 2)) |>
-  theme_booktabs() |>
-  align(align = "center", part = "all") |>
-  align(j = 1, align = "left", part = "all") |>
-  autofit()
+ft <- mgmt_rate_flextable(
+  transfusion_units_tbl,
+  spanner  = "Units, median (IQR) [n cycles]",
+  footnote = "Restricted to cycles in which a transfusion was given."
+)
 
 obj <- save_table(slug = "transfusion_units_by_anemia_hiv", df = transfusion_units_tbl, ft = ft)
 pub_objects_desc$transfusion_units_by_anemia_hiv <- obj
@@ -1745,53 +1778,120 @@ obj$ft
 emit_buttons(obj)
 ```
 
+## G-CSF
+
+<!-- ::: {.callout-important title="Open question: which severity definition indicates G-CSF?"} -->
+<!-- The three tables below use three different severity definitions, and none of -->
+<!-- them is obviously the right one for the paper. -->
+
+<!-- Tinashe's position (13-Jul-2026) is that **grade 2 or higher in either -->
+<!-- neutropenia or leukopenia** constitutes an indication for G-CSF, since -->
+<!-- neutropenia is a component of leukopenia and either can prompt support. -->
+
+<!-- Measured against that: -->
+
+<!-- - **Max neutropenia/leukopenia grade** matches the stated indication, and is -->
+<!--   what `4 - Statistical Analysis.qmd` actually models (`gcsf_grade`). It was -->
+<!--   missing here. -->
+<!-- - **Myelosuppression grade** is too broad. That collapsed category also -->
+<!--   contains thrombocytopenia and lymphopenia, neither of which indicates G-CSF, -->
+<!--   so a high grade can be driven by something clinically irrelevant to the -->
+<!--   decision. -->
+<!-- - **Neutropenia grade alone** is too narrow, and predates the myelosuppression -->
+<!--   collapse. It misses leukopenia entirely. -->
+
+<!-- **To decide:** keep the max-of-both table as the primary and drop the other two, -->
+<!-- or retain one as supplementary. All three are shown for now so the difference -->
+<!-- can be seen rather than argued about. Logged as MET-010. -->
+<!-- ::: -->
+
 ```{r}
-#| label: tbl-gcsf-rate-myelo
+#| label: tbl-gcsf-rate-indication
+#| tbl-cap: "G-CSF administration per treatment cycle, by the maximum of neutropenia and leukopenia grade, and HIV status. Cells are cycles with G-CSF given / cycles with a G-CSF record (%)."
 #| results: asis
 #| echo: false
 
-gcsf_myelo <- mgmt_cycle |>
-  filter(!is.na(myelo_grade)) |>
-  group_by(hiv_status, myelo_grade) |>
-  summarize(
-    n_cycles = n(),
-    n_gcsf = sum(csfg_indicated == 1, na.rm = TRUE),
-    pct_gcsf = round(100 * mean(csfg_indicated == 1, na.rm = TRUE), 1),
-    .groups = "drop"
+# Per-cycle maximum of neutropenia (ANC) and leukopenia (WBC) grade -- the
+# severity that actually corresponds to the stated G-CSF indication.
+#
+# Computed into a local object rather than added to mgmt_cycle, because
+# `4 - Statistical Analysis.qmd` performs the same join in its own
+# prep-mgmt-analysis chunk. Adding it here as well would make that chunk join
+# wbc_grade twice and produce wbc_grade.x / wbc_grade.y. Consolidating the two
+# is worth doing, but deliberately, not as a drive-by.
+gcsf_indication_dat <- mgmt_cycle |>
+  left_join(
+    ae_long |>
+      filter(ae_type == "wbc") |>
+      select(record_id, cycle, wbc_grade = grade),
+    by = c("record_id", "cycle")
   ) |>
-  rename(`HIV status` = hiv_status, `Myelosuppression grade` = myelo_grade,
-         `Cycles` = n_cycles, `G-CSF given` = n_gcsf, `% G-CSF` = pct_gcsf)
+  mutate(gcsf_grade = pmax(anc_grade, wbc_grade, na.rm = TRUE))
 
-obj <- save_table(slug = "gcsf_rate_by_myelo_hiv", df = gcsf_myelo)
-pub_objects_desc$gcsf_rate_by_myelo_hiv <- obj
+gcsf_indication <- mgmt_rate_table(
+  gcsf_indication_dat, "gcsf_grade", "csfg_indicated",
+  "Max neutropenia/leukopenia grade"
+)
+
+ft <- mgmt_rate_flextable(
+  gcsf_indication,
+  spanner  = "G-CSF given / cycles (%)",
+  footnote = "Denominator is cycles with a recorded G-CSF decision."
+)
+
+obj <- save_table(slug = "gcsf_rate_by_indication_hiv", df = gcsf_indication, ft = ft)
+pub_objects_desc$gcsf_rate_by_indication_hiv <- obj
 
 obj$ft
 emit_buttons(obj)
 ```
 
-```{r}
-#| label: tbl-gcsf-rate-anc
-#| results: asis
-#| echo: false
+<!-- ```{r} -->
+<!-- #| label: tbl-gcsf-rate-myelo -->
+<!-- #| tbl-cap: "G-CSF administration per treatment cycle, by myelosuppression grade and HIV status. Cells are cycles with G-CSF given / cycles with a G-CSF record (%)." -->
+<!-- #| results: asis -->
+<!-- #| echo: false -->
 
-gcsf_anc <- mgmt_cycle |>
-  filter(!is.na(anc_grade)) |>
-  group_by(hiv_status, anc_grade) |>
-  summarize(
-    n_cycles = n(),
-    n_gcsf = sum(csfg_indicated == 1, na.rm = TRUE),
-    pct_gcsf = round(100 * mean(csfg_indicated == 1, na.rm = TRUE), 1),
-    .groups = "drop"
-  ) |>
-  rename(`HIV status` = hiv_status, `Neutropenia grade` = anc_grade,
-         `Cycles` = n_cycles, `G-CSF given` = n_gcsf, `% G-CSF` = pct_gcsf)
+<!-- gcsf_myelo <- mgmt_rate_table( -->
+<!--   mgmt_cycle, "myelo_grade", "csfg_indicated", "Myelosuppression grade" -->
+<!-- ) -->
 
-obj <- save_table(slug = "gcsf_rate_by_anc_hiv", df = gcsf_anc)
-pub_objects_desc$gcsf_rate_by_anc_hiv <- obj
+<!-- ft <- mgmt_rate_flextable( -->
+<!--   gcsf_myelo, -->
+<!--   spanner  = "G-CSF given / cycles (%)", -->
+<!--   footnote = "Denominator is cycles with a recorded G-CSF decision." -->
+<!-- ) -->
 
-obj$ft
-emit_buttons(obj)
-```
+<!-- obj <- save_table(slug = "gcsf_rate_by_myelo_hiv", df = gcsf_myelo, ft = ft) -->
+<!-- pub_objects_desc$gcsf_rate_by_myelo_hiv <- obj -->
+
+<!-- obj$ft -->
+<!-- emit_buttons(obj) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #| label: tbl-gcsf-rate-anc -->
+<!-- #| tbl-cap: "G-CSF administration per treatment cycle, by neutropenia (ANC) grade and HIV status. Cells are cycles with G-CSF given / cycles with a G-CSF record (%)." -->
+<!-- #| results: asis -->
+<!-- #| echo: false -->
+
+<!-- gcsf_anc <- mgmt_rate_table( -->
+<!--   mgmt_cycle, "anc_grade", "csfg_indicated", "Neutropenia grade" -->
+<!-- ) -->
+
+<!-- ft <- mgmt_rate_flextable( -->
+<!--   gcsf_anc, -->
+<!--   spanner  = "G-CSF given / cycles (%)", -->
+<!--   footnote = "Denominator is cycles with a recorded G-CSF decision." -->
+<!-- ) -->
+
+<!-- obj <- save_table(slug = "gcsf_rate_by_anc_hiv", df = gcsf_anc, ft = ft) -->
+<!-- pub_objects_desc$gcsf_rate_by_anc_hiv <- obj -->
+
+<!-- obj$ft -->
+<!-- emit_buttons(obj) -->
+<!-- ``` -->
+
 
 
 # Save Data for Analysis
