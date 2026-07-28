@@ -27,7 +27,7 @@ Raw data, processed `.rds` files, tables, figures, and rendered `.html` docs all
 
 ## System Details
 
--   **R Version**: 4.5.0
+-   **R Version**: 4.6.0
 -   **OS**: Windows 11 Pro (E. Duke Chase)
 
 ## How to Reproduce the Analysis

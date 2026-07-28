@@ -12,10 +12,20 @@
   - [x] Captions added across `5 - Publication Figures.qmd` (now complete) + explanatory prose
   - [x] Added `snapshot_outputs()` — archives shared tables/ and figures/ before a render can overwrite Tinashe's hand-edited docx files
   - [ ] **Check OneDrive web "Modified By" + version history before first render** — find out what Tinashe has edited, recover anything already clobbered
-  - [x] Durable fix done: code now writes only to `generated/`; `tables/` and `figures/` are human-only. CSVs split into `generated/csv/`, docx filenames now human-readable via the `output_names` lookup
-  - [ ] Tell Tinashe the layout changed — edited copies stay in `tables/`, fresh output appears in `generated/tables/`
-  - [ ] Delete `_freeze/` before the next full render, or doc 6's DAG figures stay in the old location
-  - [ ] **Render the full pipeline** — all of the above is unverified, written without R available
+  - [x] Reworked output layout again: `tables/generated/` (docx) + `tables/csv/`, figures stay flat with `figures/svgs/`. Confirmed all 7 publication figures emit SVGs for submission
+  - [x] P3.1 partial: reconciled `docs/statistical-methods-draft.md` against the current code — stale filenames, R/package versions, CTCAE v5, the two transfusion strata, revised G-CSF model, cycle completion, separation screening, HIV-stratified dropout analysis
+  - [ ] P3.1 remainder: the draft is an outline, not prose. Needs the bracketed numbers filled in and turning into manuscript text
+  - [ ] Align "AE" -> "ADE" in qmd prose and captions (variable names stay as-is)
+  - [ ] Add explanations to publication figures document (mine to write)
+  - [ ] Tell Tinashe the layout changed — edited copies stay in `tables/`, fresh output appears in `tables/generated/`
+  - [x] **Deleted `_freeze/` and rendered the whole pipeline clean**
+  - [x] Dropped the automatic "HIV Status" spanning header from Table 1 and the ADE table
+  - [x] R version confirmed as 4.6.0; corrected README (said 4.5.0) and the methods draft
+  - [x] Reordered ADE categories: haematologic, electrolyte, hepatic (CBC/BMP/LFT panel order) instead of alphabetical, so hypo/hyper pairs sit together. Applied to both the ADE category table and the grouped summary table
+  - [x] Added `_dependencies.R` at project root so renv sees the runtime-only deps (broom.mixed + the easystats tidier chain). Never sourced, exists purely for the scanner
+  - [ ] Run `renv::snapshot()` to get those into the lockfile, then re-render to confirm nothing broke
+  - [ ] Then `renv::clean()` is safe for the usethis and future/furrr stacks (confirmed unused)
+  - [ ] renv version mismatch: 1.2.3 loaded, 1.1.5 recorded — `renv::record("renv@1.2.3")`
   - [ ] Decide `model_any_basic`: delete or keep as the source of the "100% ADE rate in HIV+" claim
   - [ ] Confirm with Audrey: is "all patients who received a transfusion" the patient-level stratum implemented, or something else?
   - [ ] Sort out CRLF churn — every file shows as fully modified in git, hiding real diffs

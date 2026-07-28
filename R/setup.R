@@ -426,40 +426,45 @@ describe_dropped_levels <- function(data) {
 
 # --- Output paths ----------------------------------------------------------
 #
-# Generated output goes under <OneDrive>/generated/ and nothing else writes
-# there. It is disposable: every render overwrites it in full.
+#   tables/              hand-edited / merged copies. Code NEVER writes here.
+#   tables/generated/    .docx tables, overwritten in full every render
+#   tables/csv/          .csv versions of the same tables
+#   figures/             .png figures
+#   figures/svgs/        .svg figures, for journal submission
 #
-#   generated/tables/        .docx tables
-#   generated/csv/           .csv versions of the same tables
-#   generated/figures/       .png figures
-#   generated/figures/svgs/  .svg figures
-#
-# The existing tables/ and figures/ folders are now human territory. Code never
-# touches them, so hand edits (Tinashe's, or merged versions) are safe there.
-# Merging new generated output into them is a manual step, deliberately.
+# Tables are the only output that gets edited by hand, so they are the only
+# ones that need a generated/ subfolder keeping machine output separate.
+# Figures are regenerated wholesale and nobody edits them, so they stay flat.
 
-generated_path <- function(...) onedrive_path("generated", ...)
+tables_edited_path    <- function(...) onedrive_path("tables", ...)
+tables_generated_path <- function(...) onedrive_path("tables", "generated", ...)
+tables_csv_path       <- function(...) onedrive_path("tables", "csv", ...)
+figures_png_path      <- function(...) onedrive_path("figures", ...)
+figures_svg_path      <- function(...) onedrive_path("figures", "svgs", ...)
 
-# Creates the generated tree on first use and drops a note in it, so anyone
-# browsing the shared folder can tell at a glance that it is machine output.
-ensure_generated_dirs <- function() {
-  dirs <- c(generated_path("tables"), generated_path("csv"),
-            generated_path("figures"), generated_path("figures", "svgs"))
+# Creates the output tree on first use and drops a note in the two generated
+# table folders, so anyone browsing the shared folder can tell at a glance
+# which files are safe to edit.
+ensure_output_dirs <- function() {
+  dirs <- c(tables_edited_path(), tables_generated_path(), tables_csv_path(),
+            figures_png_path(), figures_svg_path())
   for (d in dirs) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
 
-  readme <- generated_path("README.txt")
-  if (!file.exists(readme)) {
-    writeLines(c(
-      "AUTO-GENERATED OUTPUT -- DO NOT EDIT THESE FILES.",
-      "",
-      "Everything in this folder is written by the analysis code and is",
-      "overwritten in full every time the pipeline is rendered. Any edit made",
-      "here will be lost.",
-      "",
-      "Edited and reviewed versions live one level up, in ../tables and",
-      "../figures. Those folders are never written to by code."
-    ), readme)
+  note <- c(
+    "AUTO-GENERATED -- DO NOT EDIT FILES IN THIS FOLDER.",
+    "",
+    "Everything here is written by the analysis code and is overwritten in",
+    "full every time the pipeline is rendered. Any edit made here will be",
+    "lost on the next render.",
+    "",
+    "Edited and reviewed copies belong one level up, in the tables/ folder",
+    "itself. Nothing in the codebase writes there."
+  )
+  for (d in c(tables_generated_path(), tables_csv_path())) {
+    readme <- file.path(d, "README.txt")
+    if (!file.exists(readme)) writeLines(note, readme)
   }
+
   invisible(dirs)
 }
 
@@ -467,9 +472,9 @@ ensure_generated_dirs <- function() {
 # change; anything missing falls back to a prettified slug, so a new
 # save_table() call still produces a readable name without an entry here.
 #
-# Edit these freely -- they are only filenames, and changing one just means the
-# next render writes a new file rather than overwriting the old one. Delete
-# stale files from generated/ if a name changes.
+# Edit these freely -- they are only filenames. Changing one means the next
+# render writes a new file rather than overwriting the old one, so delete the
+# stale file from tables/generated/ if you rename.
 output_names <- c(
   # Tables
   table1_descriptive             = "Table - Patient characteristics by HIV status",
@@ -516,15 +521,15 @@ output_filename <- function(slug) {
 # derived automatically if not supplied), or `df`/`ft` directly for anything
 # else (e.g. a plain data frame with a hand-built flextable).
 save_table <- function(slug, gtsum = NULL, df = NULL, ft = NULL) {
-  ensure_generated_dirs()
+  ensure_output_dirs()
 
   if (is.null(ft) && !is.null(gtsum)) ft <- as_flex_table(gtsum)
   if (is.null(df) && !is.null(gtsum)) df <- as_tibble(gtsum)
   if (is.null(ft)) ft <- df |> flextable() |> theme_booktabs() |> autofit()
 
   fname     <- output_filename(slug)
-  csv_path  <- file.path(generated_path("csv"),    paste0(fname, ".csv"))
-  docx_path <- file.path(generated_path("tables"), paste0(fname, ".docx"))
+  csv_path  <- file.path(tables_csv_path(),       paste0(fname, ".csv"))
+  docx_path <- file.path(tables_generated_path(), paste0(fname, ".docx"))
 
   if (!is.null(df)) write.csv(df, csv_path, row.names = FALSE)
   save_as_docx(ft, path = docx_path)
@@ -535,11 +540,11 @@ save_table <- function(slug, gtsum = NULL, df = NULL, ft = NULL) {
 save_figure <- function(plot, slug, width = 8, height = NULL, dpi = 300) {
   if (is.null(height)) height <- width * 0.618
 
-  ensure_generated_dirs()
+  ensure_output_dirs()
 
   fname    <- output_filename(slug)
-  png_path <- file.path(generated_path("figures"), paste0(fname, ".png"))
-  svg_path <- file.path(generated_path("figures", "svgs"), paste0(fname, ".svg"))
+  png_path <- file.path(figures_png_path(), paste0(fname, ".png"))
+  svg_path <- file.path(figures_svg_path(), paste0(fname, ".svg"))
 
   ggsave(png_path, plot = plot, width = width, height = height, dpi = dpi)
   ggsave(svg_path, plot = plot, width = width, height = height)
@@ -569,40 +574,41 @@ emit_buttons <- function(obj) {
 
 # --- Protecting hand-edited output -----------------------------------------
 #
-# As of 2026-07-27 code writes only to generated/, so tables/ and figures/ are
-# no longer overwritten by a render. This snapshot is therefore no longer
-# protecting against the pipeline -- it is a backup of the hand-curated folders
-# themselves, which are now the most valuable and least reproducible thing in
-# the project. It covers a bad manual merge, an accidental deletion, or a sync
-# conflict. generated/ is deliberately not archived: it is reproducible.
+# Code writes only to tables/generated/, tables/csv/ and figures/, so a render
+# no longer overwrites anything edited by hand. This is therefore a backup of
+# the hand-merged copies sitting directly in tables/ -- now the least
+# reproducible thing in the project. It covers a bad manual merge, an
+# accidental deletion, or a OneDrive sync conflict.
 #
-# Keyed to the hour: sourcing this file once per document during a full
+# Deliberately archives only the files at the top level of tables/. The
+# generated/ and csv/ subfolders are machine output and reproducible, so
+# copying them every hour would just bloat a synced folder for nothing.
+#
+# Keyed to the hour, so sourcing this file once per document during a full
 # pipeline render produces one snapshot, not six. Set GIC_SKIP_SNAPSHOT=1 in
 # .Renviron to disable.
-snapshot_outputs <- function(dirs = c("tables", "figures"), keep = 10,
-                             quiet = FALSE) {
+snapshot_outputs <- function(keep = 10, quiet = FALSE) {
   if (Sys.getenv("GIC_SKIP_SNAPSHOT") == "1") return(invisible(NULL))
+
+  src <- onedrive_path("tables")
+  if (!dir.exists(src)) return(invisible(NULL))
+
+  files <- list.files(src, full.names = TRUE, recursive = FALSE)
+  files <- files[!dir.exists(files)]
+  if (length(files) == 0) return(invisible(NULL))
 
   archive_root <- onedrive_path("_output_archive")
   dest <- file.path(archive_root, format(Sys.time(), "%Y-%m-%d_%H"))
-
   if (dir.exists(dest)) return(invisible(dest))
-
-  present <- dirs[dir.exists(onedrive_path(dirs))]
-  if (length(present) == 0) return(invisible(NULL))
 
   ok <- tryCatch({
     dir.create(dest, recursive = TRUE, showWarnings = FALSE)
-    for (d in present) {
-      file.copy(onedrive_path(d), dest, recursive = TRUE, copy.date = TRUE)
-    }
+    file.copy(files, dest, copy.date = TRUE)
     TRUE
   }, error = function(e) {
-    # Never let a snapshot failure block a render -- but be loud about it,
-    # because it means this render is unprotected.
+    # Never let a snapshot failure block a render -- but be loud about it.
     warning("Output snapshot FAILED (", conditionMessage(e),
-            "). This render may overwrite hand-edited files. ",
-            "A file open in Word is the usual cause.", call. = FALSE)
+            "). A file open in Word is the usual cause.", call. = FALSE)
     FALSE
   })
 
@@ -614,7 +620,7 @@ snapshot_outputs <- function(dirs = c("tables", "figures"), keep = 10,
     unlink(snaps[seq_len(length(snaps) - keep)], recursive = TRUE)
   }
 
-  if (!quiet) message("Output snapshot: ", dest)
+  if (!quiet) message("Snapshot of hand-edited tables: ", dest)
   invisible(dest)
 }
 

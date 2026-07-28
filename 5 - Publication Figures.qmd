@@ -4,7 +4,7 @@ bibliography: references.bib
 format:
   html:
     code-links:
-      - text: GitHub Repo
+      - text: GitHub Page
         icon: github
         href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/5%20-%20Publication%20Figures.qmd"
 ---

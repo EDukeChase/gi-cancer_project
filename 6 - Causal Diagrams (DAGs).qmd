@@ -3,7 +3,7 @@ title: "Causal Diagrams (DAGs)"
 format:
   html:
     code-links:
-      - text: GitHub Repo
+      - text: GitHub Page
         icon: github
         href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/6%20-%20Causal%20Diagrams%20%28DAGs%29.qmd"
 ---

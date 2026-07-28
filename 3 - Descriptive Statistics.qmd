@@ -7,7 +7,7 @@ execute:
 format:
   html:
     code-links:
-      - text: GitHub Repo
+      - text: GitHub Page
         icon: github
         href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/3%20-%20Descriptive%20Statistics.qmd"
 ---
@@ -89,6 +89,29 @@ ae_long_grouped <- ae_long |>
     grade = max(grade),
     .groups = "drop"
   )
+
+# Display order for adverse event categories in tables and figures.
+#
+# Follows the order clinical laboratory panels are normally reported in --
+# haematology (CBC), then electrolytes (BMP), then liver function (LFT) --
+# which also matches this paper's own framing of haematological and hepatic
+# toxicity. Within the electrolyte pairs, hypo- precedes hyper- so that the two
+# directions of the same derangement sit next to each other; alphabetical order
+# separated them, which is what prompted this.
+#
+# This is a *display* order only. ae_group is deliberately left as a character
+# vector rather than being made an ordered factor here, because it is renamed
+# to ae_type in "4 - Statistical Analysis.qmd" and used for `.data[[...]]`
+# column lookups -- indexing with a factor would silently select by integer
+# code and return the wrong column.
+ae_group_order <- c(
+  # Haematologic
+  "Anemia", "Myelosuppression",
+  # Electrolyte
+  "Hyponatremia", "Hypernatremia", "Hypokalemia", "Hyperkalemia",
+  # Hepatic
+  "Hypoalbuminemia", "Hyperbilirubinemia", "Raised transaminases"
+)
 
 # Cycle-level summaries
 cycle_summary <- ae_long |>
@@ -1386,6 +1409,9 @@ ggcorrplot(
 #| tbl-cap: "Patient-level AE summaries by combined category and HIV status"
 
 ae_long_grouped |>
+  # Factor applied here only, so this table matches the ADE category table.
+  # Scoped to this pipeline deliberately -- see the note by ae_group_order.
+  mutate(ae_group = factor(ae_group, levels = ae_group_order)) |>
   group_by(ae_group, record_id) |>
   summarize(max_grade = max(grade), .groups = "drop") |>
   left_join(
@@ -1432,7 +1458,17 @@ ae_group_pt <- ae_long_grouped |>
     names_prefix = "aegrp_"
   )
 
-aegrp_cols <- names(ae_group_pt)[startsWith(names(ae_group_pt), "aegrp_")]
+# Row order follows ae_group_order, not the alphabetical column order that
+# pivot_wider happens to produce. gtsummary orders rows by `include`, not by
+# the `label` list, so this is the argument that matters.
+aegrp_cols <- paste0("aegrp_", ae_group_order)
+
+# Fail loudly rather than silently dropping a category if the grouping map
+# gains or loses a level.
+stopifnot(setequal(
+  aegrp_cols,
+  names(ae_group_pt)[startsWith(names(ae_group_pt), "aegrp_")]
+))
 
 # Single source data frame with all factor conversions
 tbl_desc_dat <- gic_models |>
@@ -1487,15 +1523,14 @@ t_patient <- mk_block(
 )
 
 t_disease <- mk_block(
-  c("cancer_site", "histology", "cancer_stage"),
-  list(cancer_site ~ "Cancer site", histology ~ "Histology", cancer_stage ~ "Cancer stage")
+  c("cancer_site", "cancer_stage"),
+  list(cancer_site ~ "Cancer site", cancer_stage ~ "Cancer stage")
 )
 
 t_treatment <- mk_block(
-  c("tx_intent", "tx_concurrent_rtx", "chemo_type", "cycles_prescribed", "cycles_given"),
-  list(tx_intent ~ "Treatment intent", tx_concurrent_rtx ~ "Concurrent radiotherapy",
-       chemo_type ~ "Chemotherapy type", cycles_prescribed ~ "Cycles prescribed",
-       cycles_given ~ "Cycles received"),
+  c("tx_intent",  "chemo_type", "cycles_prescribed", "cycles_given"),
+  list(tx_intent ~ "Treatment intent", chemo_type ~ "Chemotherapy type", 
+       cycles_prescribed ~ "Cycles prescribed", cycles_given ~ "Cycles received"),
   types = list(cycles_prescribed ~ "continuous", cycles_given ~ "continuous")
 )
 
@@ -1508,9 +1543,8 @@ t_comorbid <- mk_block(
 )
 
 t_history <- mk_block(
-  c("hx_etoh", "hx_tobacco", "hx_cancer", "residence"),
-  list(hx_etoh ~ "Alcohol history", hx_tobacco ~ "Tobacco history",
-       hx_cancer ~ "Prior cancer", residence ~ "Residence")
+  c("hx_etoh", "hx_tobacco", "residence"),
+  list(hx_etoh ~ "Alcohol history", hx_tobacco ~ "Tobacco history",residence ~ "Residence")
 )
 ```
 
@@ -1521,14 +1555,18 @@ t_history <- mk_block(
 #| echo: false
 
 tbl_main_gts <- tbl_stack(
-  list(t_patient, t_disease, t_treatment, t_comorbid, t_history)
+  list(t_patient, t_disease, t_treatment, t_history)
 ) |>
   modify_header(
     label  ~ "**Variable**",
     stat_0 ~ "**Total** \nN = {N}",
     stat_1 ~ "**HIV Negative** \nN = {n}",
     stat_2 ~ "**HIV Positive** \nN = {n}"
-  )
+  ) |>
+  # gtsummary 2.x adds a spanning "**HIV Status**" header over the by-variable
+  # columns automatically. Dropped here: the column headers already say HIV
+  # Negative / HIV Positive, so the spanner is redundant and eats a row.
+  modify_spanning_header(everything() ~ NA_character_)
 
 ft_main <- tbl_main_gts |>
   as_flex_table() |>
@@ -1554,13 +1592,13 @@ t_ae <- mk_block(
   list(
     `aegrp_Anemia`               ~ "Anemia",
     `aegrp_Myelosuppression`     ~ "Myelosuppression",
-    `aegrp_Raised transaminases` ~ "Raised transaminases",
-    `aegrp_Hyponatremia`   ~ "Hyponatremia",
-    `aegrp_Hypernatremia`   ~ "Hypernatremia",
-    `aegrp_Hypokalemia`   ~ "Hypokalemia",
-    `aegrp_Hyperkalemia`   ~ "Hyperkalemia",
+    `aegrp_Hyponatremia`         ~ "Hyponatremia",
+    `aegrp_Hypernatremia`        ~ "Hypernatremia",
+    `aegrp_Hypokalemia`          ~ "Hypokalemia",
+    `aegrp_Hyperkalemia`         ~ "Hyperkalemia",
     `aegrp_Hypoalbuminemia`      ~ "Hypoalbuminemia",
-    `aegrp_Hyperbilirubinemia`   ~ "Hyperbilirubinemia"
+    `aegrp_Hyperbilirubinemia`   ~ "Hyperbilirubinemia",
+    `aegrp_Raised transaminases` ~ "Raised transaminases"
   )
 )
 
@@ -1570,7 +1608,11 @@ tbl_ae_gts <- tbl_stack(list(t_ae)) |>
     stat_0 ~ "**Total** \nN = {N}",
     stat_1 ~ "**HIV Negative** \nN = {n}",
     stat_2 ~ "**HIV Positive** \nN = {n}"
-  )
+  ) |>
+  # gtsummary 2.x adds a spanning "**HIV Status**" header over the by-variable
+  # columns automatically. Dropped here: the column headers already say HIV
+  # Negative / HIV Positive, so the spanner is redundant and eats a row.
+  modify_spanning_header(everything() ~ NA_character_)
 
 ft_ae <- tbl_ae_gts |>
   as_flex_table() |>

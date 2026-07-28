@@ -58,3 +58,14 @@ the stale file from `generated/` if you rename.
 - `ensure_generated_dirs()` — creates the tree and drops the README on first use.
 - `output_filename(slug)` — applies the lookup and strips characters Windows
   forbids in filenames.
+
+## Note on `_dependencies.R` (project root)
+
+renv discovers dependencies by static analysis, so it cannot see packages that
+other packages load at runtime. `tbl_regression()` on a `glmer`/`lmer` fit is
+the case that bites here: gtsummary hands off to broom.helpers, which reaches
+for a mixed-model tidier that appears nowhere in this codebase.
+
+`_dependencies.R` at the project root exists solely so renv's scanner records
+those packages. It is never sourced. If `renv::clean()` proposes removing
+something and a render then breaks, add it there and re-snapshot.

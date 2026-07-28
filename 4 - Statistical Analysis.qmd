@@ -7,7 +7,7 @@ format:
   html:
     toc-depth: 4
     code-links:
-      - text: GitHub Repo
+      - text: GitHub Page
         icon: github
         href: "https://github.com/EDukeChase/gi-cancer_project/blob/main/4%20-%20Statistical%20Analysis.qmd"
 ---
