@@ -829,36 +829,155 @@ gic_validated |>
   ylab("Proportion") + labs(title = "Chemo Cycles Prescribed by HIV Status")
 ```
 
-Proportion of patients who completed treatment cycle $k$ from the population of patients prescribed at least $k$ cycles.
+## Cycle completion
 ```{r}
-#| label: plt-cycle-completion
+#| label: prep-cycle-completion
 
-survival_data <- gic_validated |>
-  # for each patient, create a row for each cycle they were prescribed
+# One row per patient per prescribed cycle, flagged for whether that cycle was
+# actually received.
+cycle_long <- gic_validated |>
   rowwise() |>
   mutate(cycle = list(1:cycles_prescribed)) |>
   unnest(cycle) |>
-  # mark whether they actually received each cycle
-  mutate(received = cycle <= cycles_given) |>
-  # for each HIV status and cycle number, get the proportion who received it
+  ungroup() |>
+  mutate(received = cycle <= cycles_given)
+
+# Pointwise Wilson score interval. Wilson rather than Wald because the
+# proportions run close to 1 at early cycles and close to 0 at late ones, where
+# a Wald interval overshoots [0, 1]. Note these are *pointwise* intervals: the
+# same patients contribute at successive cycles, so the bands should not be
+# read as a simultaneous confidence region for the whole curve.
+add_wilson_ci <- function(d, x = n_received, n = n_prescribed, conf = 0.95) {
+  z <- qnorm(1 - (1 - conf) / 2)
+  d |>
+    mutate(
+      .p      = {{ x }} / {{ n }},
+      .denom  = 1 + z^2 / {{ n }},
+      .centre = (.p + z^2 / (2 * {{ n }})) / .denom,
+      .half   = z * sqrt(.p * (1 - .p) / {{ n }} +
+                           z^2 / (4 * {{ n }}^2)) / .denom,
+      ci_lo   = pmax(0, .centre - .half),
+      ci_hi   = pmin(1, .centre + .half)
+    ) |>
+    select(-.p, -.denom, -.centre, -.half)
+}
+
+survival_data <- cycle_long |>
   group_by(hiv_status, cycle) |>
   summarise(
-    n_prescribed = n(),
+    n_prescribed  = n(),
+    n_received    = sum(received),
     prop_received = mean(received),
     .groups = "drop"
+  ) |>
+  add_wilson_ci()
+
+# Split by number of cycles prescribed (5-Jun-2026, Audrey's first-priority
+# request). Patients prescribed six cycles necessarily drop out at cycle 6,
+# which confounds the pooled curve. Tinashe noted 6, 8 and 12 are the standard
+# prescriptions in his clinic; observed values are 1-6, 8, 11 and 12.
+survival_data_split <- cycle_long |>
+  mutate(
+    rx_group = case_when(
+      cycles_prescribed <= 6  ~ "1-6 cycles prescribed",
+      cycles_prescribed == 8  ~ "8 cycles prescribed",
+      cycles_prescribed >= 11 ~ "11-12 cycles prescribed",
+      # Observed values are 1-6, 8, 11 and 12. This catch-all exists so that a
+      # 7, 9 or 10 appearing after a data refresh shows up as its own facet
+      # instead of silently becoming NA.
+      .default = "Other (7, 9-10 cycles)"
+    ),
+    rx_group = factor(rx_group, levels = c("1-6 cycles prescribed",
+                                           "8 cycles prescribed",
+                                           "11-12 cycles prescribed",
+                                           "Other (7, 9-10 cycles)"))
+  ) |>
+  group_by(rx_group, hiv_status, cycle) |>
+  summarise(
+    n_prescribed  = n(),
+    n_received    = sum(received),
+    prop_received = mean(received),
+    .groups = "drop"
+  ) |>
+  add_wilson_ci() |>
+  mutate(rx_group = fct_drop(rx_group))
+
+# Patient counts per stratum, for the facet strip labels.
+rx_group_n <- survival_data_split |>
+  group_by(rx_group) |>
+  summarise(n_pt = max(n_prescribed), .groups = "drop")
+
+survival_data_split <- survival_data_split |>
+  left_join(rx_group_n, by = "rx_group") |>
+  mutate(rx_facet = paste0(rx_group, "\n(n = ", n_pt, " patients)"),
+         rx_facet = fct_reorder(rx_facet, as.integer(rx_group)))
+```
+
+Proportion of patients who completed treatment cycle $k$ from the population of
+patients prescribed at least $k$ cycles.
+
+::: {.callout-note}
+This figure resembles a Kaplan-Meier curve but is **not** one: there is no
+censoring and no time axis, and each point is a simple proportion among the
+patients prescribed at least that many cycles. It is labelled explicitly to
+avoid that misreading.
+:::
+
+```{r}
+#| label: plt-cycle-completion-split
+#| fig-cap: "Chemotherapy cycle completion by HIV status, stratified by number of cycles prescribed. Splitting on the prescription avoids the artefact in the pooled curve, where patients prescribed six cycles necessarily stop contributing after cycle 6. Shaded bands are pointwise 95% Wilson intervals."
+#| fig-width: 10
+#| fig-height: 4.5
+
+plt_cycle_completion_split <- ggplot(
+  survival_data_split,
+  aes(x = cycle, y = prop_received, color = hiv_status, fill = hiv_status)
+) +
+  geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), alpha = 0.15, color = NA) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 1.8) +
+  facet_wrap(~ rx_facet, scales = "free_x") +
+  scale_x_continuous(breaks = 1:12) +
+  scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+  labs(
+    title = "Chemotherapy Cycle Completion by HIV Status and Cycles Prescribed",
+    x = "Treatment cycle number",
+    y = "Proportion receiving cycle\n(among those prescribed at least that many)",
+    color = "HIV status",
+    fill  = "HIV status"
   )
 
+plt_cycle_completion_split
+
+pub_objects_desc$plt_cycle_completion_split <-
+  save_figure(plt_cycle_completion_split, "plt_cycle_completion_split",
+              width = 10, height = 4.5)
+```
+
+Pooled version, retained for comparison so the team can choose between the two
+before the paper is assembled.
+
+```{r}
+#| label: plt-cycle-completion
+#| fig-cap: "Chemotherapy cycle completion by HIV status, all patients pooled. Shaded bands are pointwise 95% Wilson intervals; the row of counts beneath the panel gives the number of patients prescribed at least k cycles."
+
 # main plot (store it)
-p_main <- ggplot(survival_data, aes(x = cycle, y = prop_received, color = hiv_status)) +
+p_main <- ggplot(survival_data,
+                 aes(x = cycle, y = prop_received,
+                     color = hiv_status, fill = hiv_status)) +
+  geom_ribbon(aes(ymin = ci_lo, ymax = ci_hi), alpha = 0.15, color = NA) +
   geom_line(linewidth = 0.8) +
   geom_point(size = 2) +
   scale_x_continuous(breaks = 1:12) +
   scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
   labs(
     title = "Chemotherapy Cycle Completion by HIV Status",
-    x = NULL,
+    # Explicit x label (5-Jun-2026): without it the lower panel's subtitle
+    # reads as though it labels the main panel's axis.
+    x = "Treatment cycle number",
     y = "Proportion receiving cycle\n(among those prescribed at least that many)",
-    color = "HIV status"
+    color = "HIV status",
+    fill  = "HIV status"
   ) +
   theme(plot.margin = margin(5, 5, 0, 5))
 

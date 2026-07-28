@@ -757,7 +757,7 @@ gic_encoded <- gic_renamed |>
     cancer_site       = factor(cancer_site,
                          levels = c(1, 2, 3, 4, 9, 11),
                          labels = c("Esophagus", "Gastric", 
-                                    "Gastro-esophageal junction", "Gall bladder, Biliary & Pancreas", "Colorectal", "Anal")),
+                                    "Gastro-esophageal junction", "Gallbladder, Biliary & Pancreas", "Colorectal", "Anal")),
     histology         = factor(histology,
                           levels = c(1, 2, 3, 4, 5, 7),
                           labels = c("Adenocarcinoma/carcinoma", 

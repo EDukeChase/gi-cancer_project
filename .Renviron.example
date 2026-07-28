@@ -9,3 +9,7 @@
 #
 GIC_ONEDRIVE_ROOT=C:/path/to/your/OneDrive/Hendricks Lab - Documents/Research Projects/Tinashe Collaborations/gi-cancer_project
 QUARTO_PROFILE=laptop
+#
+# GIC_SKIP_SNAPSHOT (optional): set to 1 to disable the pre-render snapshot of
+#   the shared tables/ and figures/ folders. Leave unset. The snapshot exists
+#   because renders overwrite files Tinashe edits by hand.

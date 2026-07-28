@@ -88,6 +88,22 @@ tidy(model_severe_simple, conf.int = TRUE, exponentiate = TRUE) |>
 
 ### Multivariate Logistic: Full treatment period
 #### Basic logistic model of any adverse events by HIV status
+::: {.callout-important title="Deprecated model — not a result"}
+`model_any_basic` **is not a valid model and must not be read as a finding.**
+Every patient in the HIV-positive group experienced at least one adverse event,
+so the outcome is completely separated on HIV status and the coefficient is
+uninterpretable.
+
+It is retained only because the 100% event rate is itself worth stating in the
+paper. Note that this is why age was *not* added to it under the 15-May-2026
+"add age to remaining models" item: the problem is separation, not a missing
+covariate, and adding covariates to a separated model makes the fit worse.
+
+**Open decision for the team:** delete this chunk outright, or keep it as the
+source of the "100% of HIV-positive patients experienced an adverse event"
+sentence. If kept, it should not appear in the publication figures document.
+:::
+
 ```{r}
 #| label: model-any-basic
 
@@ -96,7 +112,6 @@ model_any_basic <- glm(ae_any_pt ~ hiv_status + cancer_stage + chemo_type + tx_i
 
 summary(model_any_basic)
 ```
-Invalid model due to having a 100% adverse event rate in the HIV-positive group.
 
 #### Basic logicstic model of any severe adverse events by HIV status
 
@@ -125,9 +140,9 @@ model_severe_basic |>
     ),
     pvalue_fun = label_style_pvalue(
       digits = 3
-    ),
-    add_estimate_to_reference_rows = TRUE
+    )
   ) |>
+  tbl_drop_ref_rows() |>
   bold_labels() |>
   italicize_levels() |>
   bold_p() |>
@@ -144,18 +159,18 @@ check_vif(model_severe_basic)
 ```
 :::
 
-Publication version: unadjusted vs adjusted odds ratios for severe AE, side by side.
+Publication version: adjusted odds ratios for severe AE.
 ```{r}
 #| label: tbl-severe-or-comparison
-#| tbl-cap: "Association between HIV status and severe adverse events: unadjusted vs adjusted"
+#| tbl-cap: "Adjusted association between HIV status and severe adverse events. Reference levels are named in each variable label rather than shown as separate rows. Unadjusted estimates were closely consistent with these and are not tabulated."
 
 tbl_severe_simple <- model_severe_simple |>
   tbl_regression(
     exponentiate = TRUE,
     label = list(hiv_status ~ "HIV Status"),
-    pvalue_fun = label_style_pvalue(digits = 3),
-    add_estimate_to_reference_rows = TRUE
+    pvalue_fun = label_style_pvalue(digits = 3)
   ) |>
+  tbl_drop_ref_rows() |>
   bold_p()
 
 tbl_severe_adjusted <- model_severe_basic |>
@@ -169,16 +184,17 @@ tbl_severe_adjusted <- model_severe_basic |>
       age          ~ "Age (years)",
       sex          ~ "Sex"
     ),
-    pvalue_fun = label_style_pvalue(digits = 3),
-    add_estimate_to_reference_rows = TRUE
+    pvalue_fun = label_style_pvalue(digits = 3)
   ) |>
+  tbl_drop_ref_rows() |>
   bold_p()
 
-tbl_severe_or_comparison <- tbl_merge(
-  list(tbl_severe_simple, tbl_severe_adjusted),
-  tab_spanner = c("**Unadjusted OR**", "**Adjusted OR**"),
-  quiet = TRUE
-) |>
+# 5-Jun-2026: the unadjusted estimate is very consistent with the adjusted one,
+# so it is not shown. The unadjusted model is still *fit* above, because the
+# manuscript states that the unadjusted results were similar and that claim
+# needs to be backed by an actual fit. tbl_severe_simple is retained in the
+# environment for that purpose and for the sensitivity appendix.
+tbl_severe_or_comparison <- tbl_severe_adjusted |>
   bold_labels() |>
   italicize_levels()
 
@@ -234,9 +250,9 @@ model_hiv_simple |>
     ),
     pvalue_fun = label_style_pvalue(
       digits = 3
-    ),
-    add_estimate_to_reference_rows = TRUE
+    )
   ) |>
+  tbl_drop_ref_rows() |>
   bold_labels()
 ```
 
@@ -715,9 +731,9 @@ tbl_any_hosp <- model_any_hosp |>
       age          ~ "Age (years)",
       sex          ~ "Sex"
     ),
-    pvalue_fun = label_style_pvalue(digits = 3),
-    add_estimate_to_reference_rows = TRUE
+    pvalue_fun = label_style_pvalue(digits = 3)
   ) |>
+  tbl_drop_ref_rows() |>
   bold_p() |>
   bold_labels() |>
   italicize_levels()
@@ -760,9 +776,9 @@ AE severity has minimal impact on length of stay for either group once someone i
 tbl_hosp_simple <- model_hosp_days_simple |>
   tbl_regression(
     exponentiate = FALSE,
-    label = list(hiv_status ~ "HIV Status"),
-    add_estimate_to_reference_rows = TRUE
-  )
+    label = list(hiv_status ~ "HIV Status")
+  ) |>
+  tbl_drop_ref_rows()
 
 tbl_hosp_adjusted <- model_hosp_days_adjusted |>
   tbl_regression(
@@ -773,9 +789,9 @@ tbl_hosp_adjusted <- model_hosp_days_adjusted |>
       chemo_type   ~ "Chemotherapy Regimen",
       age          ~ "Age (years)",
       sex          ~ "Sex"
-    ),
-    add_estimate_to_reference_rows = TRUE
-  )
+    )
+  ) |>
+  tbl_drop_ref_rows()
 
 tbl_hosp_days_comparison <- tbl_merge(
   list(tbl_hosp_simple, tbl_hosp_adjusted),
@@ -1132,7 +1148,7 @@ ae_early_wide |>
     footnote = paste0(
       "Among patients with cycles given ≤ ", early_dropout_cycles,
       " or prescribed > ", early_dropout_cycles, " cycles. ",
-      "AE types with 0 patients in either group cannot be evaluated in LASSO or univariate models."
+      "AE types with 0 patients in either group cannot be evaluated in univariate models."
     ),
     location = cells_column_spanners()
   ) |>
@@ -1326,6 +1342,143 @@ plt_early_dropout_forest
 pub_objects_analysis$plt_early_dropout_forest <- save_figure(plt_early_dropout_forest, "plt_early_dropout_forest")
 ```
 
+## Early dropout associations split by HIV status
+
+Requested 5-Jun-2026 (Tinashe, agreed by Audrey). The forest plot above adjusts
+for HIV status but reports a single pooled estimate per adverse event. This
+version fits each association **separately within each HIV group**, so readers
+can see whether the two groups track together or whether an apparent difference
+is small-n noise on the HIV-positive side.
+
+Kept as a **separate figure** rather than adding a second bar per row to the
+plot above, so both versions can be compared before one is chosen for the paper.
+
+::: {.callout-warning}
+The HIV-positive group is small. Many of these stratum-specific models will
+either fail to converge or return very wide intervals, and that is itself the
+finding: a difference between groups is only interpretable where both intervals
+are reasonably tight. Models that could not be fit are listed beneath the
+figure rather than silently dropped.
+:::
+
+```{r}
+#| label: fit-univariate-ae-models-byhiv
+
+# One logistic model per (AE type x HIV group). HIV status is not a covariate
+# here because it defines the stratum.
+univariate_by_hiv <- expand_grid(
+  ae_type    = ae_types,
+  hiv_group  = levels(factor(ae_early_wide$hiv_status))
+) |>
+  pmap_dfr(function(ae_type, hiv_group) {
+    base <- tibble(ae_type = ae_type, hiv_group = hiv_group)
+
+    if (ae_type %in% sparse_ae) {
+      return(base |> mutate(note = "Sparse — excluded per coverage check"))
+    }
+
+    dat <- ae_early_wide |>
+      filter(hiv_status == hiv_group,
+             !is.na(.data[[ae_type]]), !is.na(early_dropout))
+
+    # Need both outcome variation and predictor variation to estimate anything.
+    if (nrow(dat) < 10 ||
+        sum(dat$early_dropout) < 5 ||
+        sum(dat$early_dropout == 0) < 5 ||
+        dplyr::n_distinct(dat[[ae_type]]) < 2) {
+      return(base |> mutate(
+        n     = nrow(dat),
+        note  = "Too few events or no grade variation in this stratum"
+      ))
+    }
+
+    fit <- tryCatch(
+      glm(as.formula(paste0("early_dropout ~ `", ae_type, "`")),
+          data = dat, family = binomial),
+      error = function(e) e
+    )
+    if (inherits(fit, "error")) {
+      return(base |> mutate(n = nrow(dat),
+                            note = paste("Model failed:", conditionMessage(fit))))
+    }
+
+    # conf.int = TRUE profiles the likelihood and can fail on separated fits;
+    # fall back to Wald intervals rather than losing the row entirely.
+    td <- tryCatch(
+      tidy(fit, conf.int = TRUE, exponentiate = TRUE),
+      error = function(e) tidy(fit, conf.int = FALSE, exponentiate = TRUE) |>
+        mutate(conf.low = NA_real_, conf.high = NA_real_)
+    )
+
+    td |>
+      filter(str_detect(term, fixed(ae_type))) |>
+      mutate(ae_type = ae_type, hiv_group = hiv_group, n = nrow(dat),
+             note = NA_character_)
+  })
+
+# BH correction applied within each HIV group, since each group is its own
+# family of tests.
+stopifnot("p.value" %in% names(univariate_by_hiv))
+
+univariate_by_hiv <- univariate_by_hiv |>
+  group_by(hiv_group) |>
+  # n is set explicitly so the strata that could not be fit do not inflate the
+  # denominator; p.adjust()'s default n = length(p) would count them as tests.
+  mutate(p_adj = p.adjust(p.value, method = "BH",
+                          n = sum(!is.na(p.value)))) |>
+  ungroup()
+```
+
+```{r}
+#| label: plt-early-dropout-forest-byhiv
+#| fig-cap: "Association between early-cycle toxicity grade and early treatment dropout, estimated separately within each HIV group. Points are odds ratios per one-grade increase; bars are 95% confidence intervals. Compare with the pooled, HIV-adjusted figure above — overlapping intervals across the two groups indicate the pooled estimate is not masking a difference."
+#| fig-height: 6
+
+forest_byhiv_data <- univariate_by_hiv |>
+  filter(is.na(note), !is.na(estimate), ae_type %in% final_ae_columns)
+
+plt_early_dropout_forest_byhiv <- forest_byhiv_data |>
+  ggplot(aes(x = estimate, y = reorder(ae_type, estimate), color = hiv_group)) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray50") +
+  geom_errorbar(aes(xmin = conf.low, xmax = conf.high),
+                height = 0.2, linewidth = 0.7,
+                position = position_dodge(width = 0.6)) +
+  geom_point(size = 2.6, position = position_dodge(width = 0.6)) +
+  scale_x_log10() +
+  labs(
+    x = "Odds Ratio (95% CI) on Log Scale",
+    y = "Adverse Event Type (Max Grade Cycles 1-4)",
+    title = "Early Cycle Toxicities and Early Dropout, by HIV Status",
+    subtitle = "Odds of dropping out per 1-unit increase in toxicity grade, estimated within each group",
+    color = "HIV status"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold")
+  )
+
+plt_early_dropout_forest_byhiv
+
+pub_objects_analysis$plt_early_dropout_forest_byhiv <-
+  save_figure(plt_early_dropout_forest_byhiv,
+              "plt_early_dropout_forest_byhiv", height = 6)
+```
+
+```{r}
+#| label: tbl-early-dropout-byhiv-notfit
+#| tbl-cap: "Adverse event / HIV group combinations that could not be estimated, with the reason. Read alongside the figure above: an adverse event missing from one group is not evidence of no association there."
+
+univariate_by_hiv |>
+  filter(!is.na(note)) |>
+  select(`Adverse event` = ae_type, `HIV group` = hiv_group,
+         n, Reason = note) |>
+  arrange(`Adverse event`, `HIV group`) |>
+  kbl(booktabs = TRUE) |>
+  kable_styling(full_width = FALSE, position = "left")
+```
+
+
 
 # Management Interventions: Transfusions and G-CSF
 
@@ -1335,15 +1488,64 @@ pub_objects_analysis$plt_early_dropout_forest <- save_figure(plt_early_dropout_f
 # Load lmerTest to get p-values for linear mixed models
 library(lmerTest)
 
+# G-CSF can be indicated for either neutropenia (ANC) or leukopenia (WBC).
+# Pull WBC grade per cycle and compute the per-cycle max of the two.
+# Assigned to a new object rather than overwriting mgmt_cycle, so that
+# re-running this chunk in an interactive session does not join wbc_by_cycle on
+# twice and produce wbc_grade.x / wbc_grade.y.
+wbc_by_cycle <- ae_long |>
+  filter(ae_type == "wbc") |>
+  select(record_id, cycle, wbc_grade = grade)
+
+mgmt_cycle_mgmt <- mgmt_cycle |>
+  left_join(wbc_by_cycle, by = c("record_id", "cycle")) |>
+  mutate(gcsf_grade = pmax(anc_grade, wbc_grade, na.rm = TRUE))
+
+mgmt_cycle <- mgmt_cycle_mgmt
+
+# Anemia grade as a collapsed factor. Grades 3 and 4 are pooled throughout
+# because grade 4 is rare and near-universally transfused.
+add_anemia_grade_f <- function(d) {
+  d |>
+    mutate(
+      anemia_grade_f = factor(anemia_grade),
+      anemia_grade_f = fct_collapse(anemia_grade_f, "3-4" = c("3", "4"))
+    )
+}
+
 mgmt_cycle_transfusion <- mgmt_cycle |>
   filter(!is.na(anemia_grade), !is.na(transfusion_given), anemia_grade >= 1) |>
-  mutate(
-    anemia_grade_f = factor(anemia_grade),
-    anemia_grade_f = fct_collapse(anemia_grade_f, "3-4" = c("3", "4"))
-  )
+  add_anemia_grade_f()
 
+# --- Transfusion analysis strata (13-Jul-2026) -----------------------------
+# Stratum 1: every cycle where the patient had a transfusion indication.
+mgmt_grade2plus <- mgmt_cycle |>
+  filter(anemia_grade >= 2, !is.na(transfusion_given)) |>
+  add_anemia_grade_f()
+
+# Stratum 2: every cycle belonging to a patient who was transfused at least
+# once. Restricting to *cycles* where transfusion_given == 1 would leave the
+# outcome constant and unmodellable, so the restriction is applied at the
+# patient level: among patients for whom transfusion was demonstrably
+# available, does HIV status predict receiving one in a given cycle?
+tx_ever_ids <- mgmt_cycle |>
+  filter(transfusion_given == 1) |>
+  distinct(record_id) |>
+  pull(record_id)
+
+mgmt_tx_patients <- mgmt_cycle |>
+  filter(record_id %in% tx_ever_ids, !is.na(transfusion_given),
+         !is.na(anemia_grade)) |>
+  add_anemia_grade_f()
+
+# Retained sensitivity stratum: the 19-Jun-2026 grade-2-exactly specification.
 mgmt_grade2 <- mgmt_cycle |>
-  filter(anemia_grade == 2, !is.na(transfusion_given))
+  filter(anemia_grade == 2, !is.na(transfusion_given)) |>
+  add_anemia_grade_f()
+
+c(grade_2plus  = nrow(mgmt_grade2plus),
+  ever_transfused = nrow(mgmt_tx_patients),
+  grade_2_only = nrow(mgmt_grade2))
 ```
 
 ```{r}
@@ -1360,15 +1562,15 @@ mgmt_cycle_transfusion |>
 
 ```{r}
 mgmt_cycle |>
-  filter(!is.na(anc_grade), !is.na(csfg_indicated)) |>
-  count(anc_grade, hiv_status, csfg_indicated) |>
+  filter(!is.na(gcsf_grade), !is.na(csfg_indicated)) |>
+  count(gcsf_grade, hiv_status, csfg_indicated) |>
   pivot_wider(names_from = csfg_indicated, values_from = n, values_fill = 0) |>
   rename(`No G-CSF` = `0`, `G-CSF given` = `1`) |>
   mutate(
     total = `No G-CSF` + `G-CSF given`,
     pct_gcsf = round(100 * `G-CSF given` / total, 1)
   ) |>
-  arrange(anc_grade, hiv_status)
+  arrange(gcsf_grade, hiv_status)
 ```
 
 
@@ -1376,10 +1578,156 @@ mgmt_cycle |>
 
 
 ## Transfusion Received
-Test likelihood of receiving a transfusion, adjusting for HIV status and grade of anemia in the given cycle
+
+Per the 13-Jul-2026 meeting, the transfusion analysis is fit on **two separate
+strata** and the effect estimates compared for consistency, rather than pooled
+into a single model:
+
+1. **Cycles with anemia grade 2 or higher** — patients who had a clinical
+   indication for transfusion.
+2. **Cycles belonging to patients transfused at least once** — patients for whom
+   transfusion was demonstrably available, so that variation in
+   `transfusion_given` reflects a treatment decision rather than the absence of
+   any indication at all.
+
+The point of running both is that they fail in different directions. Stratum 1
+conditions on indication but includes patients who were never going to be
+transfused because blood was not available; stratum 2 conditions on
+availability but selects on a consequence of the exposure. If the HIV estimate
+is stable across the two, that consistency is the result worth reporting.
+
+::: {.callout-warning collapse="true" title="Interpretation caveat: indication is not the same as eligibility"}
+Grade 2+ patients are *supposed* to receive a transfusion, but blood supply
+constraints in this setting mean a substantial share do not. The grade 2+
+stratum should therefore be read as **"had an indication"**, not "was eligible
+and available for transfusion". A null HIV effect in this stratum is consistent
+with either equal treatment or with supply constraints dominating clinical
+decision-making. This is stated in the table footnote as well.
+:::
+
+The previous grade-2-*exactly* model (19-Jun-2026) is retained below as a
+sensitivity check, since it is the version the earlier results were based on.
+
+```{r}
+#| label: prep-tx-strata
+
+# Levels that separate are identified from the data for each stratum rather
+# than hard-coded, because the exclusions derived for the grade-2-only subset
+# (LCV/5-FU, Gallbladder/Biliary/Pancreas) are not necessarily the levels that
+# separate in a different stratum.
+tx_adj_vars <- c("cancer_stage", "chemo_type", "cancer_site")
+
+mgmt_grade2plus_adj <- mgmt_grade2plus |>
+  drop_separated_levels("transfusion_given", tx_adj_vars)
+
+mgmt_tx_patients_adj <- mgmt_tx_patients |>
+  drop_separated_levels("transfusion_given", tx_adj_vars)
+
+mgmt_grade2_adj <- mgmt_grade2 |>
+  drop_separated_levels("transfusion_given", tx_adj_vars)
+```
+
+```{r}
+#| label: fit-tx-strata
+
+tx_formula <- transfusion_given ~ hiv_status + anemia_grade_f + cancer_stage +
+  chemo_type + cancer_site + (1 | record_id)
+
+model_tx_grade2plus <- glmer(tx_formula, data = mgmt_grade2plus_adj,
+                             family = binomial)
+
+model_tx_patients  <- glmer(tx_formula, data = mgmt_tx_patients_adj,
+                            family = binomial)
+
+# A *named list of strings*, not a list of formulas. gtsummary accepts either,
+# but only this form can be subset by name -- which is needed below, where the
+# anemia-grade entry is dropped for the sensitivity model (anemia grade is
+# constant there, so the variable is not in that model and passing a label for
+# it would error).
+#
+# Do not rewrite this as `list(hiv_status = hiv_status ~ "HIV Status", ...)`.
+# A named list whose *values* are formulas makes broom.helpers read the value
+# as the label itself, and it fails with "Can't combine <list> and <character>".
+tx_labels <- list(
+  hiv_status     = "HIV Status",
+  anemia_grade_f = "Anemia Grade",
+  cancer_stage   = "Cancer Stage",
+  chemo_type     = "Chemotherapy Type",
+  cancer_site    = "Cancer Site"
+)
+
+tbl_tx_grade2plus <- model_tx_grade2plus |>
+  tbl_regression(exponentiate = TRUE, label = tx_labels)
+
+tbl_tx_patients <- model_tx_patients |>
+  tbl_regression(exponentiate = TRUE, label = tx_labels)
+```
+
+```{r}
+#| label: tbl-tx-strata-comparison
+#| tbl-cap: "Odds of Receiving a Blood Transfusion, by Analysis Stratum. Stratum 1 restricts to cycles with a transfusion indication (anemia grade 2+); stratum 2 restricts to patients transfused at least once. Consistency of the HIV estimate across strata, rather than either estimate alone, is the quantity of interest."
+
+tbl_merge(
+  list(tbl_tx_grade2plus, tbl_tx_patients),
+  tab_spanner = c("**Anemia grade 2+**", "**Ever transfused**")
+) |>
+  bold_labels()
+```
+
+Levels excluded for separation, by stratum:
+
+```{r}
+#| label: tbl-tx-strata-exclusions
+
+tibble(
+  stratum = c("Anemia grade 2+", "Ever transfused", "Anemia grade 2 only"),
+  n_cycles = c(nrow(mgmt_grade2plus_adj), nrow(mgmt_tx_patients_adj),
+               nrow(mgmt_grade2_adj)),
+  excluded = c(describe_dropped_levels(mgmt_grade2plus_adj),
+               describe_dropped_levels(mgmt_tx_patients_adj),
+               describe_dropped_levels(mgmt_grade2_adj))
+)
+```
+
+#### Validation: stratified transfusion models
+
+::: {.callout-note collapse="true" title="Validation: model_tx_grade2plus / model_tx_patients"}
+```{r}
+#| label: chk-tx-strata-vif
+
+bind_rows(
+  check_vif(model_tx_grade2plus) |> mutate(stratum = "Anemia grade 2+"),
+  check_vif(model_tx_patients)   |> mutate(stratum = "Ever transfused")
+) |>
+  relocate(stratum)
+```
+
+A "VIF not computable" result most likely reflects residual sparse-cell
+rank-deficiency in these small subsets rather than a coding error.
+
+```{r}
+#| label: chk-tx-strata-separation
+
+bind_rows(
+  check_separation(model_tx_grade2plus)$coefs |>
+    mutate(stratum = "Anemia grade 2+"),
+  check_separation(model_tx_patients)$coefs |>
+    mutate(stratum = "Ever transfused")
+) |>
+  relocate(stratum) |>
+  arrange(desc(extreme))
+```
+:::
+
+### Sensitivity: anemia grade 2 only
+
+The 19-Jun-2026 specification, kept so the grade 2+ result can be checked
+against the estimates the team has already seen. Anemia grade is constant here
+and so is dropped from the model.
+
 ```{r}
 #| label: model-transfusion-given
-#| tbl-cap: "Odds of Receiving a Blood Transfusion (Anemia Grade 2 Only)"
+#| tbl-cap: "Sensitivity Analysis: Odds of Receiving a Blood Transfusion, Anemia Grade 2 Only (Unadjusted vs Adjusted)"
 
 model_tx_unadj <- glmer(
   transfusion_given ~ hiv_status + (1 | record_id),
@@ -1387,67 +1735,34 @@ model_tx_unadj <- glmer(
 )
 
 model_tx_grade2 <- glmer(
-  transfusion_given ~ hiv_status + chemo_type + cancer_site + (1 | record_id),
-  data = mgmt_grade2, family = binomial
+  transfusion_given ~ hiv_status + cancer_stage + chemo_type + cancer_site +
+    (1 | record_id),
+  data = mgmt_grade2_adj, family = binomial
 )
 
-tbl_unadj <- model_tx_unadj |>
-  tbl_regression(
-    exponentiate = TRUE,
-    label = list(hiv_status ~ "HIV Status")
-  )
-
-tbl_adj <- model_tx_grade2 |>
-  tbl_regression(
-    exponentiate = TRUE,
-    label = list(
-      hiv_status ~ "HIV Status",
-      chemo_type ~ "Chemotherapy Type",
-      cancer_site ~ "Cancer Site"
-    )
-  )
-
 tbl_merge(
-  list(tbl_unadj, tbl_adj),
+  list(
+    model_tx_unadj |>
+      tbl_regression(exponentiate = TRUE,
+                     label = list(hiv_status ~ "HIV Status")),
+    model_tx_grade2 |>
+      tbl_regression(exponentiate = TRUE,
+                     label = tx_labels[setdiff(names(tx_labels), "anemia_grade_f")])
+  ),
   tab_spanner = c("**Unadjusted**", "**Adjusted**")
 ) |>
   bold_labels()
 ```
 
 #### Validation: model_tx_grade2
+
 ::: {.callout-note collapse="true" title="Validation: model_tx_grade2"}
 ```{r}
 #| label: chk-tx-grade2-vif
 
 check_vif(model_tx_grade2)
 ```
-Fit on the anemia-grade-2-only subset (`mgmt_grade2`), which is small — a "VIF not computable" result above most likely reflects separation/rank-deficiency from sparse `chemo_type`/`cancer_site` cells in that subset rather than a coding error.
 :::
-
-```{r}
-#| label: model-transfusion-given-withoutanemia
-#| tbl-cap: "Logistic Mixed Model: Odds of Receiving a Blood Transfusion"
-
-model_tx_given <- glmer(
-  transfusion_given ~ hiv_status + (1 | record_id),
-  data = mgmt_cycle |> filter(!is.na(anemia_grade)),
-  family = binomial
-)
-
-model_tx_given |>
-  tbl_regression(
-    exponentiate = TRUE,
-    label = list(
-      hiv_status ~ "HIV Status"
-    )
-  ) |>
-  bold_labels() |>
-  bold_p()
-```
-
-
-
-Going to revisit this in a bit, probably will collapse down to anemia grade < 3 or grade >= 3. The anemia grade is so massive because only 1 patient with grade 0 or 1 anemia received a transfusion
 
 
 ## Blood Units Given
@@ -1485,36 +1800,184 @@ check_vif(model_tx_units)
 
 ## G-CSF Administration
 
-Looking at whether HIV status influences likelihood of having G-CSF administration after adjusting for degree of myelosuppression
+Modeled among cycles with a recorded neutropenia or leukopenia grade. The
+myelosuppression severity predictor is `gcsf_grade`, the per-cycle maximum of
+neutropenia (ANC) and leukopenia (WBC) grades, since G-CSF can be indicated by
+either condition. `pmax(..., na.rm = TRUE)` is used so that a cycle with only
+one grade recorded still contributes.
+
+Age is included per the 13-Jul-2026 meeting: elderly patients are more likely to
+have a count drop and therefore to be boosted. The remaining covariates (stage,
+chemotherapy type, cancer site) mirror the transfusion model and follow
+Tinashe's 5-Jun-2026 comment that cancer type, stage, and chemotherapy regimen
+all plausibly drive neutropenia and hence G-CSF indication, whereas HIV's
+influence is expected to be behavioural — clinicians may over-indicate G-CSF for
+HIV-positive patients out of perceived immune risk.
+
+```{r}
+#| label: prep-gcsf-data
+
+# Build the analytic dataset once so the separation screen, the model, and the
+# validation checks all operate on exactly the same rows. Dropping incomplete
+# cases here rather than letting glmer() do it silently means the n reported
+# below is the n actually modelled.
+gcsf_vars <- c("csfg_indicated", "hiv_status", "gcsf_grade", "age",
+               "cancer_stage", "chemo_type", "cancer_site", "record_id")
+
+mgmt_gcsf <- mgmt_cycle |>
+  select(all_of(gcsf_vars)) |>
+  drop_na()
+
+# Grade 2+ subset, for parallelism with the transfusion analysis. 13-Jul noted
+# that G-CSF indication rises sharply at grade 2 and above for both leukopenia
+# and neutropenia.
+mgmt_gcsf_grade2plus <- mgmt_gcsf |>
+  filter(gcsf_grade >= 2)
+
+c(all_cycles = nrow(mgmt_gcsf), grade_2plus = nrow(mgmt_gcsf_grade2plus))
+```
+
+#### Separation screen (do this before trusting the adjusted model)
+
+::: {.callout-important collapse="true" title="Separation screen: G-CSF"}
+Carried over from `docs/journal.md` (open since 19-Jun-2026): the transfusion
+model turned out to be completely separated across `chemo_type` and
+`cancer_site`, which is why it is now fit on a restricted stratum. The same
+check has to happen here **before** the extra covariates are trusted, because
+adding covariates to a separated model makes the fit worse, not better.
+
+Any level flagged `separated = TRUE` below contributes no information and will
+produce an odds ratio of 0 or Inf. If levels are flagged, the options are the
+same as for transfusion: drop those levels at the model-fitting stage, collapse
+them into a coarser category, or move to Firth's penalised likelihood
+(`logistf`) / a weakly-informative Bayesian fit.
+
+```{r}
+#| label: chk-gcsf-separation
+
+# Cell-level screen on the analytic data, before fitting anything.
+mgmt_gcsf |>
+  mutate(gcsf_grade_f = factor(gcsf_grade)) |>
+  select(csfg_indicated, hiv_status, gcsf_grade_f,
+         cancer_stage, chemo_type, cancer_site) |>
+  pivot_longer(-csfg_indicated, names_to = "term", values_to = "level",
+               values_transform = as.character) |>
+  group_by(term, level) |>
+  summarise(
+    n         = n(),
+    n_gcsf    = sum(csfg_indicated == 1, na.rm = TRUE),
+    .groups   = "drop"
+  ) |>
+  mutate(
+    pct_gcsf  = round(100 * n_gcsf / n, 1),
+    separated = n_gcsf == 0 | n_gcsf == n
+  ) |>
+  arrange(desc(separated), term, level)
+```
+:::
 
 ```{r}
 #| label: model-gcsf-given
-#| tbl-cap: "Logistic Mixed Model: Odds of Receiving G-CSF"
+#| tbl-cap: "Logistic Mixed Model: Odds of Receiving G-CSF (All Graded Cycles)"
 
 model_gcsf_given <- glmer(
-  csfg_indicated ~ hiv_status + anc_grade + (1 | record_id),
-  data = mgmt_cycle |> filter(!is.na(myelo_grade)),
+  csfg_indicated ~ hiv_status + gcsf_grade + age +
+    cancer_stage + chemo_type + cancer_site + (1 | record_id),
+  data   = mgmt_gcsf,
   family = binomial
 )
 
-model_gcsf_given |>
+tbl_gcsf_all <- model_gcsf_given |>
   tbl_regression(
     exponentiate = TRUE,
     label = list(
-      hiv_status ~ "HIV Status",
-      anc_grade ~ "Neutropenia Grade"
+      hiv_status   ~ "HIV Status",
+      gcsf_grade   ~ "Max Neutropenia/Leukopenia Grade",
+      age          ~ "Age (years)",
+      cancer_stage ~ "Cancer Stage",
+      chemo_type   ~ "Chemotherapy Type",
+      cancer_site  ~ "Cancer Site"
     )
-  ) |>
+  )
+
+tbl_gcsf_all |>
   bold_labels() |>
   bold_p()
 ```
 
 #### Validation: model_gcsf_given
+
 ::: {.callout-note collapse="true" title="Validation: model_gcsf_given"}
 ```{r}
 #| label: chk-gcsf-given-vif
 
 check_vif(model_gcsf_given)
+```
+
+Post-fit separation signal — coefficients with an implausibly large magnitude or
+standard error. These should agree with the pre-fit cell screen above.
+
+```{r}
+#| label: chk-gcsf-given-separation
+
+check_separation(model_gcsf_given)$coefs |>
+  arrange(desc(extreme))
+```
+:::
+
+### G-CSF at grade 2 and above
+
+Parallel to the transfusion analysis: restricted to cycles where the patient had
+a grade 2 or higher neutropenia/leukopenia, i.e. cycles where G-CSF had a
+plausible indication. Compare the HIV estimate here against the all-cycles model
+— if they disagree substantially, the all-cycles estimate is being driven by the
+large number of low-grade cycles where G-CSF was never on the table.
+
+```{r}
+#| label: model-gcsf-grade2plus
+#| tbl-cap: "Odds of Receiving G-CSF: All Graded Cycles vs Grade 2+ Cycles"
+
+model_gcsf_grade2plus <- glmer(
+  csfg_indicated ~ hiv_status + gcsf_grade + age +
+    cancer_stage + chemo_type + cancer_site + (1 | record_id),
+  data   = mgmt_gcsf_grade2plus,
+  family = binomial
+)
+
+tbl_gcsf_grade2plus <- model_gcsf_grade2plus |>
+  tbl_regression(
+    exponentiate = TRUE,
+    label = list(
+      hiv_status   ~ "HIV Status",
+      gcsf_grade   ~ "Max Neutropenia/Leukopenia Grade",
+      age          ~ "Age (years)",
+      cancer_stage ~ "Cancer Stage",
+      chemo_type   ~ "Chemotherapy Type",
+      cancer_site  ~ "Cancer Site"
+    )
+  )
+
+tbl_merge(
+  list(tbl_gcsf_all, tbl_gcsf_grade2plus),
+  tab_spanner = c("**All graded cycles**", "**Grade 2+ only**")
+) |>
+  bold_labels()
+```
+
+#### Validation: model_gcsf_grade2plus
+
+::: {.callout-note collapse="true" title="Validation: model_gcsf_grade2plus"}
+```{r}
+#| label: chk-gcsf-grade2plus-vif
+
+check_vif(model_gcsf_grade2plus)
+```
+
+```{r}
+#| label: chk-gcsf-grade2plus-separation
+
+check_separation(model_gcsf_grade2plus)$cells |>
+  filter(separated)
 ```
 :::
 

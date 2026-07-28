@@ -260,57 +260,362 @@ check_vif <- function(model, threshold = 5) {
     mutate(flag = gvif > threshold, note = NA_character_)
 }
 
+# Screen a fitted binomial model for complete / quasi-complete separation, the
+# way the transfusion model was checked by hand. Returns a list of two tibbles:
+#
+#   $cells  one row per level of each categorical predictor in the model frame,
+#           with the event count and an `separated` flag marking levels where
+#           the outcome never varies (all events or no events). These empty
+#           cells are the *cause* of separation.
+#   $coefs  fixed effects whose magnitude or standard error is implausibly
+#           large, which is how separation *presents* after fitting. A real
+#           clinical odds ratio above `or_max` or a standard error above
+#           `se_max` on the log-odds scale is almost always separation, not a
+#           finding.
+#
+# Works on glm and glmerMod. Note this screens categorical predictors only;
+# separation on a continuous predictor (e.g. age perfectly ordering the
+# outcome) will show up in $coefs but not $cells.
+check_separation <- function(model, or_max = 100, se_max = 10) {
+  mf     <- model.frame(model)
+  y_name <- all.vars(formula(model))[1]
+
+  # Outcome may be stored as a factor, logical, or 0/1 numeric.
+  y_raw <- mf[[y_name]]
+  y <- if (is.factor(y_raw)) as.integer(y_raw) - 1L else as.numeric(y_raw)
+
+  cat_vars <- names(mf)[vapply(mf, function(x) is.factor(x) || is.character(x),
+                               logical(1))]
+
+  # A merMod model frame includes the random-effect grouping factor, e.g.
+  # record_id. Left in, it would report one "separated" row per patient who
+  # contributed a single cycle -- hundreds of rows of noise that mean nothing.
+  grouping_vars <- if (inherits(model, "merMod")) {
+    tryCatch(names(model@flist), error = function(e) character(0))
+  } else {
+    character(0)
+  }
+
+  cat_vars <- setdiff(cat_vars, c(y_name, grouping_vars))
+
+  cells <- purrr::map_dfr(cat_vars, function(v) {
+    tibble(level = as.character(mf[[v]]), y = y) |>
+      group_by(level) |>
+      summarise(n = n(), n_event = sum(y == 1, na.rm = TRUE), .groups = "drop") |>
+      mutate(
+        term      = v,
+        pct_event = round(100 * n_event / n, 1),
+        separated = n_event == 0 | n_event == n
+      ) |>
+      select(term, level, n, n_event, pct_event, separated)
+  })
+
+  # Fixed effects pulled directly rather than via broom/broom.mixed: plain
+  # broom::tidy() does not handle merMod objects and broom.mixed is not in
+  # renv.lock, so this stays dependency-free across glm and glmer.
+  est <- if (inherits(model, "merMod")) lme4::fixef(model) else stats::coef(model)
+  se  <- sqrt(diag(as.matrix(stats::vcov(model))))
+  se  <- se[names(est)]
+
+  coefs <- tibble(
+    term      = names(est),
+    estimate  = as.numeric(est),
+    std.error = as.numeric(se)
+  ) |>
+    mutate(extreme = abs(estimate) > log(or_max) | std.error > se_max)
+
+  list(cells = cells, coefs = coefs)
+}
+
+# Iteratively remove levels of `vars` that are fully separated on a binary
+# `outcome` (every row an event, or none). Used instead of hard-coding the
+# offending levels, because which levels separate depends on the stratum being
+# fitted — the exclusions derived for one subset are not valid for another.
+#
+# Loops because removing rows for one separated level can newly separate a
+# level of a different variable. Records what was removed in the
+# "dropped_levels" attribute of the returned data so it can be reported in a
+# table footnote.
+drop_separated_levels <- function(data, outcome, vars, max_passes = 5,
+                                  quiet = FALSE) {
+  dropped <- list()
+
+  for (pass in seq_len(max_passes)) {
+    changed <- FALSE
+
+    for (v in vars) {
+      bad <- data |>
+        group_by(.lvl = as.character(.data[[v]])) |>
+        summarise(n = n(),
+                  n_event = sum(.data[[outcome]] == 1, na.rm = TRUE),
+                  .groups = "drop") |>
+        filter(n_event == 0 | n_event == n) |>
+        pull(.lvl)
+
+      if (length(bad)) {
+        dropped[[v]] <- union(dropped[[v]], bad)
+        data <- data |> filter(!as.character(.data[[v]]) %in% bad)
+        changed <- TRUE
+      }
+    }
+
+    if (!changed) break
+  }
+
+  data <- data |>
+    mutate(across(all_of(vars), \(x) if (is.factor(x)) fct_drop(x) else x))
+
+  attr(data, "dropped_levels") <- dropped
+
+  if (!quiet && length(dropped)) {
+    message("drop_separated_levels(): removed ",
+            paste(names(dropped),
+                  vapply(dropped, paste, character(1), collapse = ", "),
+                  sep = " = ", collapse = "; "))
+  }
+
+  data
+}
+
+# Render the dropped_levels attribute as a sentence for a table footnote.
+# Drop reference-level rows from a gtsummary regression table (20-Apr-2026 and
+# 5-Jun-2026: they consume a lot of vertical space for no information), while
+# still telling the reader what the reference level was by appending it to the
+# variable's label row: "Cancer Stage (ref: I)".
+#
+# Uses gtsummary's public modify_table_body() / remove_row_type() rather than
+# editing $table_body in place, so it survives gtsummary internals changing.
+tbl_drop_ref_rows <- function(tbl) {
+  if (!"reference_row" %in% names(tbl$table_body)) return(tbl)
+
+  refs <- tbl$table_body |>
+    filter(!is.na(reference_row), reference_row) |>
+    select(variable, .ref_label = label) |>
+    distinct(variable, .keep_all = TRUE)
+
+  if (nrow(refs) == 0) return(tbl)
+
+  tbl |>
+    gtsummary::modify_table_body(
+      \(tb) tb |>
+        left_join(refs, by = "variable") |>
+        mutate(label = if_else(
+          row_type == "label" & !is.na(.ref_label),
+          paste0(label, " (ref: ", .ref_label, ")"),
+          label
+        )) |>
+        select(-.ref_label)
+    ) |>
+    gtsummary::remove_row_type(variables = everything(), type = "reference")
+}
+
+describe_dropped_levels <- function(data) {
+  d <- attr(data, "dropped_levels")
+  if (is.null(d) || !length(d)) {
+    return("No levels required exclusion for separation.")
+  }
+  paste0(
+    "Excluded from this model due to complete separation (no variation in the ",
+    "outcome within the level): ",
+    paste(names(d), vapply(d, paste, character(1), collapse = ", "),
+          sep = " = ", collapse = "; "), "."
+  )
+}
+
+
+
+# --- Output paths ----------------------------------------------------------
+#
+# Generated output goes under <OneDrive>/generated/ and nothing else writes
+# there. It is disposable: every render overwrites it in full.
+#
+#   generated/tables/        .docx tables
+#   generated/csv/           .csv versions of the same tables
+#   generated/figures/       .png figures
+#   generated/figures/svgs/  .svg figures
+#
+# The existing tables/ and figures/ folders are now human territory. Code never
+# touches them, so hand edits (Tinashe's, or merged versions) are safe there.
+# Merging new generated output into them is a manual step, deliberately.
+
+generated_path <- function(...) onedrive_path("generated", ...)
+
+# Creates the generated tree on first use and drops a note in it, so anyone
+# browsing the shared folder can tell at a glance that it is machine output.
+ensure_generated_dirs <- function() {
+  dirs <- c(generated_path("tables"), generated_path("csv"),
+            generated_path("figures"), generated_path("figures", "svgs"))
+  for (d in dirs) if (!dir.exists(d)) dir.create(d, recursive = TRUE)
+
+  readme <- generated_path("README.txt")
+  if (!file.exists(readme)) {
+    writeLines(c(
+      "AUTO-GENERATED OUTPUT -- DO NOT EDIT THESE FILES.",
+      "",
+      "Everything in this folder is written by the analysis code and is",
+      "overwritten in full every time the pipeline is rendered. Any edit made",
+      "here will be lost.",
+      "",
+      "Edited and reviewed versions live one level up, in ../tables and",
+      "../figures. Those folders are never written to by code."
+    ), readme)
+  }
+  invisible(dirs)
+}
+
+# Human-readable filenames. Keyed by slug so nothing at the call sites has to
+# change; anything missing falls back to a prettified slug, so a new
+# save_table() call still produces a readable name without an entry here.
+#
+# Edit these freely -- they are only filenames, and changing one just means the
+# next render writes a new file rather than overwriting the old one. Delete
+# stale files from generated/ if a name changes.
+output_names <- c(
+  # Tables
+  table1_descriptive             = "Table - Patient characteristics by HIV status",
+  table_ae_by_category           = "Table - Adverse drug events by category and HIV status",
+  tbl_severe_or_comparison       = "Table - Severe adverse events, adjusted odds by HIV status",
+  tbl_any_hosp                   = "Table - Hospitalization odds within a cycle",
+  tbl_hosp_days_comparison       = "Table - Hospital length of stay",
+  table_early_dropout_final      = "Table - Early treatment discontinuation and adverse events",
+  transfusion_rate_by_anemia_hiv = "Table - Transfusion rate by anemia grade and HIV status",
+  transfusion_units_by_anemia_hiv = "Table - Transfusion units by anemia grade and HIV status",
+  gcsf_rate_by_myelo_hiv         = "Table - G-CSF rate by myelosuppression grade and HIV status",
+  gcsf_rate_by_anc_hiv           = "Table - G-CSF rate by neutropenia grade and HIV status",
+
+  # Figures
+  plt_cycle_completion           = "Figure - Cycle completion by HIV status (pooled)",
+  plt_cycle_completion_split     = "Figure - Cycle completion by HIV status and cycles prescribed",
+  plt_hosp_vs_max_grade          = "Figure - Hospital days vs adverse event grade",
+  plt_early_dropout_forest       = "Figure - Early dropout and toxicity (pooled)",
+  plt_early_dropout_forest_byhiv = "Figure - Early dropout and toxicity by HIV status",
+  dag_transfusion                = "Figure - Causal diagram, transfusion",
+  dag_gcsf                       = "Figure - Causal diagram, G-CSF"
+)
+
+output_filename <- function(slug) {
+  nm <- unname(output_names[slug])
+
+  if (is.na(nm)) {
+    nm <- slug |>
+      str_remove("^(tbl|table|plt|plot|fig)_") |>
+      str_replace_all("_", " ") |>
+      str_to_sentence()
+  }
+
+  # Characters Windows forbids in filenames, plus trailing dots/spaces.
+  nm |>
+    str_replace_all('[\\\\/:*?"<>|]', "-") |>
+    str_squish() |>
+    str_remove("\\.+$")
+}
+
+
 # Save a table (gtsummary object and/or data frame) to csv + docx and
 # return a flextable for display. Pass `gtsum` for gtsummary objects (df/ft
 # derived automatically if not supplied), or `df`/`ft` directly for anything
 # else (e.g. a plain data frame with a hand-built flextable).
 save_table <- function(slug, gtsum = NULL, df = NULL, ft = NULL) {
-  tables_dir <- onedrive_path("tables")
-  if (!dir.exists(tables_dir)) dir.create(tables_dir, recursive = TRUE)
+  ensure_generated_dirs()
 
   if (is.null(ft) && !is.null(gtsum)) ft <- as_flex_table(gtsum)
   if (is.null(df) && !is.null(gtsum)) df <- as_tibble(gtsum)
   if (is.null(ft)) ft <- df |> flextable() |> theme_booktabs() |> autofit()
 
-  csv_path  <- file.path(tables_dir, paste0(slug, ".csv"))
-  docx_path <- file.path(tables_dir, paste0(slug, ".docx"))
+  fname     <- output_filename(slug)
+  csv_path  <- file.path(generated_path("csv"),    paste0(fname, ".csv"))
+  docx_path <- file.path(generated_path("tables"), paste0(fname, ".docx"))
 
   if (!is.null(df)) write.csv(df, csv_path, row.names = FALSE)
   save_as_docx(ft, path = docx_path)
 
-  list(ft = ft, csv = csv_path, docx = docx_path, slug = slug)
+  list(ft = ft, csv = csv_path, docx = docx_path, slug = slug, name = fname)
 }
 
-# Save a ggplot/patchwork figure as PNG (OneDrive figures/) and SVG
-# (OneDrive figures/svgs/), creating directories as needed.
 save_figure <- function(plot, slug, width = 8, height = NULL, dpi = 300) {
   if (is.null(height)) height <- width * 0.618
 
-  png_dir <- onedrive_path("figures")
-  svg_dir <- onedrive_path("figures", "svgs")
-  if (!dir.exists(png_dir)) dir.create(png_dir, recursive = TRUE)
-  if (!dir.exists(svg_dir)) dir.create(svg_dir, recursive = TRUE)
+  ensure_generated_dirs()
 
-  png_path <- file.path(png_dir, paste0(slug, ".png"))
-  svg_path <- file.path(svg_dir, paste0(slug, ".svg"))
+  fname    <- output_filename(slug)
+  png_path <- file.path(generated_path("figures"), paste0(fname, ".png"))
+  svg_path <- file.path(generated_path("figures", "svgs"), paste0(fname, ".svg"))
 
   ggsave(png_path, plot = plot, width = width, height = height, dpi = dpi)
   ggsave(svg_path, plot = plot, width = width, height = height)
 
-  list(plot = plot, png = png_path, svg = svg_path, slug = slug)
+  list(plot = plot, png = png_path, svg = svg_path, slug = slug, name = fname)
 }
 
 emit_buttons <- function(obj) {
+  # `name` was added 2026-07-27; fall back to the slug for pub_objects .rds
+  # files written before that.
+  dl_name <- obj$name %||% obj$slug
+
   cat('<div style="display: flex; gap: 10px; margin-top: 15px; margin-bottom: 25px;">')
   print(download_file(
-    path = obj$csv, output_name = obj$slug,
+    path = obj$csv, output_name = dl_name,
     button_label = "Download CSV", button_type = "primary",
     class = "btn-sm", has_icon = TRUE, icon = "fa fa-database"
   ))
   print(download_file(
-    path = obj$docx, output_name = obj$slug,
+    path = obj$docx, output_name = dl_name,
     button_label = "Download Word Doc", button_type = "default",
     class = "btn-sm", has_icon = TRUE, icon = "fa fa-file-word"
   ))
   cat('</div>')
 }
+
+
+# --- Protecting hand-edited output -----------------------------------------
+#
+# As of 2026-07-27 code writes only to generated/, so tables/ and figures/ are
+# no longer overwritten by a render. This snapshot is therefore no longer
+# protecting against the pipeline -- it is a backup of the hand-curated folders
+# themselves, which are now the most valuable and least reproducible thing in
+# the project. It covers a bad manual merge, an accidental deletion, or a sync
+# conflict. generated/ is deliberately not archived: it is reproducible.
+#
+# Keyed to the hour: sourcing this file once per document during a full
+# pipeline render produces one snapshot, not six. Set GIC_SKIP_SNAPSHOT=1 in
+# .Renviron to disable.
+snapshot_outputs <- function(dirs = c("tables", "figures"), keep = 10,
+                             quiet = FALSE) {
+  if (Sys.getenv("GIC_SKIP_SNAPSHOT") == "1") return(invisible(NULL))
+
+  archive_root <- onedrive_path("_output_archive")
+  dest <- file.path(archive_root, format(Sys.time(), "%Y-%m-%d_%H"))
+
+  if (dir.exists(dest)) return(invisible(dest))
+
+  present <- dirs[dir.exists(onedrive_path(dirs))]
+  if (length(present) == 0) return(invisible(NULL))
+
+  ok <- tryCatch({
+    dir.create(dest, recursive = TRUE, showWarnings = FALSE)
+    for (d in present) {
+      file.copy(onedrive_path(d), dest, recursive = TRUE, copy.date = TRUE)
+    }
+    TRUE
+  }, error = function(e) {
+    # Never let a snapshot failure block a render -- but be loud about it,
+    # because it means this render is unprotected.
+    warning("Output snapshot FAILED (", conditionMessage(e),
+            "). This render may overwrite hand-edited files. ",
+            "A file open in Word is the usual cause.", call. = FALSE)
+    FALSE
+  })
+
+  if (!ok) return(invisible(NULL))
+
+  # Keep the archive bounded: it lives inside a synced OneDrive folder.
+  snaps <- sort(list.dirs(archive_root, recursive = FALSE))
+  if (length(snaps) > keep) {
+    unlink(snaps[seq_len(length(snaps) - keep)], recursive = TRUE)
+  }
+
+  if (!quiet) message("Output snapshot: ", dest)
+  invisible(dest)
+}
+
+snapshot_outputs()

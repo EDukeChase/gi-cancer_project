@@ -49,18 +49,51 @@ emit_buttons(obj)
 
 
 # Completion Rate by HIV Status
-Proportion of patients who completed treatment cycle $k$ from the population of patients prescribed at least $k$ cycles.
+
+Proportion of patients who completed treatment cycle $k$, out of the patients
+who were prescribed at least $k$ cycles.
+
+::: {.callout-note}
+This figure resembles a Kaplan-Meier curve but is **not** one — there is no
+censoring and no time axis. Each point is a simple proportion among the
+patients prescribed at least that many cycles.
+:::
+
+Two versions are shown. The **stratified** version is the one to look at first:
+patients prescribed six cycles necessarily stop contributing after cycle 6, so
+the pooled curve mixes that structural drop-off with genuine early
+discontinuation. Splitting on the number of cycles prescribed separates the two.
+Please tell us which version you would rather see in the paper — we do not need
+both.
+
+```{r}
+#| label: plt-cycle-completion-split
+#| fig-cap: "Chemotherapy cycle completion by HIV status, stratified by number of cycles prescribed. Shaded bands are pointwise 95% confidence intervals."
+#| fig-width: 10
+#| fig-height: 4.5
+
+pub_objects_desc$plt_cycle_completion_split$plot
+```
+
 ```{r}
 #| label: plt-cycle-completion
+#| fig-cap: "Chemotherapy cycle completion by HIV status, all patients pooled. Shaded bands are pointwise 95% confidence intervals; the counts beneath the panel give the number of patients prescribed at least k cycles."
 
 pub_objects_desc$plt_cycle_completion$plot
 ```
 
 
 # Severe Adverse Events
+
+Odds of experiencing a grade 3-4 adverse event at any point during treatment,
+adjusted for cancer stage, chemotherapy regimen, treatment intent, age and sex.
+Reference levels are named in the variable label rather than shown as their own
+rows. Unadjusted estimates were closely consistent with these and are therefore
+not tabulated.
+
 ```{r}
 #| label: tbl-severe-or-comparison
-#| tbl-cap: "Association between HIV status and severe adverse events: unadjusted vs adjusted"
+#| tbl-cap: "Adjusted odds of a severe (grade 3-4) adverse event, by HIV status"
 
 pub_objects_analysis$tbl_severe_or_comparison$ft
 ```
@@ -68,37 +101,68 @@ pub_objects_analysis$tbl_severe_or_comparison$ft
 
 # Hospitalization
 
-OR table looking at whether a patient was hospitalized at all in a given cycle.
+Whether a patient was hospitalized at all in a given cycle, and — among the
+cycles where a hospitalization did occur — how long it lasted.
+
 ```{r}
 #| label: table-any-hosp
+#| tbl-cap: "Odds of any toxicity-related hospitalization within a treatment cycle, adjusted for maximum adverse event grade in that cycle, age and sex"
 
 pub_objects_analysis$tbl_any_hosp$ft
 ```
 
 ```{r}
 #| label: plt-hosp-vs-max-grade
-#| fig-cap: "Mean hospital days vs max AE grade in cycle, by HIV status (among measured cycles)"
+#| fig-cap: "Mean hospital days vs maximum adverse event grade in the cycle, by HIV status, among cycles where hospital days were recorded"
 
 pub_objects_analysis$plt_hosp_vs_max_grade$plot
 ```
 
 ```{r}
 #| label: table-hosp-days
+#| tbl-cap: "Length of stay among hospitalized cycles: unadjusted vs adjusted linear mixed models. Estimates are differences in hospital days, not odds ratios."
 
 pub_objects_analysis$tbl_hosp_days_comparison$ft
 ```
 
 # Early Dropout
 
+"Early dropout" means receiving four or fewer cycles among patients who were
+prescribed more than four. The question is whether toxicity in the first four
+cycles predicts stopping early.
+
 ```{r}
 #| label: table-early-dropout-final
+#| tbl-cap: "Association between early-cycle adverse events and early treatment discontinuation. P-values are Benjamini-Hochberg adjusted across adverse event types."
 
 pub_objects_analysis$table_early_dropout_final$ft
 ```
 
+The forest plot below shows the same associations. Odds ratios are per one-grade
+increase in toxicity; a value above 1 means more toxicity was associated with a
+higher chance of stopping early.
+
 ```{r}
 #| label: plt-early-dropout-forest
-#| fig-cap: "Impact of early-cycle toxicities on early treatment dropout"
+#| fig-cap: "Impact of early-cycle toxicities on early treatment dropout, pooled across HIV groups and adjusted for HIV status"
 
 pub_objects_analysis$plt_early_dropout_forest$plot
+```
+
+The version below fits each association separately within each HIV group, so the
+two groups can be compared directly rather than pooled.
+
+::: {.callout-warning}
+The HIV-positive group is small, so several of these intervals are very wide. A
+gap between the two groups is only meaningful where both intervals are
+reasonably tight — please read this figure alongside the pooled one above rather
+than instead of it.
+:::
+
+```{r}
+#| label: plt-early-dropout-forest-byhiv
+#| fig-cap: "Association between early-cycle toxicity grade and early treatment dropout, estimated separately within each HIV group"
+#| fig-height: 6
+
+pub_objects_analysis$plt_early_dropout_forest_byhiv$plot
 ```
